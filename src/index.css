@@ -48,21 +48,15 @@
   --animate-blob-drift-reverse: blob-drift-reverse 26s ease-in-out infinite;
 }
 
-html, body, #root {
+html, body {
   height: 100%;
   margin: 0;
-}
-
-html {
-  padding-top: env(safe-area-inset-top);
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
+  overflow: hidden;
   background-color: var(--color-surface-900);
 }
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: var(--color-surface-900);
   color: var(--color-surface-50);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -70,8 +64,21 @@ body {
 }
 
 #root {
+  height: var(--app-height, 100vh);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+#root > div {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 @keyframes blob-drift {

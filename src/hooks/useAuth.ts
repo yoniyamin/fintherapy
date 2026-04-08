@@ -18,13 +18,17 @@ export function useAuth() {
     loading: true,
   })
 
-  const fetchProfile = useCallback(async (): Promise<Profile | null> => {
-    const { data, error } = await supabase.rpc('get_my_profile')
-    if (error) {
-      console.warn('Failed to fetch profile:', error.message)
-      return null
+  const fetchProfile = useCallback(async (retries = 2): Promise<Profile | null> => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const { data, error } = await supabase.rpc('get_my_profile')
+      if (!error) return data as Profile | null
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+      } else {
+        console.warn('Failed to fetch profile:', error.message)
+      }
     }
-    return data as Profile | null
+    return null
   }, [])
 
   const refreshProfile = useCallback(async () => {
@@ -35,10 +39,13 @@ export function useAuth() {
 
   useEffect(() => {
     let cancelled = false
+    let initialDone = false
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (cancelled) return
+      initialDone = true
       const profile = session?.user ? await fetchProfile() : null
+      if (cancelled) return
       setState({
         user: session?.user ?? null,
         profile,
@@ -49,9 +56,11 @@ export function useAuth() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return
+      if (!initialDone && event === 'INITIAL_SESSION') return
       const profile = session?.user ? await fetchProfile() : null
+      if (cancelled) return
       setState({
         user: session?.user ?? null,
         profile,

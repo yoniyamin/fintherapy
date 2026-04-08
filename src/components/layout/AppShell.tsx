@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import OrganicBackdrop from './OrganicBackdrop'
+import InstallPrompt from './InstallPrompt'
 
 const navItems = [
   { to: '/', label: 'Home', icon: HomeIcon, activeIcon: HomeIconFilled },
@@ -10,9 +11,10 @@ const navItems = [
 
 export default function AppShell() {
   return (
-    <div className="relative flex h-full min-h-full flex-col bg-surface-900">
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-900">
       <OrganicBackdrop />
-      <main className="relative z-10 flex-1 overflow-y-auto">
+      <InstallPrompt />
+      <main className="relative z-10 min-h-0 flex-1 overflow-y-auto">
         <Outlet />
       </main>
 
