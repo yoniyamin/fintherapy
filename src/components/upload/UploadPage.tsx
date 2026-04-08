@@ -1,0 +1,457 @@
+import { useState, type ChangeEvent } from 'react'
+import { Link } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import Papa from 'papaparse'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../hooks/useAuth'
+import { useMerchantKnowledge } from '../../hooks/useMerchantKnowledge'
+import Button from '../common/Button'
+import { ui } from '../../lib/uiClasses'
+
+const MERCHANT_KEYS = ['item', 'description', 'merchant', 'merchant name', 'payee', 'name', 'details', 'concepto', 'descripción']
+const DATE_KEYS = ['date', 'transaction date', 'posting date', 'fecha', 'fecha valor']
+const AMOUNT_KEYS = ['amount', 'debit', 'value', 'importe', 'cantidad']
+
+function findKey(row: Record<string, string>, candidates: string[]): string | undefined {
+  const keys = Object.keys(row)
+  for (const candidate of candidates) {
+    const match = keys.find((k) => k.toLowerCase().trim() === candidate)
+    if (match) return match
+  }
+  return undefined
+}
+
+function parseAmount(raw: string): number {
+  if (!raw) return 0
+  let cleaned = raw.trim()
+  cleaned = cleaned.replace(/[A-Z]{3}$|^[A-Z]{3}|[€$£¥₹]/g, '').trim()
+  cleaned = cleaned.replace(/^\+/, '')
+  if (cleaned.includes(',') && cleaned.includes('.')) {
+    if (cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')) {
+      cleaned = cleaned.replace(/\./g, '').replace(',', '.')
+    } else {
+      cleaned = cleaned.replace(/,/g, '')
+    }
+  } else if (cleaned.includes(',')) {
+    const parts = cleaned.split(',')
+    if (parts.length === 2 && parts[1].length === 2) {
+      cleaned = cleaned.replace(',', '.')
+    } else {
+      cleaned = cleaned.replace(/,/g, '')
+    }
+  }
+  return Math.abs(parseFloat(cleaned) || 0)
+}
+
+function parseDate(raw: string): string {
+  if (!raw) return new Date().toISOString().slice(0, 10)
+  const trimmed = raw.trim()
+
+  const euMatch = trimmed.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/)
+  if (euMatch) {
+    const [, d, m, y] = euMatch
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (isoMatch) return trimmed
+
+  const usMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (usMatch) {
+    const [, m, d, y] = usMatch
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+
+  const parsed = new Date(trimmed)
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10)
+  }
+
+  return new Date().toISOString().slice(0, 10)
+}
+
+function detectDelimiter(text: string): string {
+  const firstLine = text.split('\n')[0] ?? ''
+  const semicolons = (firstLine.match(/;/g) ?? []).length
+  const commas = (firstLine.match(/,/g) ?? []).length
+  const tabs = (firstLine.match(/\t/g) ?? []).length
+  if (semicolons > commas && semicolons > tabs) return ';'
+  if (tabs > commas) return '\t'
+  return ','
+}
+
+function getCurrentMonth(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+function formatMonthLabel(value: string): string {
+  const [year, month] = value.split('-')
+  const date = new Date(Number(year), Number(month) - 1)
+  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
+function getMonthOptions(): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = []
+  const now = new Date()
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i)
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    options.push({ value, label: formatMonthLabel(value) })
+  }
+  return options
+}
+
+type RawRow = Record<string, string>
+
+const STEPS = ['Select file', 'Review', 'Upload']
+
+export default function UploadPage() {
+  const { profile } = useAuth()
+  const { autoClassify } = useMerchantKnowledge(profile?.household_id)
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<RawRow[]>([])
+  const [detectedColumns, setDetectedColumns] = useState<{ merchant?: string; date?: string; amount?: string } | null>(null)
+  const [billingMonth, setBillingMonth] = useState(getCurrentMonth())
+  const [accountLast4, setAccountLast4] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [result, setResult] = useState<{ count: number; inserted: number; autoCount: number } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const monthOptions = getMonthOptions()
+
+  const currentStep = result ? 2 : file ? 1 : 0
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0]
+    if (!selected) return
+    setFile(selected)
+    setResult(null)
+    setError(null)
+    setDetectedColumns(null)
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      const delimiter = detectDelimiter(text)
+
+      Papa.parse<RawRow>(text, {
+        header: true,
+        delimiter,
+        preview: 5,
+        complete: (results) => {
+          setPreview(results.data)
+          if (results.data.length > 0) {
+            const sample = results.data[0]
+            setDetectedColumns({
+              merchant: findKey(sample, MERCHANT_KEYS),
+              date: findKey(sample, DATE_KEYS),
+              amount: findKey(sample, AMOUNT_KEYS),
+            })
+          }
+        },
+      })
+    }
+    reader.readAsText(selected)
+  }
+
+  const handleUpload = async () => {
+    if (!file || !profile?.household_id) {
+      setError('You need to be in a household to upload transactions.')
+      return
+    }
+
+    setUploading(true)
+    setError(null)
+
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      const text = ev.target?.result as string
+      const delimiter = detectDelimiter(text)
+
+      Papa.parse<RawRow>(text, {
+        header: true,
+        delimiter,
+        complete: async (results) => {
+          if (results.data.length === 0) {
+            setError('CSV is empty.')
+            setUploading(false)
+            return
+          }
+
+          const sample = results.data[0]
+          const merchantKey = findKey(sample, MERCHANT_KEYS)
+          const dateKey = findKey(sample, DATE_KEYS)
+          const amountKey = findKey(sample, AMOUNT_KEYS)
+
+          if (!merchantKey || !amountKey) {
+            setError(
+              `Could not detect columns. Found: ${Object.keys(sample).join(', ')}. ` +
+              `Need a merchant column (${MERCHANT_KEYS.slice(0, 4).join('/')}) and an amount column (${AMOUNT_KEYS.slice(0, 3).join('/')}).`,
+            )
+            setUploading(false)
+            return
+          }
+
+          const rows = results.data
+            .map((row) => ({
+              uploaded_by: profile.id,
+              merchant_raw: (row[merchantKey] ?? '').trim(),
+              amount: parseAmount(row[amountKey] ?? ''),
+              tx_date: parseDate(dateKey ? row[dateKey] ?? '' : ''),
+              billing_month: billingMonth,
+              account_last4: accountLast4 || null,
+            }))
+            .filter((r) => r.merchant_raw && r.amount > 0)
+
+          if (rows.length === 0) {
+            setError('No valid transactions found after parsing. Check that amount values are non-zero.')
+            setUploading(false)
+            return
+          }
+
+          const { data: inserted, error: insertError } = await supabase.rpc('insert_transactions', {
+            p_household_id: profile.household_id!,
+            p_rows: rows,
+          })
+
+          if (insertError) {
+            setError(insertError.message)
+          } else {
+            const insertedCount = (inserted as number) ?? rows.length
+            const autoCount = insertedCount > 0 ? await autoClassify() : 0
+            setResult({ count: rows.length, inserted: insertedCount, autoCount })
+            setFile(null)
+            setPreview([])
+            setDetectedColumns(null)
+          }
+          setUploading(false)
+        },
+      })
+    }
+    reader.readAsText(file)
+  }
+
+  return (
+    <div className={`${ui.screen} ${ui.pageNoBottomPad}`}>
+      <h1 className={ui.heroTitle}>Upload Transactions</h1>
+      <p className={ui.heroSub}>Import a CSV from your bank. We auto-detect everything.</p>
+
+      {/* Step indicator */}
+      <div className={`${ui.glassFlat} mt-6 flex items-center gap-2 p-3`}>
+        {STEPS.map((step, i) => (
+          <div key={step} className="flex flex-1 items-center gap-2">
+            <div
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                i <= currentStep
+                  ? 'bg-duo-green text-white shadow-[0_6px_16px_-4px_rgba(88,204,2,0.5)]'
+                  : 'bg-surface-900/80 text-surface-500 ring-1 ring-white/[0.06]'
+              }`}
+            >
+              {i < currentStep ? '✓' : i + 1}
+            </div>
+            <span className={`text-xs font-medium ${i <= currentStep ? 'text-duo-green' : 'text-surface-500'}`}>
+              {step}
+            </span>
+            {i < STEPS.length - 1 && (
+              <div className={`h-px flex-1 ${i < currentStep ? 'bg-duo-green/40' : 'bg-white/[0.08]'}`} />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Month + Account fields */}
+      <div className="mt-6 grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="billing-month" className="block text-sm font-medium text-surface-300">
+            Billing Month
+          </label>
+          <select
+            id="billing-month"
+            value={billingMonth}
+            onChange={(e) => setBillingMonth(e.target.value)}
+            className={`mt-1.5 block w-full ${ui.select}`}
+          >
+            {monthOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="account-last4" className="block text-sm font-medium text-surface-300">
+            Account (last 4)
+          </label>
+          <input
+            id="account-last4"
+            type="text"
+            inputMode="numeric"
+            maxLength={4}
+            value={accountLast4}
+            onChange={(e) => setAccountLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            className={`mt-1.5 block w-full ${ui.input} px-3 py-2.5`}
+            placeholder="1234"
+          />
+        </div>
+      </div>
+
+      {/* File picker */}
+      <label className="mt-4 flex cursor-pointer flex-col items-center gap-3 rounded-2xl border border-dashed border-white/[0.12] bg-surface-950/40 px-6 py-10 shadow-[0_20px_48px_-28px_rgba(28,176,246,0.2)] transition-all hover:border-ice/40 hover:bg-ice/[0.04]">
+        <motion.div
+          animate={{ y: [0, -6, 0] }}
+          transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+        >
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-surface-400">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" strokeLinecap="round" strokeLinejoin="round" />
+            <polyline points="17 8 12 3 7 8" strokeLinecap="round" strokeLinejoin="round" />
+            <line x1="12" y1="3" x2="12" y2="15" strokeLinecap="round" />
+          </svg>
+        </motion.div>
+        <span className="text-sm text-surface-300">
+          {file ? file.name : 'Tap to choose a CSV file'}
+        </span>
+        <input
+          type="file"
+          accept=".csv"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+      </label>
+
+      {/* Detected columns indicator */}
+      {detectedColumns && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+          {detectedColumns.merchant && (
+            <span className="rounded-full bg-duo-green/10 px-2.5 py-1 font-medium text-duo-green">
+              Merchant: {detectedColumns.merchant}
+            </span>
+          )}
+          {detectedColumns.date && (
+            <span className="rounded-full bg-duo-green/10 px-2.5 py-1 font-medium text-duo-green">
+              Date: {detectedColumns.date}
+            </span>
+          )}
+          {detectedColumns.amount && (
+            <span className="rounded-full bg-duo-green/10 px-2.5 py-1 font-medium text-duo-green">
+              Amount: {detectedColumns.amount}
+            </span>
+          )}
+          {!detectedColumns.merchant && (
+            <span className="rounded-full bg-danger/10 px-2.5 py-1 font-medium text-danger">
+              Merchant not found
+            </span>
+          )}
+          {!detectedColumns.amount && (
+            <span className="rounded-full bg-danger/10 px-2.5 py-1 font-medium text-danger">
+              Amount not found
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Upload context pills */}
+      {file && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="rounded-full bg-surface-800 px-2.5 py-1 font-medium text-surface-400">
+            {formatMonthLabel(billingMonth)}
+          </span>
+          {accountLast4 && (
+            <span className="rounded-full bg-surface-800 px-2.5 py-1 font-medium text-surface-400">
+              ••••{accountLast4}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* CSV Preview */}
+      {preview.length > 0 && (
+        <div className="mt-4 overflow-x-auto rounded-2xl border border-white/[0.08] bg-surface-950/35 backdrop-blur-sm">
+          <table className="w-full text-left text-xs">
+            <thead className="border-b border-white/[0.06] bg-surface-900/60">
+              <tr>
+                {Object.keys(preview[0]).map((key) => (
+                  <th key={key} className="px-3 py-2 font-semibold text-surface-300">
+                    {key}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {preview.map((row, i) => (
+                <tr key={i} className="border-b border-white/[0.05] last:border-0">
+                  {Object.values(row).map((val, j) => (
+                    <td key={j} className="px-3 py-2 text-surface-200">
+                      {String(val)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="px-3 py-2 text-xs text-surface-500">Showing first 5 rows</p>
+        </div>
+      )}
+
+      {error && <div className={`mt-4 ${ui.dangerBanner}`}>{error}</div>}
+
+      <AnimatePresence>
+        {result && (
+          <motion.div
+            className={`${ui.glassFlat} mt-4 border border-duo-green/25 bg-duo-green/[0.08] p-6 text-center`}
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', damping: 15 }}
+          >
+            <motion.div
+              className="text-4xl"
+              animate={{ scale: [1, 1.3, 1] }}
+              transition={{ duration: 0.4 }}
+            >
+              ✅
+            </motion.div>
+            <p className="mt-3 text-base font-bold text-duo-green">
+              {result.inserted} transaction{result.inserted !== 1 ? 's' : ''} uploaded!
+            </p>
+            {result.inserted < result.count && (
+              <p className="mt-1 text-sm text-surface-400">
+                {result.count - result.inserted} duplicate{result.count - result.inserted !== 1 ? 's' : ''} skipped
+              </p>
+            )}
+            {result.inserted === 0 && (
+              <p className="mt-1 text-sm font-medium text-flame">
+                All transactions already exist — nothing new to add
+              </p>
+            )}
+            {result.autoCount > 0 && (
+              <p className="mt-1 text-sm font-bold text-gem">
+                {result.autoCount} auto-classified from memory
+              </p>
+            )}
+            <p className="mt-1 text-sm text-surface-400">
+              {formatMonthLabel(billingMonth)}
+              {accountLast4 ? ` · ••••${accountLast4}` : ''}
+            </p>
+            <Link
+              to="/classify"
+              className="mt-4 inline-block rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
+            >
+              Go classify
+            </Link>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {file && !result && (
+        <Button
+          className="mt-4 w-full"
+          onClick={handleUpload}
+          disabled={uploading || !detectedColumns?.merchant || !detectedColumns?.amount}
+        >
+          {uploading ? 'Uploading...' : `Upload ${file.name}`}
+        </Button>
+      )}
+    </div>
+  )
+}
