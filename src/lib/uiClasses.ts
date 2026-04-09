@@ -1,7 +1,7 @@
 /** Shared glass / jewel-tone styling for Option 1+3 consistency across screens */
 export const ui = {
   screen: 'relative z-10',
-  page: 'mx-auto max-w-lg px-5 py-8 pb-24',
+  page: 'mx-auto max-w-lg px-5 py-8 pb-8',
   pageNoBottomPad: 'mx-auto max-w-lg px-5 py-8',
   heroTitle:
     'bg-gradient-to-r from-surface-100 via-ice to-gem-light bg-clip-text text-transparent text-xl font-bold tracking-tight',

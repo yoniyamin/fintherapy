@@ -14,20 +14,20 @@ export default function AppShell() {
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-900">
       <OrganicBackdrop />
       <InstallPrompt />
-      <main className="relative z-10 min-h-0 flex-1 overflow-y-auto">
+      <main className="relative z-10 min-h-0 flex-1 overflow-y-auto pb-[var(--shell-tab-clearance)]">
         <Outlet />
       </main>
 
-      <nav className="relative z-10 flex shrink-0 border-t border-white/[0.06] bg-surface-900/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
+      {/* fixed: iOS PWA often leaves a strip below in-flow flex footers; pin to the visual viewport */}
+      <nav className="fixed bottom-0 left-0 right-0 z-20 flex border-t border-white/[0.06] bg-surface-900/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
+            end={item.to === '/classify' ? false : undefined}
             className={({ isActive }) =>
               `flex flex-1 flex-col items-center gap-0.5 pb-3 pt-3 text-[11px] font-semibold transition-colors ${
-                isActive
-                  ? 'text-duo-green'
-                  : 'text-surface-500 hover:text-surface-300'
+                isActive ? 'text-duo-green' : 'text-surface-500 hover:text-surface-300'
               }`
             }
           >
