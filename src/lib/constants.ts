@@ -1,3 +1,6 @@
+/** Internal transfers between your own accounts (excluded from spending pie by default). */
+export const OWN_TRANSFERS_CATEGORY_ID = 'own_transfers' as const
+
 export const CATEGORIES = [
   { id: 'food_groceries', label: 'Food & Groceries', icon: '🛒', color: 'bg-green-500/20 border-green-500/40' },
   { id: 'transport', label: 'Transport', icon: '🚗', color: 'bg-blue-500/20 border-blue-500/40' },
@@ -10,7 +13,7 @@ export const CATEGORIES = [
   { id: 'kids_toys', label: 'Kids & Toys', icon: '🧸', color: 'bg-yellow-500/20 border-yellow-500/40' },
   { id: 'home_maintenance', label: 'Home', icon: '🏠', color: 'bg-amber-500/20 border-amber-500/40' },
   { id: 'miscellaneous', label: 'Misc', icon: '📦', color: 'bg-slate-500/20 border-slate-500/40' },
-  { id: 'uncategorized', label: 'Unsure', icon: '❓', color: 'bg-gray-500/20 border-gray-500/40' },
+  { id: 'own_transfers', label: 'Own transfers', icon: '🔁', color: 'bg-slate-600/25 border-slate-500/35' },
 ] as const
 
 export type CategoryId = (typeof CATEGORIES)[number]['id']

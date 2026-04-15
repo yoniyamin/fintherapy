@@ -23,10 +23,14 @@ interface ClassificationState {
   load: (txns: Transaction[]) => void
   advance: (txCount: number) => void
   flag: () => void
+  /** Move current group to end of queue (e.g. skip in No idea deck). */
+  rotateCurrentToEnd: () => void
   markTransfer: () => void
   openCategoryPicker: () => void
   closeCategoryPicker: () => void
   reset: () => void
+  /** Apply the same note to all listed transaction ids (local state after RPC save). */
+  setNotesOnTransactions: (txIds: string[], note: string | null) => void
 
   /** @deprecated kept for compatibility */
   transactions: Transaction[]
@@ -105,6 +109,21 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
     })
   },
 
+  rotateCurrentToEnd: () => {
+    const { groups, currentIndex } = get()
+    if (groups.length <= 1) return
+    const cur = groups[currentIndex]
+    const others = groups.filter((_, i) => i !== currentIndex)
+    const nextGroups = [...others, cur]
+    set({
+      groups: nextGroups,
+      currentIndex: 0,
+      showCategoryPicker: false,
+      activeGroup: nextGroups[0] ?? null,
+      activeTransaction: nextGroups[0]?.transactions[0] ?? null,
+    })
+  },
+
   markTransfer: () => {
     const { groups, currentIndex, transferCount } = get()
     const nextIndex = currentIndex + 1
@@ -119,6 +138,25 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
 
   openCategoryPicker: () => set({ showCategoryPicker: true }),
   closeCategoryPicker: () => set({ showCategoryPicker: false }),
+
+  setNotesOnTransactions: (txIds, note) => {
+    const idSet = new Set(txIds)
+    set((state) => {
+      const patchTx = (t: Transaction) =>
+        idSet.has(t.id) ? { ...t, user_note: note } : t
+      const nextGroups = state.groups.map((g) => ({
+        ...g,
+        transactions: g.transactions.map(patchTx),
+      }))
+      const cur = nextGroups[state.currentIndex] ?? null
+      return {
+        groups: nextGroups,
+        transactions: state.transactions.map(patchTx),
+        activeGroup: cur,
+        activeTransaction: cur?.transactions[0] ?? null,
+      }
+    })
+  },
 
   reset: () =>
     set({

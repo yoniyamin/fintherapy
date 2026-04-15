@@ -1,5 +1,6 @@
 import { motion, useMotionValue, useTransform } from 'framer-motion'
 import type { MerchantGroup } from '../../stores/classificationStore'
+import { formatAccountLabel } from '../../lib/accountDisplay'
 
 interface SwipeCardProps {
   group: MerchantGroup
@@ -7,6 +8,16 @@ interface SwipeCardProps {
   onSwipeLeft: () => void
   onTransfer: () => void
   stackIndex: number
+  /** Main deck: categorize / no idea. No idea deck: pick category / skip for later */
+  rightLabel?: string
+  leftLabel?: string
+  showTransferButton?: boolean
+  accountAliases?: Map<string, string>
+  /** When true and the group mixes multiple cards, show account next to each amount. */
+  showAccountPerLine?: boolean
+  /** Shown when any transaction has a note (top card). */
+  notePreview?: string | null
+  onOpenNote?: () => void
 }
 
 export default function SwipeCard({
@@ -15,6 +26,13 @@ export default function SwipeCard({
   onSwipeLeft,
   onTransfer,
   stackIndex,
+  rightLabel = 'Categorize',
+  leftLabel = 'No idea',
+  showTransferButton = true,
+  accountAliases = new Map(),
+  showAccountPerLine = false,
+  notePreview = null,
+  onOpenNote,
 }: SwipeCardProps) {
   const x = useMotionValue(0)
   const rotate = useTransform(x, [-200, 200], [-12, 12])
@@ -52,6 +70,11 @@ export default function SwipeCard({
   }
 
   const tx = group.transactions[0]
+  const distinctLast4 = new Set(
+    group.transactions.map((t) => t.account_last4?.trim() ?? '').filter(Boolean),
+  )
+  const showMixedAccountTags = showAccountPerLine && distinctLast4.size > 1
+
   const dateRange = group.count > 1
     ? `${formatDate(group.transactions[group.transactions.length - 1].tx_date)} – ${formatDate(group.transactions[0].tx_date)}`
     : formatDate(tx.tx_date)
@@ -90,25 +113,39 @@ export default function SwipeCard({
               className="absolute left-4 top-4 rounded-lg bg-duo-green px-3 py-1 text-xs font-bold text-white"
               style={{ opacity: rightOpacity }}
             >
-              Categorize
+              {rightLabel}
             </motion.div>
             <motion.div
               className="absolute right-4 top-4 rounded-lg bg-flame px-3 py-1 text-xs font-bold text-white"
               style={{ opacity: leftOpacity }}
             >
-              Flag
+              {leftLabel}
             </motion.div>
           </>
         )}
 
-        {isTopCard && (
+        {isTopCard && onOpenNote && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenNote()
+            }}
+            className="absolute bottom-4 left-4 flex h-10 w-10 items-center justify-center rounded-full bg-gem/15 text-lg transition-all active:scale-90 active:bg-gem/25"
+            title="Add or edit note"
+          >
+            📝
+          </button>
+        )}
+
+        {isTopCard && showTransferButton && (
           <button
             onClick={(e) => {
               e.stopPropagation()
               onTransfer()
             }}
             className="absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-ice/10 text-lg transition-all active:scale-90 active:bg-ice/20"
-            title="Mark as money transfer"
+            title="Mark as own account transfer"
           >
             💸
           </button>
@@ -136,14 +173,36 @@ export default function SwipeCard({
           </p>
 
           {group.count > 1 && (
-            <p className="mt-1 text-xs text-surface-500">
-              {group.transactions.map(t => formatAmount(Number(t.amount))).join(' + ')}
+            <div className="mt-1 space-y-0.5 text-xs text-surface-500">
+              {showMixedAccountTags ? (
+                group.transactions.map((t) => (
+                  <p key={t.id} className="tabular-nums">
+                    <span className="text-surface-400">
+                      {formatAccountLabel(t.account_last4, accountAliases)}
+                    </span>
+                    {' · '}
+                    {formatAmount(Number(t.amount))}
+                  </p>
+                ))
+              ) : (
+                <p>{group.transactions.map((t) => formatAmount(Number(t.amount))).join(' + ')}</p>
+              )}
+            </div>
+          )}
+
+          {isTopCard && notePreview && (
+            <p className="mt-3 max-w-full px-1 text-center text-[11px] leading-snug text-surface-400 line-clamp-3">
+              {notePreview}
             </p>
           )}
         </div>
 
         {isTopCard && (
-          <p className="mt-8 text-[10px] font-medium tracking-wider text-surface-500">
+          <p
+            className={`text-[10px] font-medium tracking-wider text-surface-500 ${
+              notePreview ? 'mt-3' : 'mt-8'
+            }`}
+          >
             Swipe right to categorize · left to flag
           </p>
         )}

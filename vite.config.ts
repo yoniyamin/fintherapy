@@ -2,17 +2,25 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
-import basicSsl from '@vitejs/plugin-basic-ssl'
+import mkcert from 'vite-plugin-mkcert'
+
+const devTlsHosts =
+  process.env.VITE_DEV_TLS_HOSTS?.split(',')
+    .map((h) => h.trim())
+    .filter(Boolean) ?? []
 
 export default defineConfig({
   server: {
     host: true,
-    https: {},
   },
   plugins: [
     react(),
     tailwindcss(),
-    basicSsl(),
+    mkcert(
+      devTlsHosts.length > 0
+        ? { hosts: ['localhost', '127.0.0.1', '::1', ...devTlsHosts] }
+        : {},
+    ),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],

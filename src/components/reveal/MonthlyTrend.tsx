@@ -10,6 +10,8 @@ interface Props {
   data: MonthlyTotal[]
   selectedMonth: string
   income: number | null
+  /** Optional note under the chart title (e.g. own_transfers exclusion). */
+  subtitle?: string
 }
 
 function shortMonth(billing: string): string {
@@ -21,7 +23,7 @@ function shortMonth(billing: string): string {
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
-export default function MonthlyTrend({ data, selectedMonth, income }: Props) {
+export default function MonthlyTrend({ data, selectedMonth, income, subtitle }: Props) {
   if (data.length < 1) {
     return null
   }
@@ -39,7 +41,10 @@ export default function MonthlyTrend({ data, selectedMonth, income }: Props) {
       initial={{ y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
     >
-      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">Monthly Spending</h2>
+      <div className="space-y-1">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">Monthly Spending</h2>
+        {subtitle && <p className="text-[10px] leading-snug text-surface-500">{subtitle}</p>}
+      </div>
 
       <div className={ui.chartCard}>
         <ResponsiveContainer width="100%" height={200}>

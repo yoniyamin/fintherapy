@@ -5,7 +5,7 @@ export default function ScreenSurface({ children }: { children: React.ReactNode 
   return (
     <div className="relative min-h-full bg-surface-900">
       <OrganicBackdrop />
-      <div className="relative z-10 min-h-full">{children}</div>
+      <div className="relative z-10 min-h-full pb-[env(safe-area-inset-bottom)]">{children}</div>
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import type { Profile } from '../../types/database'
 import ScreenSurface from '../layout/ScreenSurface'
 import { ui } from '../../lib/uiClasses'
 
@@ -99,12 +100,11 @@ function CreateHouseholdForm({
   refreshProfile,
 }: {
   onBack: () => void
-  refreshProfile: () => Promise<unknown>
+  refreshProfile: (options?: { untilHouseholdId?: boolean }) => Promise<unknown>
 }) {
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [inviteCode, setInviteCode] = useState<string | null>(null)
   const navigate = useNavigate()
 
   const handleSubmit = async (e: FormEvent) => {
@@ -113,44 +113,25 @@ function CreateHouseholdForm({
     setSubmitting(true)
 
     try {
-      const { data, error: rpcErr } = await supabase.rpc('create_household', {
+      const { error: rpcErr } = await supabase.rpc('create_household', {
         p_name: name.trim(),
       })
 
       if (rpcErr) throw new Error(rpcErr.message)
 
-      await refreshProfile()
-      const result = data as { invite_code: string } | null
-      setInviteCode(result?.invite_code ?? null)
+      const profile = (await refreshProfile({ untilHouseholdId: true })) as Profile | null
+      if (!profile?.household_id) {
+        setError(
+          'Household was created, but your profile did not update yet. Refresh the page and try again.',
+        )
+        return
+      }
+      navigate('/', { replace: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
       setSubmitting(false)
     }
-  }
-
-  if (inviteCode) {
-    return (
-      <motion.div
-        className="space-y-5"
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-      >
-        <div className="rounded-2xl border border-duo-green/25 bg-duo-green/10 p-6 text-center shadow-[0_16px_40px_-18px_rgba(88,204,2,0.25)]">
-          <p className="text-sm text-surface-300">Share this invite code:</p>
-          <p className="mt-3 select-all font-mono text-2xl font-extrabold tracking-[0.3em] text-duo-green">
-            {inviteCode}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="w-full rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-3 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
-        >
-          Let&apos;s Go!
-        </button>
-      </motion.div>
-    )
   }
 
   return (
@@ -197,7 +178,7 @@ function JoinHouseholdForm({
   refreshProfile,
 }: {
   onBack: () => void
-  refreshProfile: () => Promise<unknown>
+  refreshProfile: (options?: { untilHouseholdId?: boolean }) => Promise<unknown>
 }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -216,8 +197,14 @@ function JoinHouseholdForm({
 
       if (rpcErr) throw new Error(rpcErr.message)
 
-      await refreshProfile()
-      navigate('/')
+      const profile = (await refreshProfile({ untilHouseholdId: true })) as Profile | null
+      if (!profile?.household_id) {
+        setError(
+          'Joined successfully, but your profile did not update yet. Refresh the page and try again.',
+        )
+        return
+      }
+      navigate('/', { replace: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {

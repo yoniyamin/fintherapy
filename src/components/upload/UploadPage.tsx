@@ -1,10 +1,13 @@
-import { useState, type ChangeEvent } from 'react'
+import { useState, useEffect, useMemo, useCallback, type ChangeEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Papa from 'papaparse'
 import { supabase } from '../../lib/supabase'
+import { invalidatePendingTransactionsInflight } from '../../lib/pendingTransactionsCache'
 import { useAuth } from '../../hooks/useAuth'
 import { useMerchantKnowledge } from '../../hooks/useMerchantKnowledge'
+import { useTransactions } from '../../hooks/useTransactions'
+import { formatAccountLabel } from '../../lib/accountDisplay'
 import Button from '../common/Button'
 import { ui } from '../../lib/uiClasses'
 
@@ -24,6 +27,12 @@ function findKey(row: Record<string, string>, candidates: string[]): string | un
 function parseAmount(raw: string): number {
   if (!raw) return 0
   let cleaned = raw.trim()
+  cleaned = cleaned.replace(/\u2212/g, '-')
+  let negate = false
+  if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
+    negate = true
+    cleaned = cleaned.slice(1, -1).trim()
+  }
   cleaned = cleaned.replace(/[A-Z]{3}$|^[A-Z]{3}|[€$£¥₹]/g, '').trim()
   cleaned = cleaned.replace(/^\+/, '')
   if (cleaned.includes(',') && cleaned.includes('.')) {
@@ -40,7 +49,8 @@ function parseAmount(raw: string): number {
       cleaned = cleaned.replace(/,/g, '')
     }
   }
-  return Math.abs(parseFloat(cleaned) || 0)
+  const n = parseFloat(cleaned) || 0
+  return negate ? -n : n
 }
 
 function parseDate(raw: string): string {
@@ -109,6 +119,37 @@ const STEPS = ['Select file', 'Review', 'Upload']
 export default function UploadPage() {
   const { profile } = useAuth()
   const { autoClassify } = useMerchantKnowledge(profile?.household_id)
+  const { getAccountAliases, getDistinctAccountLast4ForHousehold } = useTransactions(profile?.household_id)
+  const [accountAliases, setAccountAliases] = useState<Map<string, string>>(new Map())
+  const [knownLast4sFromData, setKnownLast4sFromData] = useState<string[]>([])
+
+  const refreshAccountPickers = useCallback(async () => {
+    if (!profile?.household_id) return
+    const [aliasRows, last4s] = await Promise.all([
+      getAccountAliases(),
+      getDistinctAccountLast4ForHousehold(),
+    ])
+    setAccountAliases(new Map(aliasRows.map((r) => [r.last4.trim(), r.label.trim()])))
+    setKnownLast4sFromData(last4s)
+  }, [profile?.household_id, getAccountAliases, getDistinctAccountLast4ForHousehold])
+
+  useEffect(() => {
+    void refreshAccountPickers()
+  }, [refreshAccountPickers])
+
+  /** Saved names ∪ any last-4 present in transactions (new cards show without naming first). */
+  const accountPicklist = useMemo(() => {
+    const s = new Set<string>()
+    for (const x of knownLast4sFromData) {
+      const t = String(x).trim()
+      if (t) s.add(t)
+    }
+    for (const k of accountAliases.keys()) {
+      const t = k.trim()
+      if (t) s.add(t)
+    }
+    return [...s].sort((a, b) => a.localeCompare(b))
+  }, [knownLast4sFromData, accountAliases])
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<RawRow[]>([])
   const [detectedColumns, setDetectedColumns] = useState<{ merchant?: string; date?: string; amount?: string } | null>(null)
@@ -202,7 +243,7 @@ export default function UploadPage() {
               billing_month: billingMonth,
               account_last4: accountLast4 || null,
             }))
-            .filter((r) => r.merchant_raw && r.amount > 0)
+            .filter((r) => r.merchant_raw && r.amount !== 0)
 
           if (rows.length === 0) {
             setError('No valid transactions found after parsing. Check that amount values are non-zero.')
@@ -218,9 +259,11 @@ export default function UploadPage() {
           if (insertError) {
             setError(insertError.message)
           } else {
+            invalidatePendingTransactionsInflight(profile.household_id!)
             const insertedCount = (inserted as number) ?? rows.length
             const autoCount = insertedCount > 0 ? await autoClassify() : 0
             setResult({ count: rows.length, inserted: insertedCount, autoCount })
+            void refreshAccountPickers()
             setFile(null)
             setPreview([])
             setDetectedColumns(null)
@@ -261,7 +304,7 @@ export default function UploadPage() {
       </div>
 
       {/* Month + Account fields */}
-      <div className="mt-6 grid grid-cols-2 gap-3">
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label htmlFor="billing-month" className="block text-sm font-medium text-surface-300">
             Billing Month
@@ -284,6 +327,24 @@ export default function UploadPage() {
           <label htmlFor="account-last4" className="block text-sm font-medium text-surface-300">
             Account (last 4)
           </label>
+          {accountPicklist.length > 0 && (
+            <select
+              aria-label="Pick a saved card"
+              value=""
+              onChange={(e) => {
+                const v = e.target.value
+                if (v) setAccountLast4(v)
+              }}
+              className={`mt-1.5 mb-1.5 block w-full ${ui.select}`}
+            >
+              <option value="">Or choose a card…</option>
+              {accountPicklist.map((last4) => (
+                <option key={last4} value={last4}>
+                  {formatAccountLabel(last4, accountAliases)}
+                </option>
+              ))}
+            </select>
+          )}
           <input
             id="account-last4"
             type="text"
@@ -293,7 +354,21 @@ export default function UploadPage() {
             onChange={(e) => setAccountLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
             className={`mt-1.5 block w-full ${ui.input} px-3 py-2.5`}
             placeholder="1234"
+            list={accountPicklist.length > 0 ? 'saved-accounts-datalist' : undefined}
+            autoComplete="off"
           />
+          {accountPicklist.length > 0 && (
+            <datalist id="saved-accounts-datalist">
+              {accountPicklist.map((k) => (
+                <option key={k} value={k} />
+              ))}
+            </datalist>
+          )}
+          {accountLast4.length === 4 && (
+            <p className="mt-1 text-[11px] text-surface-500">
+              {formatAccountLabel(accountLast4, accountAliases)}
+            </p>
+          )}
         </div>
       </div>
 
@@ -359,7 +434,7 @@ export default function UploadPage() {
           </span>
           {accountLast4 && (
             <span className="rounded-full bg-surface-800 px-2.5 py-1 font-medium text-surface-400">
-              ••••{accountLast4}
+              {formatAccountLabel(accountLast4, accountAliases)}
             </span>
           )}
         </div>
@@ -431,7 +506,7 @@ export default function UploadPage() {
             )}
             <p className="mt-1 text-sm text-surface-400">
               {formatMonthLabel(billingMonth)}
-              {accountLast4 ? ` · ••••${accountLast4}` : ''}
+              {accountLast4 ? ` · ${formatAccountLabel(accountLast4, accountAliases)}` : ''}
             </p>
             <Link
               to="/classify"

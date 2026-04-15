@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Transaction } from '../../types/database'
 import { CATEGORIES } from '../../lib/constants'
+import { formatAccountLabel } from '../../lib/accountDisplay'
 
 interface Props {
   category: string
@@ -11,12 +12,21 @@ interface Props {
   onClose: () => void
   onReclassify: (txId: string, newCategory: string) => Promise<void>
   onMarkTransfer?: (txId: string) => Promise<void>
+  accountAliases?: Map<string, string>
 }
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(v)
 
-export default function CategoryDetail({ category, transactions, loading, onClose, onReclassify, onMarkTransfer }: Props) {
+export default function CategoryDetail({
+  category,
+  transactions,
+  loading,
+  onClose,
+  onReclassify,
+  onMarkTransfer,
+  accountAliases,
+}: Props) {
   const [movingTxId, setMovingTxId] = useState<string | null>(null)
   const [reclassifying, setReclassifying] = useState(false)
 
@@ -89,6 +99,12 @@ export default function CategoryDetail({ category, transactions, loading, onClos
                   <p className="text-sm font-medium text-surface-200">
                     {tx.merchant_clean ?? tx.merchant_raw}
                   </p>
+                  <p className="mt-0.5 text-[11px] text-surface-500">
+                    {formatAccountLabel(tx.account_last4, accountAliases ?? new Map())}
+                  </p>
+                  {tx.user_note?.trim() && (
+                    <p className="mt-1.5 text-[11px] leading-snug text-surface-400">{tx.user_note.trim()}</p>
+                  )}
                   <div className="mt-1.5 flex items-center gap-2">
                     <span className="text-xs text-surface-500">
                       {new Date(tx.tx_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}

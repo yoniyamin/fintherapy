@@ -21,6 +21,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage /> },
       { path: 'upload', element: <UploadPage /> },
+      { path: 'classify/no-idea', element: <SwipeDeck /> },
       { path: 'classify', element: <SwipeDeck /> },
       { path: 'reveal', element: <RevealPage /> },
       { path: 'bets', element: <BetsPage /> },

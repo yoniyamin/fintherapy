@@ -1,4 +1,6 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useReveal } from '../../hooks/useReveal'
@@ -7,9 +9,10 @@ import SpendingChart from './SpendingChart'
 import MonthlyTrend from './MonthlyTrend'
 import Leaderboard from './Leaderboard'
 import CategoryDetail from './CategoryDetail'
-import { CATEGORIES } from '../../lib/constants'
+import { CATEGORIES, OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
 import type { Transaction } from '../../types/database'
 import { ui } from '../../lib/uiClasses'
+import { formatAccountLabel } from '../../lib/accountDisplay'
 
 function getCurrentMonth(): string {
   const now = new Date()
@@ -37,7 +40,17 @@ const fmt = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(v)
 
 function downloadCSV(rows: ExportRow[], month: string) {
-  const headers = ['Date', 'Merchant', 'Merchant (Clean)', 'Amount', 'Category', 'Status', 'Month', 'Account Last 4']
+  const headers = [
+    'Date',
+    'Merchant',
+    'Merchant (Clean)',
+    'Amount',
+    'Category',
+    'Status',
+    'Month',
+    'Account Last 4',
+    'Note',
+  ]
   const catLookup = Object.fromEntries(CATEGORIES.map(c => [c.id, c.label]))
   const csvLines = [
     headers.join(','),
@@ -50,6 +63,7 @@ function downloadCSV(rows: ExportRow[], month: string) {
       r.status,
       r.billing_month,
       r.account_last4 ?? '',
+      `"${(r.user_note ?? '').replace(/"/g, '""')}"`,
     ].join(','))
   ]
   const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' })
@@ -62,14 +76,29 @@ function downloadCSV(rows: ExportRow[], month: string) {
 }
 
 export default function RevealPage() {
+  const location = useLocation()
   const { profile, user } = useAuth()
   const {
     summary, leaderboard, monthlyTotals, householdIncome,
     loading, fetchSummary, setIncome,
   } = useReveal(profile?.household_id)
-  const { getTransactionsByCategory, reclassifyTransaction, markTransfer, getExportData } =
-    useTransactions(profile?.household_id)
+  const {
+    getTransactionsByCategory,
+    reclassifyTransaction,
+    markTransfer,
+    getExportData,
+    getAccountAliases,
+    getDistinctAccountLast4ForHousehold,
+    upsertAccountAlias,
+  } = useTransactions(profile?.household_id)
   const [month, setMonth] = useState(getCurrentMonth())
+  /** null = all cards; non-null = filter to these last-4 values */
+  const [accountFilter, setAccountFilter] = useState<string[] | null>(null)
+  const [availableLast4s, setAvailableLast4s] = useState<string[]>([])
+  const [aliasMap, setAliasMap] = useState<Map<string, string>>(new Map())
+  const [aliasDraft, setAliasDraft] = useState<{ last4: string; label: string } | null>(null)
+  const [cardsOpen, setCardsOpen] = useState(false)
+  const cardsPanelRef = useRef<HTMLDivElement>(null)
   const [incomeInput, setIncomeInput] = useState('')
   const [editingIncome, setEditingIncome] = useState(false)
   const incomeRef = useRef<HTMLInputElement>(null)
@@ -80,10 +109,50 @@ export default function RevealPage() {
   const [drillTxns, setDrillTxns] = useState<Transaction[]>([])
   const [drillLoading, setDrillLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
+  /** When false, own_transfers are omitted from pie, “Total spent”, monthly trend bars, and tx counts. */
+  const [includeOwnTransfers, setIncludeOwnTransfers] = useState(false)
 
   useEffect(() => {
-    fetchSummary(month)
-  }, [month, fetchSummary])
+    fetchSummary(month, accountFilter?.length ? accountFilter : null, includeOwnTransfers)
+  }, [month, fetchSummary, accountFilter, includeOwnTransfers])
+
+  useEffect(() => {
+    if (!profile?.household_id) return
+    let cancelled = false
+    Promise.all([getDistinctAccountLast4ForHousehold(), getAccountAliases()]).then(([last4s, aliases]) => {
+      if (cancelled) return
+      setAvailableLast4s(last4s)
+      setAliasMap(new Map(aliases.map((a) => [a.last4.trim(), a.label.trim()])))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.household_id, getDistinctAccountLast4ForHousehold, getAccountAliases, location.pathname])
+
+  /** Cards with any uploaded activity ∪ saved aliases (names without tx yet still listed). */
+  const mergedCardLast4s = useMemo(() => {
+    const s = new Set<string>()
+    for (const x of availableLast4s) {
+      const t = String(x).trim()
+      if (t) s.add(t)
+    }
+    for (const k of aliasMap.keys()) {
+      const t = k.trim()
+      if (t) s.add(t)
+    }
+    return [...s].sort((a, b) => a.localeCompare(b))
+  }, [availableLast4s, aliasMap])
+
+  useEffect(() => {
+    if (!cardsOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (cardsPanelRef.current && !cardsPanelRef.current.contains(e.target as Node)) {
+        setCardsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [cardsOpen])
 
   useEffect(() => {
     if (householdIncome !== null) {
@@ -91,7 +160,11 @@ export default function RevealPage() {
     }
   }, [householdIncome])
 
-  const totalSpent = summary.reduce((sum, s) => sum + Number(s.total_amount), 0)
+  const spendingSummary = summary.filter(
+    (s) => includeOwnTransfers || s.category !== OWN_TRANSFERS_CATEGORY_ID,
+  )
+  const totalSpent = spendingSummary.reduce((sum, s) => sum + Number(s.total_amount), 0)
+  const spendingTxCount = spendingSummary.reduce((sum, s) => sum + Number(s.tx_count), 0)
   const incomeNum = Number(incomeInput) || 0
   const freeIncome = incomeNum - totalSpent
   const savingsRate = incomeNum > 0 ? (freeIncome / incomeNum) * 100 : 0
@@ -111,27 +184,61 @@ export default function RevealPage() {
     if (e.key === 'Escape') setEditingIncome(false)
   }
 
+  const accountRpcFilter = accountFilter?.length ? accountFilter : null
+
   const handleCategoryClick = useCallback(async (categoryId: string) => {
     setDrillCategory(categoryId)
     setDrillLoading(true)
-    const txns = await getTransactionsByCategory(month, categoryId)
+    const txns = await getTransactionsByCategory(month, categoryId, accountRpcFilter)
     setDrillTxns(txns)
     setDrillLoading(false)
-  }, [month, getTransactionsByCategory])
+  }, [month, getTransactionsByCategory, accountRpcFilter])
 
   const handleReclassify = useCallback(async (txId: string, newCategory: string) => {
     if (!user) return
     await reclassifyTransaction(txId, newCategory, user.id)
     setDrillTxns(prev => prev.filter(t => t.id !== txId))
-    fetchSummary(month)
-  }, [user, reclassifyTransaction, fetchSummary, month])
+    fetchSummary(month, accountRpcFilter, includeOwnTransfers)
+  }, [user, reclassifyTransaction, fetchSummary, month, accountRpcFilter, includeOwnTransfers])
 
   const handleMarkTransfer = useCallback(async (txId: string) => {
     if (!user) return
     await markTransfer(txId, user.id)
     setDrillTxns(prev => prev.filter(t => t.id !== txId))
-    fetchSummary(month)
-  }, [user, markTransfer, fetchSummary, month])
+    fetchSummary(month, accountRpcFilter, includeOwnTransfers)
+  }, [user, markTransfer, fetchSummary, month, accountRpcFilter, includeOwnTransfers])
+
+  const isCardIncluded = (last4: string) =>
+    accountFilter === null || accountFilter.includes(last4)
+
+  const toggleAccountLast4 = (last4: string) => {
+    setAccountFilter((prev) => {
+      if (prev === null) {
+        const next = mergedCardLast4s.filter((x) => x !== last4)
+        return next.length === 0 ? null : next
+      }
+      if (prev.includes(last4)) {
+        const next = prev.filter((x) => x !== last4)
+        return next.length === 0 ? null : next
+      }
+      const next = [...prev, last4]
+      if (next.length >= mergedCardLast4s.length) return null
+      return next
+    })
+  }
+
+  const selectAllCards = () => setAccountFilter(null)
+
+  const saveAlias = async () => {
+    if (!aliasDraft?.label.trim() || !aliasDraft.last4) return
+    const { error } = await upsertAccountAlias(aliasDraft.last4, aliasDraft.label.trim())
+    if (error) {
+      console.error('upsert_account_alias', error.message)
+      return
+    }
+    setAliasMap((m) => new Map(m).set(aliasDraft.last4, aliasDraft.label.trim()))
+    setAliasDraft(null)
+  }
 
   const handleExport = async () => {
     setExporting(true)
@@ -184,6 +291,118 @@ export default function RevealPage() {
         </button>
       </div>
 
+      {profile?.household_id && (
+        <div className={`${ui.glassFlat} relative z-30 mt-3 px-3 py-3`} ref={cardsPanelRef}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-surface-400">Cards in this view</span>
+            <button
+              type="button"
+              onClick={selectAllCards}
+              className="text-xs font-medium text-ice hover:text-ice/90"
+            >
+              All cards
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] text-surface-500">
+            Saved names apply everywhere (including upload). Open the list to filter Reveal by card.
+          </p>
+          <div className="relative mt-2">
+            <button
+              type="button"
+              onClick={() => setCardsOpen((o) => !o)}
+              className="flex w-full items-center justify-between rounded-xl border border-white/[0.08] bg-surface-950/55 px-3 py-2.5 text-left text-sm text-surface-200 outline-none ring-1 ring-white/[0.06]"
+            >
+              <span>
+                {accountFilter === null
+                  ? 'All cards included'
+                  : `${accountFilter.length} card${accountFilter.length !== 1 ? 's' : ''} selected`}
+              </span>
+              <span className="text-surface-500">{cardsOpen ? '▲' : '▼'}</span>
+            </button>
+            {cardsOpen && (
+              <div className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-64 overflow-y-auto rounded-xl border border-white/[0.1] bg-surface-950 p-2 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.65)]">
+                {mergedCardLast4s.length === 0 ? (
+                  <p className="px-2 py-3 text-xs text-surface-500">
+                    No card last-4 in this month yet. Upload a CSV with an account, or add a name after data appears.
+                  </p>
+                ) : (
+                  <>
+                    {mergedCardLast4s.map((last4) => (
+                      <label
+                        key={last4}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-white/[0.04]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isCardIncluded(last4)}
+                          onChange={() => toggleAccountLast4(last4)}
+                          className="h-4 w-4 rounded border-white/20 bg-surface-900 text-duo-green"
+                        />
+                        <span className="flex-1 text-sm text-surface-200">{formatAccountLabel(last4, aliasMap)}</span>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-md px-2 py-1 text-xs text-ice hover:bg-white/[0.06]"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            setAliasDraft({ last4, label: aliasMap.get(last4) ?? '' })
+                          }}
+                        >
+                          Name
+                        </button>
+                      </label>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {aliasDraft &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="alias-card-title"
+            onClick={() => setAliasDraft(null)}
+          >
+            <div
+              className="w-full max-w-sm rounded-2xl border border-white/10 bg-surface-950 p-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p id="alias-card-title" className="text-xs text-surface-500">
+                Card ···{aliasDraft.last4}
+              </p>
+              <input
+                value={aliasDraft.label}
+                onChange={(e) => setAliasDraft({ ...aliasDraft, label: e.target.value })}
+                placeholder="Display name (e.g. Yonatan)"
+                className={`mt-2 w-full ${ui.input}`}
+                autoFocus
+              />
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg px-3 py-2 text-sm text-surface-400"
+                  onClick={() => setAliasDraft(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-duo-green px-4 py-2 text-sm font-bold text-white"
+                  onClick={() => void saveAlias()}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
       {loading ? (
         <div className="mt-12 flex items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
@@ -234,12 +453,28 @@ export default function RevealPage() {
             </div>
 
             <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
-              <span className="text-sm text-surface-400">Total Spent</span>
+              <span className="text-sm text-surface-400">Total spent</span>
               <span className="text-sm font-bold tabular-nums text-primary-400">{fmt(totalSpent)}</span>
             </div>
+            <label className="flex cursor-pointer items-center gap-2.5 border-b border-white/[0.06] px-4 py-3">
+              <input
+                type="checkbox"
+                checked={includeOwnTransfers}
+                onChange={(e) => setIncludeOwnTransfers(e.target.checked)}
+                className="h-4 w-4 shrink-0 rounded border-white/20 bg-surface-900 text-duo-green"
+              />
+              <span className="text-sm text-surface-300">
+                Include own-account transfers in totals, pie, and monthly bars
+              </span>
+            </label>
+            <p className="border-b border-white/[0.06] px-4 py-2 text-[11px] text-surface-500">
+              {includeOwnTransfers
+                ? 'Own transfers are included everywhere below.'
+                : 'Own transfers stay visible in the category list (for drill-down) but are excluded from totals and the donut.'}
+            </p>
             <div className="flex items-center justify-between px-4 py-1 text-xs text-surface-500/90">
               <span />
-              <span>{summary.reduce((s, c) => s + Number(c.tx_count), 0)} transactions</span>
+              <span>{spendingTxCount} spending tx</span>
             </div>
 
             {incomeNum > 0 && (
@@ -273,10 +508,18 @@ export default function RevealPage() {
             total={totalSpent}
             categoryLookup={categoryLookup}
             onCategoryClick={handleCategoryClick}
+            excludeFromPieIds={includeOwnTransfers ? [] : [OWN_TRANSFERS_CATEGORY_ID]}
           />
 
           {/* Monthly trend */}
-          <MonthlyTrend data={monthlyTotals} selectedMonth={month} income={householdIncome} />
+          <MonthlyTrend
+            data={monthlyTotals}
+            selectedMonth={month}
+            income={householdIncome}
+            subtitle={
+              includeOwnTransfers ? undefined : 'Excludes own-account transfers (enable checkbox above to include).'
+            }
+          />
 
           {/* Leaderboard */}
           <Leaderboard entries={leaderboard} />
@@ -293,6 +536,7 @@ export default function RevealPage() {
             onClose={() => setDrillCategory(null)}
             onReclassify={handleReclassify}
             onMarkTransfer={handleMarkTransfer}
+            accountAliases={aliasMap}
           />
         )}
       </AnimatePresence>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useTransactions, type DailyActivity, type HomeLeaderboardEntry } from '../../hooks/useTransactions'
+import { useFlaggedCount } from '../../hooks/useFlaggedCount'
 import { XP_VALUES } from '../../lib/constants'
 import Leaderboard from '../reveal/Leaderboard'
 
@@ -42,9 +43,10 @@ const actionGlow = {
 } as const
 
 export default function HomePage() {
-  const { profile, signOut, loading } = useAuth()
+  const { profile, signOut } = useAuth()
   const { transactions: pending, getDailyActivity, getHouseholdInfo, getLeaderboard } =
     useTransactions(profile?.household_id)
+  const noIdeaCount = useFlaggedCount(profile?.household_id)
   const [dailyActivity, setDailyActivity] = useState<DailyActivity[]>([])
   const [leaderboard, setLeaderboard] = useState<HomeLeaderboardEntry[]>([])
   const [householdInfo, setHouseholdInfo] = useState<{ name: string; invite_code: string } | null>(null)
@@ -70,14 +72,6 @@ export default function HomePage() {
     await navigator.clipboard.writeText(householdInfo.invite_code)
     setCodeCopied(true)
     setTimeout(() => setCodeCopied(false), 2000)
-  }
-
-  if (loading) {
-    return (
-      <div className="relative flex h-full items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
-      </div>
-    )
   }
 
   const myToday = dailyActivity.find(d => d.user_id === profile?.id)
@@ -223,6 +217,15 @@ export default function HomePage() {
             </motion.div>
           </Link>
         </div>
+        {noIdeaCount > 0 && (
+          <Link
+            to="/classify/no-idea"
+            className="mt-2 flex items-center justify-center gap-2 rounded-xl border border-flame/25 bg-flame/10 px-3 py-2 text-center text-xs font-semibold text-flame transition-colors hover:bg-flame/15"
+          >
+            <span>No idea queue</span>
+            <span className="rounded-full bg-flame/30 px-2 py-0.5 tabular-nums">{noIdeaCount}</span>
+          </Link>
+        )}
       </motion.div>
 
       {profile && (

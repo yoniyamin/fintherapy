@@ -52,6 +52,8 @@ export interface Transaction {
   status: 'auto' | 'manual' | 'pending' | 'flagged' | 'transfer' | 'offset'
   classified_by: string | null
   batch_id: string | null
+  /** Optional note from the classify screen; persisted per transaction. */
+  user_note?: string | null
   created_at: string
 }
 

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useBets } from '../../hooks/useBets'
 import { useReveal } from '../../hooks/useReveal'
-import { CATEGORIES } from '../../lib/constants'
+import { CATEGORIES, OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
 import Button from '../common/Button'
 import { ui } from '../../lib/uiClasses'
 
@@ -61,6 +61,7 @@ export default function BetsPage() {
     setSubmitting(true)
     setSuccess(false)
     const bets = CATEGORIES
+      .filter((c) => c.id !== OWN_TRANSFERS_CATEGORY_ID)
       .filter((cat) => amounts[cat.id] && Number(amounts[cat.id]) > 0)
       .map((cat) => ({
         category: cat.id,
@@ -123,7 +124,7 @@ export default function BetsPage() {
         </div>
       ) : tab === 'predict' ? (
         <div className="mt-6 space-y-2">
-          {CATEGORIES.filter((c) => c.id !== 'uncategorized').map((cat, i) => (
+          {CATEGORIES.filter((c) => c.id !== OWN_TRANSFERS_CATEGORY_ID).map((cat, i) => (
             <motion.div
               key={cat.id}
               className={`flex items-center gap-3 px-3.5 py-3 ${ui.glassFlat}`}
@@ -167,7 +168,7 @@ export default function BetsPage() {
         </div>
       ) : (
         <div className="mt-6 space-y-2">
-          {CATEGORIES.filter((c) => c.id !== 'uncategorized').map((cat, i) => {
+          {CATEGORIES.filter((c) => c.id !== OWN_TRANSFERS_CATEGORY_ID).map((cat, i) => {
             const predicted = Number(amounts[cat.id] ?? 0)
             const actual = actualLookup[cat.id] ?? 0
             const diff = actual - predicted

@@ -1,6 +1,10 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { fetchPendingTransactionsShared } from '../lib/pendingTransactionsCache'
 import type { Transaction } from '../types/database'
+
+/** `pending` = normal classify queue; `no-idea` = flagged transactions deck. */
+export type ClassifyDeckMode = 'pending' | 'no-idea'
 
 export interface MonthStats {
   total_count: number
@@ -42,33 +46,46 @@ export interface ExportRow {
   status: string
   billing_month: string
   account_last4: string | null
+  user_note?: string | null
 }
 
-export function useTransactions(householdId: string | null | undefined) {
+export function useTransactions(
+  householdId: string | null | undefined,
+  deck: ClassifyDeckMode = 'pending',
+) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [autoClassified, setAutoClassified] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  /** Avoid full-screen spinner on background refetches (e.g. tab idle / token refresh). */
+  const loadedKeyRef = useRef<string | null>(null)
 
   const fetchPending = useCallback(async () => {
     if (!householdId) {
       setLoading(false)
+      loadedKeyRef.current = null
       return
     }
-    setLoading(true)
-
-    const [pendingRes, autoRes] = await Promise.all([
-      supabase.rpc('get_pending_transactions', { p_household_id: householdId }),
-      supabase.rpc('get_auto_classified_transactions', { p_household_id: householdId }),
-    ])
-
-    if (!pendingRes.error && pendingRes.data) {
-      setTransactions(pendingRes.data as Transaction[])
+    const key = `${householdId}:${deck}`
+    const blocking = loadedKeyRef.current !== key
+    if (blocking) setLoading(true)
+    try {
+      if (deck === 'no-idea') {
+        const { data, error } = await supabase.rpc('get_flagged_transactions', {
+          p_household_id: householdId,
+        })
+        if (!error && data) setTransactions(data as Transaction[])
+        else setTransactions([])
+        setAutoClassified([])
+      } else {
+        const { pending, autoClassified: auto } = await fetchPendingTransactionsShared(householdId)
+        setTransactions(pending)
+        setAutoClassified(auto)
+      }
+      loadedKeyRef.current = key
+    } finally {
+      setLoading(false)
     }
-    if (!autoRes.error && autoRes.data) {
-      setAutoClassified(autoRes.data as Transaction[])
-    }
-    setLoading(false)
-  }, [householdId])
+  }, [householdId, deck])
 
   useEffect(() => {
     fetchPending()
@@ -97,6 +114,19 @@ export function useTransactions(householdId: string | null | undefined) {
     const { error } = await supabase.rpc('flag_transaction', {
       p_household_id: householdId,
       p_tx_id: txId,
+    })
+
+    return { error }
+  }
+
+  const setTransactionsUserNote = async (txIds: string[], note: string | null) => {
+    if (!householdId) return { error: new Error('No household') }
+    if (txIds.length === 0) return { error: null }
+
+    const { error } = await supabase.rpc('set_transactions_user_note', {
+      p_household_id: householdId,
+      p_tx_ids: txIds,
+      p_note: note,
     })
 
     return { error }
@@ -163,6 +193,7 @@ export function useTransactions(householdId: string | null | undefined) {
   const getTransactionsByCategory = useCallback(async (
     billingMonth: string,
     category: string,
+    accountLast4s?: string[] | null,
   ): Promise<Transaction[]> => {
     if (!householdId) return []
 
@@ -170,6 +201,8 @@ export function useTransactions(householdId: string | null | undefined) {
       p_household_id: householdId,
       p_billing_month: billingMonth,
       p_category: category,
+      p_account_last4s:
+        accountLast4s && accountLast4s.length > 0 ? accountLast4s : null,
     })
 
     if (error || !data) return []
@@ -239,6 +272,56 @@ export function useTransactions(householdId: string | null | undefined) {
     return rows[0] ?? null
   }, [householdId])
 
+  const getAccountAliases = useCallback(async (): Promise<{ last4: string; label: string }[]> => {
+    if (!householdId) return []
+    const { data, error } = await supabase.rpc('get_account_aliases', {
+      p_household_id: householdId,
+    })
+    if (error || !data) return []
+    return data as { last4: string; label: string }[]
+  }, [householdId])
+
+  const getDistinctAccountLast4ForMonth = useCallback(async (billingMonth: string): Promise<string[]> => {
+    if (!householdId) return []
+    const { data, error } = await supabase.rpc('get_distinct_account_last4_for_month', {
+      p_household_id: householdId,
+      p_billing_month: billingMonth,
+    })
+    if (error || !data) return []
+    return (data as { account_last4: string }[]).map((r) => r.account_last4).filter(Boolean)
+  }, [householdId])
+
+  /** Every non-null last-4 ever seen in uploads (any billing month). */
+  const getDistinctAccountLast4ForHousehold = useCallback(async (): Promise<string[]> => {
+    if (!householdId) return []
+    const { data, error } = await supabase.rpc('get_distinct_account_last4_for_household', {
+      p_household_id: householdId,
+    })
+    if (error) {
+      console.error('get_distinct_account_last4_for_household failed:', error.message)
+      return []
+    }
+    if (!data) return []
+    return (data as { account_last4: string }[]).map((r) => r.account_last4).filter(Boolean)
+  }, [householdId])
+
+  const upsertAccountAlias = useCallback(async (last4: string, label: string) => {
+    if (!householdId) return { error: new Error('No household') }
+    return supabase.rpc('upsert_account_alias', {
+      p_household_id: householdId,
+      p_last4: last4,
+      p_label: label,
+    })
+  }, [householdId])
+
+  const deleteAccountAlias = useCallback(async (last4: string) => {
+    if (!householdId) return { error: new Error('No household') }
+    return supabase.rpc('delete_account_alias', {
+      p_household_id: householdId,
+      p_last4: last4,
+    })
+  }, [householdId])
+
   return {
     transactions,
     autoClassified,
@@ -246,6 +329,7 @@ export function useTransactions(householdId: string | null | undefined) {
     fetchPending,
     classifyTransaction,
     flagTransaction,
+    setTransactionsUserNote,
     markTransfer,
     detectRefunds,
     awardXp,
@@ -257,5 +341,10 @@ export function useTransactions(householdId: string | null | undefined) {
     getExportData,
     getHouseholdInfo,
     getLeaderboard,
+    getAccountAliases,
+    getDistinctAccountLast4ForMonth,
+    getDistinctAccountLast4ForHousehold,
+    upsertAccountAlias,
+    deleteAccountAlias,
   }
 }
