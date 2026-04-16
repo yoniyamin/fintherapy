@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, type ChangeEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Papa from 'papaparse'
@@ -8,21 +9,12 @@ import { useAuth } from '../../hooks/useAuth'
 import { useMerchantKnowledge } from '../../hooks/useMerchantKnowledge'
 import { useTransactions } from '../../hooks/useTransactions'
 import { formatAccountLabel } from '../../lib/accountDisplay'
+import {
+  getResolvedCsvColumns,
+  type CsvColumnSelection,
+} from '../../lib/csvColumnMap'
 import Button from '../common/Button'
 import { ui } from '../../lib/uiClasses'
-
-const MERCHANT_KEYS = ['item', 'description', 'merchant', 'merchant name', 'payee', 'name', 'details', 'concepto', 'descripción']
-const DATE_KEYS = ['date', 'transaction date', 'posting date', 'fecha', 'fecha valor']
-const AMOUNT_KEYS = ['amount', 'debit', 'value', 'importe', 'cantidad']
-
-function findKey(row: Record<string, string>, candidates: string[]): string | undefined {
-  const keys = Object.keys(row)
-  for (const candidate of candidates) {
-    const match = keys.find((k) => k.toLowerCase().trim() === candidate)
-    if (match) return match
-  }
-  return undefined
-}
 
 function parseAmount(raw: string): number {
   if (!raw) return 0
@@ -152,7 +144,13 @@ export default function UploadPage() {
   }, [knownLast4sFromData, accountAliases])
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<RawRow[]>([])
-  const [detectedColumns, setDetectedColumns] = useState<{ merchant?: string; date?: string; amount?: string } | null>(null)
+  const [forcedColumns, setForcedColumns] = useState<CsvColumnSelection | null>(null)
+  const [columnMapOpen, setColumnMapOpen] = useState(false)
+  const [columnMapDraft, setColumnMapDraft] = useState<CsvColumnSelection>({
+    merchant: '',
+    amount: '',
+    date: '',
+  })
   const [billingMonth, setBillingMonth] = useState(getCurrentMonth())
   const [accountLast4, setAccountLast4] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -163,13 +161,35 @@ export default function UploadPage() {
 
   const currentStep = result ? 2 : file ? 1 : 0
 
+  const previewSample = preview[0]
+  const headerList = previewSample ? Object.keys(previewSample) : []
+  const resolvedColumns = previewSample
+    ? getResolvedCsvColumns(previewSample, forcedColumns)
+    : {}
+
+  const openColumnMapModal = useCallback(() => {
+    if (!previewSample) return
+    const r = getResolvedCsvColumns(previewSample, forcedColumns)
+    const cols = Object.keys(previewSample)
+    const fallbackMerchant = r.merchant ?? cols[0] ?? ''
+    const fallbackAmount =
+      r.amount ?? cols.find((c) => c !== fallbackMerchant) ?? cols[1] ?? cols[0] ?? ''
+    setColumnMapDraft({
+      merchant: fallbackMerchant,
+      amount: fallbackAmount,
+      date: r.date ?? '',
+    })
+    setColumnMapOpen(true)
+  }, [previewSample, forcedColumns])
+
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0]
     if (!selected) return
     setFile(selected)
     setResult(null)
     setError(null)
-    setDetectedColumns(null)
+    setForcedColumns(null)
+    setColumnMapOpen(false)
 
     const reader = new FileReader()
     reader.onload = (ev) => {
@@ -182,13 +202,19 @@ export default function UploadPage() {
         preview: 5,
         complete: (results) => {
           setPreview(results.data)
-          if (results.data.length > 0) {
-            const sample = results.data[0]
-            setDetectedColumns({
-              merchant: findKey(sample, MERCHANT_KEYS),
-              date: findKey(sample, DATE_KEYS),
-              amount: findKey(sample, AMOUNT_KEYS),
+          const sample = results.data[0]
+          if (!sample) return
+          const auto = getResolvedCsvColumns(sample, null)
+          if (!auto.merchant || !auto.amount) {
+            const cols = Object.keys(sample)
+            const fbM = auto.merchant ?? cols[0] ?? ''
+            const fbA = auto.amount ?? cols.find((c) => c !== fbM) ?? cols[1] ?? cols[0] ?? ''
+            setColumnMapDraft({
+              merchant: fbM,
+              amount: fbA,
+              date: auto.date ?? '',
             })
+            setColumnMapOpen(true)
           }
         },
       })
@@ -221,14 +247,15 @@ export default function UploadPage() {
           }
 
           const sample = results.data[0]
-          const merchantKey = findKey(sample, MERCHANT_KEYS)
-          const dateKey = findKey(sample, DATE_KEYS)
-          const amountKey = findKey(sample, AMOUNT_KEYS)
+          const { merchant: merchantKey, date: dateKey, amount: amountKey } = getResolvedCsvColumns(
+            sample,
+            forcedColumns,
+          )
 
           if (!merchantKey || !amountKey) {
             setError(
               `Could not detect columns. Found: ${Object.keys(sample).join(', ')}. ` +
-              `Need a merchant column (${MERCHANT_KEYS.slice(0, 4).join('/')}) and an amount column (${AMOUNT_KEYS.slice(0, 3).join('/')}).`,
+                'Use “Choose columns” to map merchant and amount.',
             )
             setUploading(false)
             return
@@ -266,7 +293,7 @@ export default function UploadPage() {
             void refreshAccountPickers()
             setFile(null)
             setPreview([])
-            setDetectedColumns(null)
+            setForcedColumns(null)
           }
           setUploading(false)
         },
@@ -278,7 +305,10 @@ export default function UploadPage() {
   return (
     <div className={`${ui.screen} ${ui.pageNoBottomPad}`}>
       <h1 className={ui.heroTitle}>Upload Transactions</h1>
-      <p className={ui.heroSub}>Import a CSV from your bank. We auto-detect everything.</p>
+      <p className={ui.heroSub}>
+        Import a CSV from your bank. We auto-detect columns (EN / ES / CA); you can map them manually if
+        needed.
+      </p>
 
       {/* Step indicator */}
       <div className={`${ui.glassFlat} mt-6 flex items-center gap-2 p-3`}>
@@ -395,34 +425,46 @@ export default function UploadPage() {
         />
       </label>
 
-      {/* Detected columns indicator */}
-      {detectedColumns && (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
-          {detectedColumns.merchant && (
-            <span className="rounded-full bg-duo-green/10 px-2.5 py-1 font-medium text-duo-green">
-              Merchant: {detectedColumns.merchant}
-            </span>
-          )}
-          {detectedColumns.date && (
-            <span className="rounded-full bg-duo-green/10 px-2.5 py-1 font-medium text-duo-green">
-              Date: {detectedColumns.date}
-            </span>
-          )}
-          {detectedColumns.amount && (
-            <span className="rounded-full bg-duo-green/10 px-2.5 py-1 font-medium text-duo-green">
-              Amount: {detectedColumns.amount}
-            </span>
-          )}
-          {!detectedColumns.merchant && (
-            <span className="rounded-full bg-danger/10 px-2.5 py-1 font-medium text-danger">
-              Merchant not found
-            </span>
-          )}
-          {!detectedColumns.amount && (
-            <span className="rounded-full bg-danger/10 px-2.5 py-1 font-medium text-danger">
-              Amount not found
-            </span>
-          )}
+      {/* Detected columns + manual map */}
+      {previewSample && (
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            {resolvedColumns.merchant && (
+              <span className="rounded-full bg-duo-green/10 px-2.5 py-1 font-medium text-duo-green">
+                Merchant: {resolvedColumns.merchant}
+              </span>
+            )}
+            {resolvedColumns.date && (
+              <span className="rounded-full bg-duo-green/10 px-2.5 py-1 font-medium text-duo-green">
+                Date: {resolvedColumns.date}
+              </span>
+            )}
+            {resolvedColumns.amount && (
+              <span className="rounded-full bg-duo-green/10 px-2.5 py-1 font-medium text-duo-green">
+                Amount: {resolvedColumns.amount}
+              </span>
+            )}
+            {!resolvedColumns.merchant && (
+              <span className="rounded-full bg-danger/10 px-2.5 py-1 font-medium text-danger">
+                Merchant not mapped
+              </span>
+            )}
+            {!resolvedColumns.amount && (
+              <span className="rounded-full bg-danger/10 px-2.5 py-1 font-medium text-danger">
+                Amount not mapped
+              </span>
+            )}
+            {forcedColumns && (
+              <span className="rounded-full bg-ice/10 px-2.5 py-1 font-medium text-ice">Custom mapping</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={openColumnMapModal}
+            className="self-start text-xs font-semibold text-ice underline decoration-ice/40 underline-offset-2 hover:decoration-ice"
+          >
+            Choose columns…
+          </button>
         </div>
       )}
 
@@ -522,11 +564,128 @@ export default function UploadPage() {
         <Button
           className="mt-4 w-full"
           onClick={handleUpload}
-          disabled={uploading || !detectedColumns?.merchant || !detectedColumns?.amount}
+          disabled={uploading || !resolvedColumns.merchant || !resolvedColumns.amount}
         >
           {uploading ? 'Uploading...' : `Upload ${file.name}`}
         </Button>
       )}
+
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {columnMapOpen && previewSample && (
+              <>
+                <motion.div
+                  className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setColumnMapOpen(false)}
+                />
+                <motion.div
+                  className="fixed inset-x-0 bottom-0 z-[101] max-h-[85vh] overflow-y-auto rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 px-4 pt-3 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl pb-[max(2.5rem,env(safe-area-inset-bottom))]"
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  exit={{ y: '100%' }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+                  <h3 className="mb-1 text-center text-base font-bold text-surface-50">CSV columns</h3>
+                  <p className="mb-4 text-center text-[11px] text-surface-500">
+                    Pick which column is the description, the amount, and optionally the date. Works with
+                    English, Spanish, and Catalan bank exports.
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-surface-400">Merchant / description</label>
+                      <select
+                        value={columnMapDraft.merchant}
+                        onChange={(e) => setColumnMapDraft((d) => ({ ...d, merchant: e.target.value }))}
+                        className={`mt-1 block w-full ${ui.select}`}
+                      >
+                        {headerList.map((h) => (
+                          <option key={h} value={h}>
+                            {h}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-surface-400">Amount</label>
+                      <select
+                        value={columnMapDraft.amount}
+                        onChange={(e) => setColumnMapDraft((d) => ({ ...d, amount: e.target.value }))}
+                        className={`mt-1 block w-full ${ui.select}`}
+                      >
+                        {headerList.map((h) => (
+                          <option key={h} value={h}>
+                            {h}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-surface-400">Date (optional)</label>
+                      <select
+                        value={columnMapDraft.date}
+                        onChange={(e) => setColumnMapDraft((d) => ({ ...d, date: e.target.value }))}
+                        className={`mt-1 block w-full ${ui.select}`}
+                      >
+                        <option value="">Auto-detect or omit</option>
+                        {headerList.map((h) => (
+                          <option key={h} value={h}>
+                            {h}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-5 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForcedColumns(null)
+                        setColumnMapOpen(false)
+                      }}
+                      className="flex-1 rounded-xl border border-white/[0.1] bg-surface-800/80 py-2.5 text-sm font-semibold text-surface-300 transition-colors hover:bg-surface-700"
+                    >
+                      Use auto-detect
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const keys = new Set(headerList)
+                        if (
+                          !keys.has(columnMapDraft.merchant) ||
+                          !keys.has(columnMapDraft.amount) ||
+                          columnMapDraft.merchant === columnMapDraft.amount
+                        ) {
+                          return
+                        }
+                        setForcedColumns({
+                          merchant: columnMapDraft.merchant,
+                          amount: columnMapDraft.amount,
+                          date: columnMapDraft.date,
+                        })
+                        setColumnMapOpen(false)
+                      }}
+                      disabled={
+                        !headerList.includes(columnMapDraft.merchant) ||
+                        !headerList.includes(columnMapDraft.amount) ||
+                        columnMapDraft.merchant === columnMapDraft.amount
+                      }
+                      className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] active:translate-y-[1px] active:border-b disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Apply mapping
+                    </button>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
     </div>
   )
 }
