@@ -53,7 +53,7 @@ function TabBar() {
 const SHOW_DEBUG_OVERLAY = false
 
 const DebugOverlay: FC = () => {
-  const shellRef = useRef<HTMLDivElement>(null)
+  const shellRef = useRef<HTMLPreElement>(null)
   const [info, setInfo] = useState('')
 
   useEffect(() => {
