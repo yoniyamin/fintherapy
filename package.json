@@ -9,6 +9,10 @@
     "lint": "eslint .",
     "preview": "vite preview"
   },
+  "overrides": {
+  "vite-plugin-pwa": {
+    "vite": "$vite"}
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",
     "framer-motion": "^12.38.0",
