@@ -16,6 +16,18 @@ import {
 import Button from '../common/Button'
 import { ui } from '../../lib/uiClasses'
 
+/** Keep patterns aligned with supabase/migration_015_refund_detection_timing_and_positive_pairs.sql (pos_pairs). */
+const REFUND_DESCRIPTION_RE =
+  /refund|reversal|rebate|chargeback|returned payment|credit voucher|acct credit/i
+
+/** Many banks show refunds as positive amounts; treat as outflow reversal for math and pairing. */
+function amountAsSpend(merchantRaw: string, parsedAmount: number): number {
+  if (parsedAmount > 0 && REFUND_DESCRIPTION_RE.test(merchantRaw.trim())) {
+    return -parsedAmount
+  }
+  return parsedAmount
+}
+
 function parseAmount(raw: string): number {
   if (!raw) return 0
   let cleaned = raw.trim()
@@ -111,7 +123,9 @@ const STEPS = ['Select file', 'Review', 'Upload']
 export default function UploadPage() {
   const { profile } = useAuth()
   const { autoClassify } = useMerchantKnowledge(profile?.household_id)
-  const { getAccountAliases, getDistinctAccountLast4ForHousehold } = useTransactions(profile?.household_id)
+  const { getAccountAliases, getDistinctAccountLast4ForHousehold, detectRefunds } = useTransactions(
+    profile?.household_id,
+  )
   const [accountAliases, setAccountAliases] = useState<Map<string, string>>(new Map())
   const [knownLast4sFromData, setKnownLast4sFromData] = useState<string[]>([])
 
@@ -262,14 +276,17 @@ export default function UploadPage() {
           }
 
           const rows = results.data
-            .map((row) => ({
-              uploaded_by: profile.id,
-              merchant_raw: (row[merchantKey] ?? '').trim(),
-              amount: parseAmount(row[amountKey] ?? ''),
-              tx_date: parseDate(dateKey ? row[dateKey] ?? '' : ''),
-              billing_month: billingMonth,
-              account_last4: accountLast4 || null,
-            }))
+            .map((row) => {
+              const merchant_raw = (row[merchantKey] ?? '').trim()
+              return {
+                uploaded_by: profile.id,
+                merchant_raw,
+                amount: amountAsSpend(merchant_raw, parseAmount(row[amountKey] ?? '')),
+                tx_date: parseDate(dateKey ? row[dateKey] ?? '' : ''),
+                billing_month: billingMonth,
+                account_last4: accountLast4 || null,
+              }
+            })
             .filter((r) => r.merchant_raw && r.amount !== 0)
 
           if (rows.length === 0) {
@@ -288,6 +305,9 @@ export default function UploadPage() {
           } else {
             invalidatePendingTransactionsInflight(profile.household_id!)
             const insertedCount = (inserted as number) ?? rows.length
+            if (insertedCount > 0) {
+              await detectRefunds()
+            }
             const autoCount = insertedCount > 0 ? await autoClassify() : 0
             setResult({ count: rows.length, inserted: insertedCount, autoCount })
             void refreshAccountPickers()

@@ -4,7 +4,6 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useTransactions, type DailyActivity, type HomeLeaderboardEntry } from '../../hooks/useTransactions'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
-import { XP_VALUES } from '../../lib/constants'
 import Leaderboard from '../reveal/Leaderboard'
 
 const XP_PER_LEVEL_SEGMENT = 300
@@ -256,60 +255,13 @@ export default function HomePage() {
         </motion.div>
       )}
 
-      {dailyActivity.length > 0 && (
-        <motion.div
-          className="mt-3"
-          initial={{ y: 12, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.22 }}
-        >
-          <h3 className="mb-1.5 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-surface-500">
-            Today&apos;s activity
-          </h3>
-          <div className="space-y-px overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur-md">
-            {dailyActivity.map((d, i) => {
-              const estXp = Number(d.classified_today) * XP_VALUES.CLASSIFY_MANUAL
-              return (
-                <div
-                  key={d.user_id}
-                  className="flex items-center gap-2 border-b border-white/[0.05] px-3 py-2 last:border-b-0"
-                >
-                  <span className="text-xs">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
-                  <div className="min-w-0 flex-1">
-                    <span className="text-xs font-medium text-surface-200">
-                      {d.display_name}
-                    </span>
-                    <div className="flex flex-wrap gap-x-2.5 text-[9px] text-surface-400">
-                      {Number(d.classified_today) > 0 && (
-                        <span>🏷️ {d.classified_today} classified</span>
-                      )}
-                      {Number(d.uploads_today) > 0 && (
-                        <span>📄 {d.uploads_today} loaded</span>
-                      )}
-                      {Number(d.bets_placed_today) > 0 && (
-                        <span>🎰 Bets placed</span>
-                      )}
-                    </div>
-                  </div>
-                  {estXp > 0 && (
-                    <span className="shrink-0 text-[11px] font-bold tabular-nums text-duo-green">
-                      +{estXp}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </motion.div>
-      )}
-
       {leaderboard.length > 1 && (
         <motion.div
           initial={{ y: 12, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.26 }}
+          transition={{ delay: 0.22 }}
         >
-          <Leaderboard entries={leaderboard} />
+          <Leaderboard entries={leaderboard} dailyActivity={dailyActivity} />
         </motion.div>
       )}
 

@@ -13,10 +13,11 @@ import type { Profile } from '../types/database'
 
 /** JWT still valid locally but auth.users row was removed (e.g. reset_all_for_new_deployment.sql). */
 function isOrphanSessionProfileError(err: { message: string; code?: string }): boolean {
+  const msg = err.message.toLowerCase()
   return (
     err.code === '23503' ||
-    err.message.includes('profiles_id_fkey') ||
-    (err.message.includes('profiles') && err.message.includes('foreign key'))
+    msg.includes('profiles_id_fkey') ||
+    (msg.includes('insert or update on table "profiles"') && msg.includes('foreign key'))
   )
 }
 
@@ -103,9 +104,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false
     let initialDone = false
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    const bootTimeout = window.setTimeout(() => {
       if (cancelled) return
-      initialDone = true
+      setState((prev) =>
+        prev.loading ? { ...prev, loading: false } : prev,
+      )
+    }, 15_000)
+
+    const applySession = async (session: Session | null) => {
       const profile = session?.user ? await fetchProfile() : null
       if (cancelled) return
       setState({
@@ -114,47 +120,123 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         loading: false,
       })
-    })
+    }
+
+    supabase.auth
+      .getSession()
+      .then(async ({ data: { session } }) => {
+        if (cancelled) return
+        initialDone = true
+        await applySession(session)
+      })
+      .catch((err) => {
+        console.error('getSession failed:', err)
+        if (!cancelled) {
+          setState({
+            user: null,
+            profile: null,
+            session: null,
+            loading: false,
+          })
+        }
+      })
+      .finally(() => {
+        window.clearTimeout(bootTimeout)
+      })
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return
       if (!initialDone && event === 'INITIAL_SESSION') return
-      const profile = session?.user ? await fetchProfile() : null
-      if (cancelled) return
-      setState({
-        user: session?.user ?? null,
-        profile,
-        session,
-        loading: false,
-      })
+      await applySession(session)
     })
 
     return () => {
       cancelled = true
+      window.clearTimeout(bootTimeout)
       subscription.unsubscribe()
     }
   }, [fetchProfile])
 
-  const signUp = useCallback(async (email: string, password: string, displayName: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { display_name: displayName } },
-    })
-    if (error) throw error
-    return data
+  /** Tab sleep / PWA background pauses refresh timers; nudge session when user returns. */
+  useEffect(() => {
+    let debounce: number | undefined
+
+    const onResume = () => {
+      if (document.visibilityState !== 'visible') return
+      window.clearTimeout(debounce)
+      debounce = window.setTimeout(() => {
+        void supabase.auth.refreshSession().then(({ error }) => {
+          if (!error) return
+          const msg = error.message.toLowerCase()
+          if (msg.includes('refresh token') || msg.includes('invalid refresh token')) {
+            void supabase.auth.signOut()
+          }
+        })
+      }, 400)
+    }
+
+    document.addEventListener('visibilitychange', onResume)
+    window.addEventListener('pageshow', onResume)
+    window.addEventListener('online', onResume)
+
+    return () => {
+      window.clearTimeout(debounce)
+      document.removeEventListener('visibilitychange', onResume)
+      window.removeEventListener('pageshow', onResume)
+      window.removeEventListener('online', onResume)
+    }
   }, [])
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    if (error) throw error
-    return data
-  }, [])
+  const signUp = useCallback(
+    async (email: string, password: string, displayName: string) => {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { display_name: displayName } },
+      })
+      if (error) throw error
+      const session = data.session
+      const user = data.user
+      if (session && user) {
+        const profile = await fetchProfile()
+        setState({
+          user,
+          profile,
+          session,
+          loading: false,
+        })
+      }
+      return data
+    },
+    [fetchProfile],
+  )
+
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      if (error) throw error
+      const session = data.session
+      const user = data.user ?? session?.user ?? null
+      if (!session || !user) {
+        setState((prev) => ({ ...prev, loading: false }))
+        return data
+      }
+      const profile = await fetchProfile()
+      setState({
+        user,
+        profile,
+        session,
+        loading: false,
+      })
+      return data
+    },
+    [fetchProfile],
+  )
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut()

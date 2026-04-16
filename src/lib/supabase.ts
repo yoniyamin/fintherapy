@@ -43,5 +43,12 @@ const mockClient = new Proxy({} as SupabaseClient, {
 })
 
 export const supabase: SupabaseClient = supabaseConfigured
-  ? createClient(supabaseUrl!, supabaseAnonKey!)
+  ? createClient(supabaseUrl!, supabaseAnonKey!, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        // Password-only app; avoids PWA / standalone URL hash edge cases with session parsing.
+        detectSessionInUrl: false,
+      },
+    })
   : mockClient
