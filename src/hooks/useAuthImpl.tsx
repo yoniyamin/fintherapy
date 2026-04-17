@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useCallback,
   type ReactNode,
@@ -54,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session: null,
     loading: true,
   })
+  const bootDoneRef = useRef(false)
 
   const fetchProfile = useCallback(async (retries = 2): Promise<Profile | null> => {
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -106,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const bootTimeout = window.setTimeout(() => {
       if (cancelled) return
+      bootDoneRef.current = true
       setState((prev) =>
         prev.loading ? { ...prev, loading: false } : prev,
       )
@@ -142,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .finally(() => {
         window.clearTimeout(bootTimeout)
+        bootDoneRef.current = true
       })
 
     const {
@@ -165,6 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const onResume = () => {
       if (document.visibilityState !== 'visible') return
+      if (!bootDoneRef.current) return
       window.clearTimeout(debounce)
       debounce = window.setTimeout(() => {
         void supabase.auth.refreshSession().then(({ error }) => {

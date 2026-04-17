@@ -91,6 +91,12 @@ export function useTransactions(
     fetchPending()
   }, [fetchPending])
 
+  const removeTransactions = useCallback((ids: string[]) => {
+    const idSet = new Set(ids)
+    setTransactions((prev) => prev.filter((t) => !idSet.has(t.id)))
+    setAutoClassified((prev) => prev.filter((t) => !idSet.has(t.id)))
+  }, [])
+
   const classifyTransaction = async (
     txId: string,
     category: string,
@@ -327,6 +333,7 @@ export function useTransactions(
     autoClassified,
     loading,
     fetchPending,
+    removeTransactions,
     classifyTransaction,
     flagTransaction,
     setTransactionsUserNote,

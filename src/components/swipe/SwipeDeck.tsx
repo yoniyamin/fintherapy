@@ -97,7 +97,7 @@ export default function SwipeDeck() {
   const flaggedQueueCount = useFlaggedCount(profile?.household_id)
   const {
     transactions: fetched, loading,
-    classifyTransaction, flagTransaction, markTransfer,
+    removeTransactions, classifyTransaction, flagTransaction, markTransfer,
     detectRefunds, awardXp, getMonthStats, getAccountAliases,
     setTransactionsUserNote,
   } = useTransactions(profile?.household_id, deckMode)
@@ -272,6 +272,7 @@ export default function SwipeDeck() {
     for (const tx of group.transactions) {
       await flagTransaction(tx.id)
     }
+    removeTransactions(group.transactions.map((t) => t.id))
     store.flag()
   }
 
@@ -281,6 +282,7 @@ export default function SwipeDeck() {
     for (const tx of group.transactions) {
       await markTransfer(tx.id, user.id)
     }
+    removeTransactions(group.transactions.map((t) => t.id))
     store.markTransfer()
   }
 
@@ -292,6 +294,7 @@ export default function SwipeDeck() {
       await classifyTransaction(tx.id, categoryId, user.id)
     }
     learnMerchant(group.merchantRaw, categoryId)
+    removeTransactions(group.transactions.map((t) => t.id))
 
     const txCount = group.count
     const xpEarned = txCount * XP_VALUES.CLASSIFY_MANUAL
