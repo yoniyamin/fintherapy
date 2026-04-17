@@ -10,6 +10,7 @@ export default function SignUpPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const { signUp, user } = useAuth()
   const navigate = useNavigate()
@@ -21,9 +22,18 @@ export default function SignUpPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    setSuccess(null)
     setSubmitting(true)
     try {
-      await signUp(email, password, displayName)
+      const data = await signUp(email, password, displayName) as {
+        user: { id: string } | null
+        session: unknown
+      }
+      if (data?.user && !data.session) {
+        setSuccess(
+          'Account created! Check your email to confirm, then sign in.',
+        )
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Sign up failed')
     } finally {
@@ -56,7 +66,28 @@ export default function SignUpPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {error && <div className={ui.dangerBanner}>{error}</div>}
+              {error && (
+                <div className={ui.dangerBanner}>
+                  {error}
+                  {error.includes('already exists') && (
+                    <>
+                      {' '}
+                      <Link to="/login" className="underline font-semibold">
+                        Sign in
+                      </Link>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {success && (
+                <div className="rounded-xl border border-duo-green/30 bg-duo-green/10 px-4 py-3 text-sm font-medium text-duo-green">
+                  {success}{' '}
+                  <Link to="/login" className="underline font-semibold">
+                    Go to sign in
+                  </Link>
+                </div>
+              )}
 
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-surface-300">
@@ -106,7 +137,7 @@ export default function SignUpPage() {
 
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !!success}
                 className="w-full rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-3 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] transition-all hover:brightness-110 active:translate-y-[1px] active:border-b disabled:opacity-50 disabled:shadow-none disabled:active:translate-y-0"
               >
                 {submitting ? 'Creating account...' : 'Create Account'}

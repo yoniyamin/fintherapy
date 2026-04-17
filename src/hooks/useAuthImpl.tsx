@@ -12,7 +12,29 @@ import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../types/database'
 
-/** JWT still valid locally but auth.users row was removed (e.g. reset_all_for_new_deployment.sql). */
+// ---------------------------------------------------------------------------
+// Friendly error messages
+// ---------------------------------------------------------------------------
+
+const ERROR_MAP: [test: RegExp, friendly: string][] = [
+  [/invalid login credentials/i, 'Wrong email or password. Please try again.'],
+  [/user already registered/i, 'An account with this email already exists.'],
+  [/email not confirmed/i, 'Please confirm your email before signing in.'],
+  [/signup is disabled/i, 'Signups are currently disabled. Contact an admin.'],
+  [/rate limit/i, 'Too many attempts. Please wait a moment and try again.'],
+]
+
+export function friendlyAuthError(raw: string): string {
+  for (const [re, friendly] of ERROR_MAP) {
+    if (re.test(raw)) return friendly
+  }
+  return raw
+}
+
+// ---------------------------------------------------------------------------
+// Orphan session detection (user row deleted from DB while JWT still valid)
+// ---------------------------------------------------------------------------
+
 function isOrphanSessionProfileError(err: { message: string; code?: string }): boolean {
   const msg = err.message.toLowerCase()
   return (
@@ -22,7 +44,6 @@ function isOrphanSessionProfileError(err: { message: string; code?: string }): b
   )
 }
 
-/** Returns true if we signed out so the client stops using a dead session. */
 async function signOutIfOrphanProfileError(err: { message: string; code?: string }): Promise<boolean> {
   if (!isOrphanSessionProfileError(err)) return false
   console.warn(
@@ -32,11 +53,20 @@ async function signOutIfOrphanProfileError(err: { message: string; code?: string
   return true
 }
 
+// ---------------------------------------------------------------------------
+// Auth context types
+// ---------------------------------------------------------------------------
+
+const SESSION_CHECK_INTERVAL_MS = 5 * 60 * 1000
+
 interface AuthState {
   user: User | null
   profile: Profile | null
   session: Session | null
   loading: boolean
+  sessionExpiredReason: string | null
+  /** Set when onAuthStateChange fires PASSWORD_RECOVERY so ResetPasswordPage can act. */
+  passwordRecoveryActive: boolean
 }
 
 export interface AuthContextValue extends AuthState {
@@ -44,9 +74,14 @@ export interface AuthContextValue extends AuthState {
   signIn: (email: string, password: string) => Promise<unknown>
   signOut: () => Promise<unknown>
   refreshProfile: (options?: { untilHouseholdId?: boolean }) => Promise<Profile | null>
+  clearSessionExpired: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
+
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -54,8 +89,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile: null,
     session: null,
     loading: true,
+    sessionExpiredReason: null,
+    passwordRecoveryActive: false,
   })
   const bootDoneRef = useRef(false)
+  /** true while the user explicitly clicks "sign out" — distinguishes voluntary from automatic. */
+  const manualSignOutRef = useRef(false)
+  /** true once the initial getSession + applySession has run (prevents double-fire with INITIAL_SESSION). */
+  const hadSessionRef = useRef(false)
+
+  // ---- helpers ----
+
+  const setExpired = useCallback((reason: string) => {
+    setState((prev) => ({ ...prev, sessionExpiredReason: reason }))
+  }, [])
+
+  const clearSessionExpired = useCallback(() => {
+    setState((prev) =>
+      prev.sessionExpiredReason ? { ...prev, sessionExpiredReason: null } : prev,
+    )
+  }, [])
 
   const fetchProfile = useCallback(async (retries = 2): Promise<Profile | null> => {
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -102,6 +155,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [fetchProfile],
   )
 
+  // ---- bootstrap + auth state listener ----
+
   useEffect(() => {
     let cancelled = false
     let initialDone = false
@@ -117,12 +172,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const applySession = async (session: Session | null) => {
       const profile = session?.user ? await fetchProfile() : null
       if (cancelled) return
-      setState({
+      setState((prev) => ({
+        ...prev,
         user: session?.user ?? null,
         profile,
         session,
         loading: false,
-      })
+        passwordRecoveryActive: prev.passwordRecoveryActive,
+      }))
     }
 
     supabase.auth
@@ -130,17 +187,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(async ({ data: { session } }) => {
         if (cancelled) return
         initialDone = true
+        if (session) hadSessionRef.current = true
         await applySession(session)
       })
       .catch((err) => {
         console.error('getSession failed:', err)
         if (!cancelled) {
-          setState({
+          setState((prev) => ({
+            ...prev,
             user: null,
             profile: null,
             session: null,
             loading: false,
-          })
+          }))
         }
       })
       .finally(() => {
@@ -153,6 +212,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return
       if (!initialDone && event === 'INITIAL_SESSION') return
+
+      if (event === 'PASSWORD_RECOVERY') {
+        setState((prev) => ({ ...prev, passwordRecoveryActive: true }))
+      }
+
+      if (event === 'SIGNED_OUT') {
+        if (!manualSignOutRef.current && hadSessionRef.current) {
+          setExpired('Your session has expired. Please sign in again.')
+        }
+        hadSessionRef.current = false
+      }
+
+      if (session) hadSessionRef.current = true
+
       await applySession(session)
     })
 
@@ -161,9 +234,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(bootTimeout)
       subscription.unsubscribe()
     }
-  }, [fetchProfile])
+  }, [fetchProfile, setExpired])
 
-  /** Tab sleep / PWA background pauses refresh timers; nudge session when user returns. */
+  // ---- tab sleep / PWA background: nudge session when user returns ----
+
   useEffect(() => {
     let debounce: number | undefined
 
@@ -176,6 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!error) return
           const msg = error.message.toLowerCase()
           if (msg.includes('refresh token') || msg.includes('invalid refresh token')) {
+            setExpired('Your session has expired. Please sign in again.')
             void supabase.auth.signOut()
           }
         })
@@ -192,7 +267,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('pageshow', onResume)
       window.removeEventListener('online', onResume)
     }
-  }, [])
+  }, [setExpired])
+
+  // ---- periodic session health check (catches silent expiry during active use) ----
+
+  useEffect(() => {
+    const id = window.setInterval(async () => {
+      if (!bootDoneRef.current) return
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session && hadSessionRef.current) {
+        setExpired('Your session has expired. Please sign in again.')
+        hadSessionRef.current = false
+        void supabase.auth.signOut()
+      }
+    }, SESSION_CHECK_INTERVAL_MS)
+
+    return () => window.clearInterval(id)
+  }, [setExpired])
+
+  // ---- signUp / signIn / signOut ----
 
   const signUp = useCallback(
     async (email: string, password: string, displayName: string) => {
@@ -201,17 +294,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         options: { data: { display_name: displayName } },
       })
-      if (error) throw error
-      const session = data.session
+      if (error) throw new Error(friendlyAuthError(error.message))
+
       const user = data.user
+      if (user && (!user.identities || user.identities.length === 0)) {
+        throw new Error('An account with this email already exists. Please sign in instead.')
+      }
+
+      const session = data.session
       if (session && user) {
         const profile = await fetchProfile()
-        setState({
+        setState((prev) => ({
+          ...prev,
           user,
           profile,
           session,
           loading: false,
-        })
+        }))
       }
       return data
     },
@@ -224,7 +323,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         password,
       })
-      if (error) throw error
+      if (error) throw new Error(friendlyAuthError(error.message))
       const session = data.session
       const user = data.user ?? session?.user ?? null
       if (!session || !user) {
@@ -232,21 +331,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return data
       }
       const profile = await fetchProfile()
-      setState({
+      setState((prev) => ({
+        ...prev,
         user,
         profile,
         session,
         loading: false,
-      })
+      }))
       return data
     },
     [fetchProfile],
   )
 
   const signOut = useCallback(async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    manualSignOutRef.current = true
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+    } finally {
+      manualSignOutRef.current = false
+    }
   }, [])
+
+  // ---- context value ----
 
   const value = useMemo(
     (): AuthContextValue => ({
@@ -255,8 +362,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       refreshProfile,
+      clearSessionExpired,
     }),
-    [state, signUp, signIn, signOut, refreshProfile],
+    [state, signUp, signIn, signOut, refreshProfile, clearSessionExpired],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import ScreenSurface from '../layout/ScreenSurface'
@@ -10,16 +10,24 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const { signIn, user } = useAuth()
+  const { signIn, user, sessionExpiredReason, clearSessionExpired } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  const passwordReset = searchParams.get('password_reset') === 'success'
 
   useEffect(() => {
     if (user) navigate('/', { replace: true })
   }, [user, navigate])
 
+  useEffect(() => {
+    return () => { clearSessionExpired() }
+  }, [clearSessionExpired])
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    clearSessionExpired()
     setSubmitting(true)
     try {
       await signIn(email, password)
@@ -55,6 +63,18 @@ export default function LoginPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {sessionExpiredReason && (
+                <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm font-medium text-amber-300">
+                  {sessionExpiredReason}
+                </div>
+              )}
+
+              {passwordReset && (
+                <div className="rounded-xl border border-duo-green/30 bg-duo-green/10 px-4 py-3 text-sm font-medium text-duo-green">
+                  Password updated successfully. Sign in with your new password.
+                </div>
+              )}
+
               {error && <div className={ui.dangerBanner}>{error}</div>}
 
               <div>
@@ -85,6 +105,14 @@ export default function LoginPage() {
                   className={`mt-1.5 block w-full ${ui.input}`}
                   placeholder="••••••••"
                 />
+                <div className="mt-1.5 text-right">
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs font-medium text-surface-400 transition-colors hover:text-surface-200"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
               </div>
 
               <button

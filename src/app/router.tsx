@@ -3,6 +3,8 @@ import AppShell from '../components/layout/AppShell'
 import AuthGuard from '../components/auth/AuthGuard'
 import LoginPage from '../components/auth/LoginPage'
 import SignUpPage from '../components/auth/SignUpPage'
+import ForgotPasswordPage from '../components/auth/ForgotPasswordPage'
+import ResetPasswordPage from '../components/auth/ResetPasswordPage'
 import HouseholdSetupPage from '../components/auth/HouseholdSetupPage'
 import HomePage from '../components/home/HomePage'
 import UploadPage from '../components/upload/UploadPage'
@@ -37,5 +39,7 @@ export const router = createBrowserRouter([
   },
   { path: '/login', element: <LoginPage /> },
   { path: '/signup', element: <SignUpPage /> },
+  { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '*', element: <Navigate to="/" replace /> },
 ])
