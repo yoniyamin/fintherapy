@@ -160,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
     let initialDone = false
+    let applySeq = 0
 
     const bootTimeout = window.setTimeout(() => {
       if (cancelled) return
@@ -170,8 +171,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 15_000)
 
     const applySession = async (session: Session | null) => {
+      const seq = ++applySeq
       const profile = session?.user ? await fetchProfile() : null
-      if (cancelled) return
+      if (cancelled || seq !== applySeq) return
       setState((prev) => ({
         ...prev,
         user: session?.user ?? null,
@@ -319,28 +321,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string) => {
+      manualSignOutRef.current = true
+      try { await supabase.auth.signOut() } catch { /* stale-session cleanup */ }
+      finally { manualSignOutRef.current = false }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
       if (error) throw new Error(friendlyAuthError(error.message))
-      const session = data.session
-      const user = data.user ?? session?.user ?? null
-      if (!session || !user) {
-        setState((prev) => ({ ...prev, loading: false }))
-        return data
-      }
-      const profile = await fetchProfile()
-      setState((prev) => ({
-        ...prev,
-        user,
-        profile,
-        session,
-        loading: false,
-      }))
       return data
     },
-    [fetchProfile],
+    [],
   )
 
   const signOut = useCallback(async () => {
