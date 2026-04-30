@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useBets } from '../../hooks/useBets'
 import { useReveal } from '../../hooks/useReveal'
-import { CATEGORIES, OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import Button from '../common/Button'
 import { ui } from '../../lib/uiClasses'
 
@@ -35,6 +36,7 @@ export default function BetsPage() {
   const { profile } = useAuth()
   const { myBets, loading, fetchMyBets, submitBets } = useBets(profile?.household_id)
   const { summary, fetchSummary } = useReveal(profile?.household_id)
+  const { categories: CATEGORIES } = useCategoryConfig(profile?.household_id)
   const [month, setMonth] = useState(getCurrentMonth())
   const [tab, setTab] = useState<Tab>('predict')
   const [amounts, setAmounts] = useState<Record<string, string>>({})

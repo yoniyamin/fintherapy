@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Transaction } from '../../types/database'
-import { CATEGORIES } from '../../lib/constants'
+import { CATEGORIES, type CategoryDef } from '../../lib/constants'
 import { formatAccountLabel } from '../../lib/accountDisplay'
 
 interface Props {
@@ -13,6 +13,8 @@ interface Props {
   onReclassify: (txId: string, newCategory: string) => Promise<void>
   onMarkTransfer?: (txId: string) => Promise<void>
   accountAliases?: Map<string, string>
+  /** Resolved categories from useCategoryConfig; falls back to hard-coded defaults. */
+  categories?: readonly CategoryDef[]
 }
 
 const fmt = (v: number) =>
@@ -26,11 +28,13 @@ export default function CategoryDetail({
   onReclassify,
   onMarkTransfer,
   accountAliases,
+  categories: categoriesProp,
 }: Props) {
   const [movingTxId, setMovingTxId] = useState<string | null>(null)
   const [reclassifying, setReclassifying] = useState(false)
 
-  const cat = CATEGORIES.find(c => c.id === category)
+  const cats = categoriesProp ?? CATEGORIES
+  const cat = cats.find(c => c.id === category)
 
   const handleMove = async (txId: string, newCategory: string) => {
     setReclassifying(true)
@@ -141,7 +145,7 @@ export default function CategoryDetail({
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.2 }}
                       >
-                        {CATEGORIES.filter(c => c.id !== category).map(c => (
+                        {cats.filter(c => c.id !== category).map(c => (
                           <button
                             key={c.id}
                             onClick={() => handleMove(tx.id, c.id)}

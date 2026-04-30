@@ -9,8 +9,9 @@ import SpendingChart from './SpendingChart'
 import MonthlyTrend from './MonthlyTrend'
 import Leaderboard from './Leaderboard'
 import CategoryDetail from './CategoryDetail'
-import { CATEGORIES, OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
-import type { Transaction } from '../../types/database'
+import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { useCategoryConfig } from '../../hooks/useCategoryConfig'
+import type { AccountType, Transaction } from '../../types/database'
 import { ui } from '../../lib/uiClasses'
 import { formatAccountLabel } from '../../lib/accountDisplay'
 
@@ -39,7 +40,11 @@ function getMonthOptions(): { value: string; label: string }[] {
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(v)
 
-function downloadCSV(rows: ExportRow[], month: string) {
+function downloadCSV(
+  rows: ExportRow[],
+  month: string,
+  catLabelLookup: Record<string, string>,
+) {
   const headers = [
     'Date',
     'Merchant',
@@ -51,7 +56,7 @@ function downloadCSV(rows: ExportRow[], month: string) {
     'Account Last 4',
     'Note',
   ]
-  const catLookup = Object.fromEntries(CATEGORIES.map(c => [c.id, c.label]))
+  const catLookup = catLabelLookup
   const csvLines = [
     headers.join(','),
     ...rows.map(r => [
@@ -90,13 +95,19 @@ export default function RevealPage() {
     getAccountAliases,
     getDistinctAccountLast4ForHousehold,
     upsertAccountAlias,
+    autoMarkDebitLoads,
   } = useTransactions(profile?.household_id)
   const [month, setMonth] = useState(getCurrentMonth())
   /** null = all cards; non-null = filter to these last-4 values */
   const [accountFilter, setAccountFilter] = useState<string[] | null>(null)
   const [availableLast4s, setAvailableLast4s] = useState<string[]>([])
   const [aliasMap, setAliasMap] = useState<Map<string, string>>(new Map())
-  const [aliasDraft, setAliasDraft] = useState<{ last4: string; label: string } | null>(null)
+  const [accountTypeMap, setAccountTypeMap] = useState<Map<string, AccountType>>(new Map())
+  const [aliasDraft, setAliasDraft] = useState<
+    { last4: string; label: string; accountType: AccountType | null } | null
+  >(null)
+  const [retroBusy, setRetroBusy] = useState<string | null>(null)
+  const [retroResult, setRetroResult] = useState<{ last4: string; count: number } | null>(null)
   const [cardsOpen, setCardsOpen] = useState(false)
   const cardsPanelRef = useRef<HTMLDivElement>(null)
   const [incomeInput, setIncomeInput] = useState('')
@@ -111,6 +122,8 @@ export default function RevealPage() {
   const [exporting, setExporting] = useState(false)
   /** When false, own_transfers are omitted from pie, “Total spent”, monthly trend bars, and tx counts. */
   const [includeOwnTransfers, setIncludeOwnTransfers] = useState(false)
+  const [showTransfersHelp, setShowTransfersHelp] = useState(false)
+  const catConfig = useCategoryConfig(profile?.household_id)
 
   useEffect(() => {
     fetchSummary(month, accountFilter?.length ? accountFilter : null, includeOwnTransfers)
@@ -123,6 +136,11 @@ export default function RevealPage() {
       if (cancelled) return
       setAvailableLast4s(last4s)
       setAliasMap(new Map(aliases.map((a) => [a.last4.trim(), a.label.trim()])))
+      const types = new Map<string, AccountType>()
+      for (const a of aliases) {
+        if (a.account_type) types.set(a.last4.trim(), a.account_type)
+      }
+      setAccountTypeMap(types)
     })
     return () => {
       cancelled = true
@@ -169,7 +187,7 @@ export default function RevealPage() {
   const freeIncome = incomeNum - totalSpent
   const savingsRate = incomeNum > 0 ? (freeIncome / incomeNum) * 100 : 0
 
-  const categoryLookup = Object.fromEntries(CATEGORIES.map((c) => [c.id, c]))
+  const categoryLookup = catConfig.categoryLookup
 
   const handleIncomeSave = async () => {
     const val = Number(incomeInput)
@@ -231,20 +249,43 @@ export default function RevealPage() {
 
   const saveAlias = async () => {
     if (!aliasDraft?.label.trim() || !aliasDraft.last4) return
-    const { error } = await upsertAccountAlias(aliasDraft.last4, aliasDraft.label.trim())
+    const { error } = await upsertAccountAlias(
+      aliasDraft.last4,
+      aliasDraft.label.trim(),
+      aliasDraft.accountType,
+    )
     if (error) {
       console.error('upsert_account_alias', error.message)
       return
     }
     setAliasMap((m) => new Map(m).set(aliasDraft.last4, aliasDraft.label.trim()))
+    setAccountTypeMap((m) => {
+      const next = new Map(m)
+      if (aliasDraft.accountType) next.set(aliasDraft.last4, aliasDraft.accountType)
+      else next.delete(aliasDraft.last4)
+      return next
+    })
     setAliasDraft(null)
+  }
+
+  const handleMarkAllLoads = async (last4: string) => {
+    if (retroBusy) return
+    setRetroBusy(last4)
+    setRetroResult(null)
+    const count = await autoMarkDebitLoads(last4, null)
+    setRetroResult({ last4, count })
+    setRetroBusy(null)
+    fetchSummary(month, accountRpcFilter, includeOwnTransfers)
   }
 
   const handleExport = async () => {
     setExporting(true)
     const rows = await getExportData(month)
     if (rows.length > 0) {
-      downloadCSV(rows, month)
+      const labelLookup = Object.fromEntries(
+        catConfig.categories.map((c) => [c.id, c.label]),
+      )
+      downloadCSV(rows, month, labelLookup)
     }
     setExporting(false)
   }
@@ -327,30 +368,71 @@ export default function RevealPage() {
                   </p>
                 ) : (
                   <>
-                    {mergedCardLast4s.map((last4) => (
-                      <label
-                        key={last4}
-                        className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-white/[0.04]"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isCardIncluded(last4)}
-                          onChange={() => toggleAccountLast4(last4)}
-                          className="h-4 w-4 rounded border-white/20 bg-surface-900 text-duo-green"
-                        />
-                        <span className="flex-1 text-sm text-surface-200">{formatAccountLabel(last4, aliasMap)}</span>
-                        <button
-                          type="button"
-                          className="shrink-0 rounded-md px-2 py-1 text-xs text-ice hover:bg-white/[0.06]"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setAliasDraft({ last4, label: aliasMap.get(last4) ?? '' })
-                          }}
+                    {mergedCardLast4s.map((last4) => {
+                      const cardType = accountTypeMap.get(last4) ?? null
+                      const isDebit = cardType === 'debit'
+                      return (
+                        <label
+                          key={last4}
+                          className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-white/[0.04]"
                         >
-                          Name
-                        </button>
-                      </label>
-                    ))}
+                          <input
+                            type="checkbox"
+                            checked={isCardIncluded(last4)}
+                            onChange={() => toggleAccountLast4(last4)}
+                            className="h-4 w-4 rounded border-white/20 bg-surface-900 text-duo-green"
+                          />
+                          <span className="flex-1 text-sm text-surface-200">
+                            {formatAccountLabel(last4, aliasMap)}
+                            {cardType && (
+                              <span
+                                className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                  isDebit
+                                    ? 'bg-ice/15 text-ice'
+                                    : 'bg-duo-green/10 text-duo-green'
+                                }`}
+                              >
+                                {isDebit ? 'Debit' : 'Credit'}
+                              </span>
+                            )}
+                          </span>
+                          {isDebit && (
+                            <button
+                              type="button"
+                              disabled={retroBusy === last4}
+                              className="shrink-0 rounded-md px-2 py-1 text-xs text-ice hover:bg-white/[0.06] disabled:opacity-40"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                void handleMarkAllLoads(last4)
+                              }}
+                              title="Mark all positive-amount transactions on this card as own-account transfers"
+                            >
+                              {retroBusy === last4 ? '…' : 'Mark loads'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-md px-2 py-1 text-xs text-ice hover:bg-white/[0.06]"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              setAliasDraft({
+                                last4,
+                                label: aliasMap.get(last4) ?? '',
+                                accountType: cardType,
+                              })
+                            }}
+                          >
+                            Name
+                          </button>
+                        </label>
+                      )
+                    })}
+                    {retroResult && (
+                      <p className="px-2 py-2 text-[11px] text-surface-500">
+                        Marked {retroResult.count} load
+                        {retroResult.count === 1 ? '' : 's'} on ···{retroResult.last4} as transfers.
+                      </p>
+                    )}
                   </>
                 )}
               </div>
@@ -382,7 +464,39 @@ export default function RevealPage() {
                 className={`mt-2 w-full ${ui.input}`}
                 autoFocus
               />
-              <div className="mt-3 flex justify-end gap-2">
+              <div className="mt-3">
+                <p className="mb-1.5 text-xs font-medium text-surface-400">Card type</p>
+                <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-surface-900/60 p-1 ring-1 ring-white/[0.06]">
+                  {(['credit', 'debit', null] as const).map((opt) => {
+                    const active = aliasDraft.accountType === opt
+                    const label = opt === null ? 'Unknown' : opt === 'credit' ? 'Credit' : 'Debit'
+                    return (
+                      <button
+                        key={String(opt)}
+                        type="button"
+                        onClick={() => setAliasDraft({ ...aliasDraft, accountType: opt })}
+                        className={`rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${
+                          active
+                            ? opt === 'debit'
+                              ? 'bg-ice/20 text-ice'
+                              : opt === 'credit'
+                                ? 'bg-duo-green/15 text-duo-green'
+                                : 'bg-surface-700/70 text-surface-200'
+                            : 'text-surface-500 hover:bg-white/[0.04]'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {aliasDraft.accountType === 'debit' && (
+                  <p className="mt-2 text-[11px] leading-snug text-surface-500">
+                    Future uploads on this card will auto-mark positive-amount loads as own-account transfers.
+                  </p>
+                )}
+              </div>
+              <div className="mt-4 flex justify-end gap-2">
                 <button
                   type="button"
                   className="rounded-lg px-3 py-2 text-sm text-surface-400"
@@ -456,22 +570,38 @@ export default function RevealPage() {
               <span className="text-sm text-surface-400">Total spent</span>
               <span className="text-sm font-bold tabular-nums text-primary-400">{fmt(totalSpent)}</span>
             </div>
-            <label className="flex cursor-pointer items-center gap-2.5 border-b border-white/[0.06] px-4 py-3">
-              <input
-                type="checkbox"
-                checked={includeOwnTransfers}
-                onChange={(e) => setIncludeOwnTransfers(e.target.checked)}
-                className="h-4 w-4 shrink-0 rounded border-white/20 bg-surface-900 text-duo-green"
-              />
-              <span className="text-sm text-surface-300">
-                Include own-account transfers in totals, pie, and monthly bars
-              </span>
-            </label>
-            <p className="border-b border-white/[0.06] px-4 py-2 text-[11px] text-surface-500">
-              {includeOwnTransfers
-                ? 'Own transfers are included everywhere below.'
-                : 'Own transfers stay visible in the category list (for drill-down) but are excluded from totals and the donut.'}
-            </p>
+            <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm text-surface-300">Hide internal transfers</span>
+                <button
+                  type="button"
+                  onClick={() => setShowTransfersHelp((v) => !v)}
+                  className="flex h-4 w-4 items-center justify-center rounded-full border border-surface-600 text-[10px] font-bold text-surface-400 transition-colors hover:border-surface-400 hover:text-surface-200"
+                  aria-label="What does this do?"
+                  aria-expanded={showTransfersHelp}
+                >
+                  ?
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIncludeOwnTransfers((v) => !v)}
+                role="switch"
+                aria-checked={!includeOwnTransfers}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${!includeOwnTransfers ? 'bg-duo-green' : 'bg-surface-700'}`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${!includeOwnTransfers ? 'translate-x-5' : 'translate-x-0.5'}`}
+                />
+              </button>
+            </div>
+            {showTransfersHelp && (
+              <p className="border-b border-white/[0.06] bg-surface-950/40 px-4 py-2 text-[11px] leading-snug text-surface-400">
+                {includeOwnTransfers
+                  ? 'Own-account transfers (e.g. moving money between your cards) are counted in totals, the donut, and monthly bars.'
+                  : 'Own-account transfers stay visible in the category list (for drill-down) but are excluded from totals and the donut so spending isn’t double-counted.'}
+              </p>
+            )}
             <div className="flex items-center justify-between px-4 py-1 text-xs text-surface-500/90">
               <span />
               <span>{spendingTxCount} spending tx</span>
@@ -537,9 +667,11 @@ export default function RevealPage() {
             onReclassify={handleReclassify}
             onMarkTransfer={handleMarkTransfer}
             accountAliases={aliasMap}
+            categories={catConfig.categories}
           />
         )}
       </AnimatePresence>
+
     </div>
   )
 }

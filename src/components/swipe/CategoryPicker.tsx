@@ -1,15 +1,19 @@
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CATEGORIES } from '../../lib/constants'
+import { CATEGORIES, type CategoryDef } from '../../lib/constants'
 
 interface CategoryPickerProps {
   open: boolean
   onSelect: (categoryId: string) => void
   onClose: () => void
+  /** Resolved categories from useCategoryConfig; falls back to hard-coded defaults. */
+  categories?: readonly CategoryDef[]
 }
 
-export default function CategoryPicker({ open, onSelect, onClose }: CategoryPickerProps) {
+export default function CategoryPicker({ open, onSelect, onClose, categories }: CategoryPickerProps) {
   if (typeof document === 'undefined') return null
+
+  const cats = categories ?? CATEGORIES
 
   return createPortal(
     <AnimatePresence>
@@ -37,7 +41,7 @@ export default function CategoryPicker({ open, onSelect, onClose }: CategoryPick
             </h3>
 
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {CATEGORIES.map((cat, i) => (
+              {cats.map((cat, i) => (
                 <motion.button
                   key={cat.id}
                   type="button"

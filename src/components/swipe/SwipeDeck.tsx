@@ -8,14 +8,16 @@ import { usePresence } from '../../hooks/usePresence'
 import { useAuth } from '../../hooks/useAuth'
 import SwipeCard from './SwipeCard'
 import CategoryPicker from './CategoryPicker'
+import CategoryEditorModal from '../settings/CategoryEditorModal'
 import ProgressBar from '../common/ProgressBar'
 import Confetti from '../common/Confetti'
 import { Link, useLocation } from 'react-router-dom'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
+import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import { XP_VALUES } from '../../lib/constants'
 import { ui } from '../../lib/uiClasses'
 import { formatAccountLabel } from '../../lib/accountDisplay'
-import type { Transaction } from '../../types/database'
+import type { AccountType, Transaction } from '../../types/database'
 
 function getCurrentMonth(): string {
   const now = new Date()
@@ -96,13 +98,16 @@ export default function SwipeDeck() {
   const { profile, user, refreshProfile } = useAuth()
   const flaggedQueueCount = useFlaggedCount(profile?.household_id)
   const {
-    transactions: fetched, loading,
+    transactions: fetched, autoClassified, loading,
     removeTransactions, classifyTransaction, flagTransaction, markTransfer,
     detectRefunds, awardXp, getMonthStats, getAccountAliases,
     setTransactionsUserNote,
   } = useTransactions(profile?.household_id, deckMode)
-  const { learnMerchant } = useMerchantKnowledge(profile?.household_id)
+  const { learnMerchant, confirmAutoClassified } = useMerchantKnowledge(profile?.household_id)
   const { onlineUsers } = usePresence(profile?.household_id, user?.id, profile?.display_name)
+  const catConfig = useCategoryConfig(profile?.household_id)
+  const resolvedCategories = catConfig.categories
+  const [catEditorOpen, setCatEditorOpen] = useState(false)
   const store = useClassificationStore()
   const lastSyncedFingerprintRef = useRef<string | null>(null)
   const prevHouseholdIdRef = useRef<string | undefined>(undefined)
@@ -115,21 +120,29 @@ export default function SwipeDeck() {
   const hasRefreshedProfile = useRef(false)
   const [accountFilter, setAccountFilter] = useState<string | null>(null)
   const [accountAliases, setAccountAliases] = useState<Map<string, string>>(new Map())
+  const [accountTypes, setAccountTypes] = useState<Map<string, AccountType>>(new Map())
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [noteDraft, setNoteDraft] = useState('')
 
+  /** All deck candidates: pending classify queue + already auto-classified items
+   *  surfaced as confirmable "Predicted" cards. No-idea deck only uses `fetched`. */
+  const allDeckTxns = useMemo(() => {
+    if (deckMode === 'no-idea') return fetched
+    return [...fetched, ...autoClassified]
+  }, [fetched, autoClassified, deckMode])
+
   const distinctLast4InPending = useMemo(() => {
     const s = new Set<string>()
-    for (const t of fetched) {
+    for (const t of allDeckTxns) {
       const x = t.account_last4?.trim()
       if (x) s.add(x)
     }
     return Array.from(s).sort()
-  }, [fetched])
+  }, [allDeckTxns])
 
   const deckFromFetched = useMemo(
-    () => filterTransactionsByAccount(fetched, accountFilter),
-    [fetched, accountFilter],
+    () => filterTransactionsByAccount(allDeckTxns, accountFilter),
+    [allDeckTxns, accountFilter],
   )
 
   const setAccountFilterPersist = useCallback(
@@ -152,6 +165,11 @@ export default function SwipeDeck() {
     if (!hid) return
     void getAccountAliases().then((rows) => {
       setAccountAliases(new Map(rows.map((r) => [r.last4.trim(), r.label.trim()])))
+      const types = new Map<string, AccountType>()
+      for (const r of rows) {
+        if (r.account_type) types.set(r.last4.trim(), r.account_type)
+      }
+      setAccountTypes(types)
     })
   }, [profile?.household_id, getAccountAliases])
 
@@ -166,6 +184,22 @@ export default function SwipeDeck() {
       setAccountFilter(null)
     }
   }, [profile?.household_id])
+
+  // Auto-select the current user's own card when aliases are first loaded and
+  // no filter has been manually set yet (session storage was empty).
+  useEffect(() => {
+    if (accountAliases.size === 0 || distinctLast4InPending.length <= 1) return
+    if (accountFilter !== null) return
+    const displayName = profile?.display_name?.toLowerCase().trim()
+    if (!displayName) return
+    for (const [last4, alias] of accountAliases.entries()) {
+      const a = alias.toLowerCase().trim()
+      if (a.includes(displayName) || displayName.includes(a)) {
+        setAccountFilterPersist(last4)
+        break
+      }
+    }
+  }, [accountAliases, profile?.display_name, distinctLast4InPending.length, accountFilter, setAccountFilterPersist])
 
   useEffect(() => {
     if (fetched.length === 0) return
@@ -199,9 +233,9 @@ export default function SwipeDeck() {
 
     const init = async () => {
       store.load(deckFromFetched)
-      let finalTxns = fetched
+      let finalTxns = allDeckTxns
 
-      if (fetched.length === 0) {
+      if (allDeckTxns.length === 0) {
         if (gen !== deckSyncGenerationRef.current) return
         lastSyncedFingerprintRef.current = deckFp
         return
@@ -222,13 +256,19 @@ export default function SwipeDeck() {
         if (gen !== deckSyncGenerationRef.current) return
         setRefundsOffset(offsetCount)
         if (offsetCount > 0) {
-          const { data } = await (await import('../../lib/supabase')).supabase.rpc(
-            'get_pending_transactions',
-            { p_household_id: hid },
-          )
+          const supa = (await import('../../lib/supabase')).supabase
+          const [pendingRes, autoRes] = await Promise.all([
+            supa.rpc('get_pending_transactions', { p_household_id: hid }),
+            supa.rpc('get_auto_classified_transactions', { p_household_id: hid }),
+          ])
           if (gen !== deckSyncGenerationRef.current) return
-          if (data && (data as typeof fetched).length > 0) {
-            finalTxns = data as typeof fetched
+          const refreshedPending =
+            !pendingRes.error && pendingRes.data ? (pendingRes.data as typeof fetched) : []
+          const refreshedAuto =
+            !autoRes.error && autoRes.data ? (autoRes.data as typeof fetched) : []
+          const merged = [...refreshedPending, ...refreshedAuto]
+          if (merged.length > 0) {
+            finalTxns = merged
             const deckAfter = filterTransactionsByAccount(finalTxns, accountFilter)
             store.load(deckAfter)
           }
@@ -248,6 +288,7 @@ export default function SwipeDeck() {
     void loadMonthStats()
   }, [
     fetched,
+    allDeckTxns,
     deckFromFetched,
     accountFilter,
     loading,
@@ -258,7 +299,44 @@ export default function SwipeDeck() {
     deckMode,
   ])
 
-  const handleSwipeRight = () => {
+  const handleSwipeRight = async () => {
+    const group = store.activeGroup
+    if (!group || !user) {
+      store.openCategoryPicker()
+      return
+    }
+    // Predicted card → 1-tap confirm. No-prediction card → fall back to picker.
+    if (deckMode === 'pending' && group.predictedCategory) {
+      const predicted = group.predictedCategory
+      for (const tx of group.transactions) {
+        await confirmAutoClassified(tx.id, user.id)
+      }
+      // Boost the merchant→category mapping confidence so future uploads stick.
+      learnMerchant(group.merchantRaw, predicted)
+      removeTransactions(group.transactions.map((t) => t.id))
+
+      const txCount = group.count
+      const xpEarned = txCount * XP_VALUES.CLASSIFY_EASY
+      await awardXp(user.id, xpEarned)
+      store.advance(txCount)
+
+      xpCounter.current += 1
+      const floatId = xpCounter.current
+      setXpFloats(prev => [...prev, { id: floatId, amount: xpEarned }])
+      setTimeout(() => setXpFloats(prev => prev.filter(f => f.id !== floatId)), 900)
+      if (txCount > 1) {
+        const toastId = floatId
+        setGroupToasts(prev => [...prev, { id: toastId, count: txCount }])
+        setTimeout(() => setGroupToasts(prev => prev.filter(t => t.id !== toastId)), 1300)
+      }
+      return
+    }
+    store.openCategoryPicker()
+  }
+
+  const handleSwipeUp = () => {
+    // Both decks: vertical swipe always opens the picker — useful to override a
+    // prediction or pick fresh without going through swipe-right.
     store.openCategoryPicker()
   }
 
@@ -355,7 +433,7 @@ export default function SwipeDeck() {
     )
   }
 
-  if (fetched.length > 0 && deckFromFetched.length === 0 && accountFilter != null) {
+  if (allDeckTxns.length > 0 && deckFromFetched.length === 0 && accountFilter != null) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
         <div className={`max-w-sm space-y-4 ${ui.glass} px-8 py-10`}>
@@ -463,6 +541,12 @@ export default function SwipeDeck() {
                 {store.classifiedTxCount} tx ({store.completedCount} card{store.completedCount !== 1 ? 's' : ''})
               </span>
             </div>
+            {store.classifiedTxCount > store.completedCount && store.completedCount > 0 && (
+              <p className="-mt-1 text-[11px] text-surface-500">
+                Smart Stacks saved you {store.classifiedTxCount - store.completedCount} swipe
+                {store.classifiedTxCount - store.completedCount !== 1 ? 's' : ''} 🎯
+              </p>
+            )}
             {deckMode === 'pending' && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-surface-400">No idea</span>
@@ -530,6 +614,17 @@ export default function SwipeDeck() {
           >
             No idea{flaggedQueueCount > 0 ? ` (${flaggedQueueCount})` : ''}
           </Link>
+          <button
+            type="button"
+            onClick={() => setCatEditorOpen(true)}
+            className="ml-auto rounded-full p-1.5 text-surface-500 transition-colors hover:bg-white/[0.06] hover:text-surface-300"
+            title="Edit categories"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
         </div>
 
         {/* Co-op presence */}
@@ -625,14 +720,23 @@ export default function SwipeDeck() {
                   stackIndex={i}
                   onSwipeRight={handleSwipeRight}
                   onSwipeLeft={handleSwipeLeft}
+                  onSwipeUp={i === 0 && !!group.predictedCategory ? handleSwipeUp : undefined}
                   onTransfer={handleTransfer}
-                  rightLabel={deckMode === 'no-idea' ? 'Pick category' : 'Categorize'}
+                  rightLabel={
+                    deckMode === 'no-idea'
+                      ? 'Pick category'
+                      : group.predictedCategory
+                        ? 'Confirm'
+                        : 'Categorize'
+                  }
                   leftLabel={deckMode === 'no-idea' ? 'Later' : 'No idea'}
                   showTransferButton={deckMode === 'pending'}
                   accountAliases={accountAliases}
+                  accountTypes={accountTypes}
                   showAccountPerLine={accountFilter == null}
                   notePreview={notePreviewForGroup(group.transactions)}
                   onOpenNote={i === 0 ? openNoteModal : undefined}
+                  categories={resolvedCategories}
                 />
               ))
               .reverse()}
@@ -656,6 +760,7 @@ export default function SwipeDeck() {
         open={store.showCategoryPicker}
         onSelect={handleCategorySelect}
         onClose={store.closeCategoryPicker}
+        categories={resolvedCategories}
       />
 
       {typeof document !== 'undefined' &&
@@ -712,6 +817,12 @@ export default function SwipeDeck() {
           </AnimatePresence>,
           document.body,
         )}
+
+      <CategoryEditorModal
+        open={catEditorOpen}
+        onClose={() => setCatEditorOpen(false)}
+        config={catConfig}
+      />
     </div>
   )
 }

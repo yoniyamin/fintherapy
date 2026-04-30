@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { fetchPendingTransactionsShared } from '../lib/pendingTransactionsCache'
-import type { Transaction } from '../types/database'
+import type { AccountType, Transaction } from '../types/database'
 
 /** `pending` = normal classify queue; `no-idea` = flagged transactions deck. */
 export type ClassifyDeckMode = 'pending' | 'no-idea'
@@ -278,13 +278,21 @@ export function useTransactions(
     return rows[0] ?? null
   }, [householdId])
 
-  const getAccountAliases = useCallback(async (): Promise<{ last4: string; label: string }[]> => {
+  const getAccountAliases = useCallback(async (): Promise<
+    { last4: string; label: string; account_type: AccountType | null }[]
+  > => {
     if (!householdId) return []
     const { data, error } = await supabase.rpc('get_account_aliases', {
       p_household_id: householdId,
     })
     if (error || !data) return []
-    return data as { last4: string; label: string }[]
+    return (data as { last4: string; label: string; account_type: AccountType | null }[]).map(
+      (r) => ({
+        last4: r.last4,
+        label: r.label,
+        account_type: r.account_type ?? null,
+      }),
+    )
   }, [householdId])
 
   const getDistinctAccountLast4ForMonth = useCallback(async (billingMonth: string): Promise<string[]> => {
@@ -311,12 +319,29 @@ export function useTransactions(
     return (data as { account_last4: string }[]).map((r) => r.account_last4).filter(Boolean)
   }, [householdId])
 
-  const upsertAccountAlias = useCallback(async (last4: string, label: string) => {
+  const upsertAccountAlias = useCallback(async (
+    last4: string,
+    label: string,
+    accountType: AccountType | null = null,
+  ) => {
     if (!householdId) return { error: new Error('No household') }
     return supabase.rpc('upsert_account_alias', {
       p_household_id: householdId,
       p_last4: last4,
       p_label: label,
+      p_account_type: accountType,
+    })
+  }, [householdId])
+
+  const setAccountType = useCallback(async (
+    last4: string,
+    accountType: AccountType | null,
+  ) => {
+    if (!householdId) return { error: new Error('No household') }
+    return supabase.rpc('set_account_type', {
+      p_household_id: householdId,
+      p_last4: last4,
+      p_account_type: accountType,
     })
   }, [householdId])
 
@@ -326,6 +351,25 @@ export function useTransactions(
       p_household_id: householdId,
       p_last4: last4,
     })
+  }, [householdId])
+
+  /** Mark positive-amount pending tx on debit accounts as own_transfers.
+   *  Pass last4 / billingMonth to scope; omit both for retroactive cleanup. */
+  const autoMarkDebitLoads = useCallback(async (
+    last4: string | null = null,
+    billingMonth: string | null = null,
+  ): Promise<number> => {
+    if (!householdId) return 0
+    const { data, error } = await supabase.rpc('auto_mark_debit_loads', {
+      p_household_id: householdId,
+      p_account_last4: last4,
+      p_billing_month: billingMonth,
+    })
+    if (error) {
+      console.warn('auto_mark_debit_loads failed:', error.message)
+      return 0
+    }
+    return (data as number) ?? 0
   }, [householdId])
 
   return {
@@ -352,6 +396,8 @@ export function useTransactions(
     getDistinctAccountLast4ForMonth,
     getDistinctAccountLast4ForHousehold,
     upsertAccountAlias,
+    setAccountType,
     deleteAccountAlias,
+    autoMarkDebitLoads,
   }
 }

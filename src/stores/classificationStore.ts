@@ -5,6 +5,8 @@ export interface MerchantGroup {
   key: string
   merchantRaw: string
   merchantClean: string | null
+  /** Set when every tx in the group was auto-classified to the same category. Null otherwise. */
+  predictedCategory: string | null
   transactions: Transaction[]
   totalAmount: number
   count: number
@@ -45,14 +47,22 @@ function groupByMerchant(txns: Transaction[]): MerchantGroup[] {
     if (existing) existing.push(tx)
     else map.set(key, [tx])
   }
-  return Array.from(map.entries()).map(([key, transactions]) => ({
-    key,
-    merchantRaw: transactions[0].merchant_raw,
-    merchantClean: transactions[0].merchant_clean,
-    transactions,
-    totalAmount: transactions.reduce((sum, t) => sum + Number(t.amount), 0),
-    count: transactions.length,
-  }))
+  return Array.from(map.entries()).map(([key, transactions]) => {
+    // A group counts as "predicted" only when every tx is status='auto' AND they all
+    // resolved to the same category. Mixed pending/auto stays unpredicted (safer to ask).
+    const allAuto = transactions.every((t) => t.status === 'auto' && t.category)
+    const autoCats = new Set(transactions.map((t) => t.category).filter(Boolean) as string[])
+    const predictedCategory = allAuto && autoCats.size === 1 ? [...autoCats][0]! : null
+    return {
+      key,
+      merchantRaw: transactions[0].merchant_raw,
+      merchantClean: transactions[0].merchant_clean,
+      predictedCategory,
+      transactions,
+      totalAmount: transactions.reduce((sum, t) => sum + Number(t.amount), 0),
+      count: transactions.length,
+    }
+  })
 }
 
 export const useClassificationStore = create<ClassificationState>((set, get) => ({

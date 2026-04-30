@@ -9,6 +9,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useMerchantKnowledge } from '../../hooks/useMerchantKnowledge'
 import { useTransactions } from '../../hooks/useTransactions'
 import { formatAccountLabel } from '../../lib/accountDisplay'
+import type { AccountType } from '../../types/database'
 import {
   getResolvedCsvColumns,
   type CsvColumnSelection,
@@ -123,10 +124,15 @@ const STEPS = ['Select file', 'Review', 'Upload']
 export default function UploadPage() {
   const { profile } = useAuth()
   const { autoClassify } = useMerchantKnowledge(profile?.household_id)
-  const { getAccountAliases, getDistinctAccountLast4ForHousehold, detectRefunds } = useTransactions(
-    profile?.household_id,
-  )
+  const {
+    getAccountAliases,
+    getDistinctAccountLast4ForHousehold,
+    detectRefunds,
+    autoMarkDebitLoads,
+    setAccountType,
+  } = useTransactions(profile?.household_id)
   const [accountAliases, setAccountAliases] = useState<Map<string, string>>(new Map())
+  const [accountTypes, setAccountTypes] = useState<Map<string, AccountType>>(new Map())
   const [knownLast4sFromData, setKnownLast4sFromData] = useState<string[]>([])
 
   const refreshAccountPickers = useCallback(async () => {
@@ -136,6 +142,11 @@ export default function UploadPage() {
       getDistinctAccountLast4ForHousehold(),
     ])
     setAccountAliases(new Map(aliasRows.map((r) => [r.last4.trim(), r.label.trim()])))
+    const types = new Map<string, AccountType>()
+    for (const a of aliasRows) {
+      if (a.account_type) types.set(a.last4.trim(), a.account_type)
+    }
+    setAccountTypes(types)
     setKnownLast4sFromData(last4s)
   }, [profile?.household_id, getAccountAliases, getDistinctAccountLast4ForHousehold])
 
@@ -168,8 +179,11 @@ export default function UploadPage() {
   const [billingMonth, setBillingMonth] = useState(getCurrentMonth())
   const [accountLast4, setAccountLast4] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [result, setResult] = useState<{ count: number; inserted: number; autoCount: number } | null>(null)
+  const [result, setResult] = useState<
+    { count: number; inserted: number; autoCount: number; loadCount: number } | null
+  >(null)
   const [error, setError] = useState<string | null>(null)
+  const [pendingTypePrompt, setPendingTypePrompt] = useState<string | null>(null)
 
   const monthOptions = getMonthOptions()
 
@@ -309,7 +323,16 @@ export default function UploadPage() {
               await detectRefunds()
             }
             const autoCount = insertedCount > 0 ? await autoClassify() : 0
-            setResult({ count: rows.length, inserted: insertedCount, autoCount })
+            const last4 = accountLast4.trim()
+            const isDebit = !!last4 && accountTypes.get(last4) === 'debit'
+            const loadCount =
+              insertedCount > 0 && isDebit
+                ? await autoMarkDebitLoads(last4, billingMonth)
+                : 0
+            if (loadCount > 0) {
+              invalidatePendingTransactionsInflight(profile.household_id!)
+            }
+            setResult({ count: rows.length, inserted: insertedCount, autoCount, loadCount })
             void refreshAccountPickers()
             setFile(null)
             setPreview([])
@@ -499,6 +522,25 @@ export default function UploadPage() {
               {formatAccountLabel(accountLast4, accountAliases)}
             </span>
           )}
+          {accountLast4 && accountTypes.get(accountLast4.trim()) === 'debit' && (
+            <span className="rounded-full bg-ice/15 px-2.5 py-1 font-semibold text-ice">
+              Debit · loads auto-classified
+            </span>
+          )}
+          {accountLast4 && accountTypes.get(accountLast4.trim()) === 'credit' && (
+            <span className="rounded-full bg-duo-green/10 px-2.5 py-1 font-semibold text-duo-green">
+              Credit
+            </span>
+          )}
+          {accountLast4.length === 4 && !accountTypes.has(accountLast4.trim()) && (
+            <button
+              type="button"
+              onClick={() => setPendingTypePrompt(accountLast4.trim())}
+              className="rounded-full border border-dashed border-white/20 bg-transparent px-2.5 py-1 font-medium text-surface-400 hover:border-ice/40 hover:text-ice"
+            >
+              Set card type…
+            </button>
+          )}
         </div>
       )}
 
@@ -566,6 +608,11 @@ export default function UploadPage() {
                 {result.autoCount} auto-classified from memory
               </p>
             )}
+            {result.loadCount > 0 && (
+              <p className="mt-1 text-sm font-bold text-ice">
+                {result.loadCount} debit load{result.loadCount !== 1 ? 's' : ''} marked as own transfers
+              </p>
+            )}
             <p className="mt-1 text-sm text-surface-400">
               {formatMonthLabel(billingMonth)}
               {accountLast4 ? ` · ${formatAccountLabel(accountLast4, accountAliases)}` : ''}
@@ -589,6 +636,60 @@ export default function UploadPage() {
           {uploading ? 'Uploading...' : `Upload ${file.name}`}
         </Button>
       )}
+
+      {pendingTypePrompt &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setPendingTypePrompt(null)}
+          >
+            <div
+              className="w-full max-w-sm rounded-2xl border border-white/10 bg-surface-950 p-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-xs text-surface-500">Card ···{pendingTypePrompt}</p>
+              <p className="mt-1 text-sm text-surface-200">Is this a credit or debit card?</p>
+              <p className="mt-1 text-[11px] leading-snug text-surface-500">
+                Debit cards must be loaded before spending — we’ll auto-mark those loads as own-account transfers so they don’t skew your spending.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {(['credit', 'debit'] as const).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={async () => {
+                      const last4 = pendingTypePrompt
+                      setPendingTypePrompt(null)
+                      const { error: typeErr } = await setAccountType(last4, opt)
+                      if (typeErr) {
+                        console.error('set_account_type', typeErr.message)
+                        return
+                      }
+                      setAccountTypes((m) => new Map(m).set(last4, opt))
+                    }}
+                    className={`rounded-xl border-b-[3px] px-3 py-2.5 text-sm font-bold ${
+                      opt === 'debit'
+                        ? 'border-ice/40 bg-ice/15 text-ice'
+                        : 'border-duo-green-dark bg-duo-green/15 text-duo-green'
+                    }`}
+                  >
+                    {opt === 'debit' ? 'Debit' : 'Credit'}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingTypePrompt(null)}
+                className="mt-2 w-full rounded-lg px-3 py-2 text-xs text-surface-400 hover:bg-white/[0.04]"
+              >
+                Skip for now
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {typeof document !== 'undefined' &&
         createPortal(

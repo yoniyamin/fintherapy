@@ -57,6 +57,14 @@ export interface Transaction {
   created_at: string
 }
 
+export type AccountType = 'credit' | 'debit'
+
+export interface AccountAlias {
+  last4: string
+  label: string
+  account_type: AccountType | null
+}
+
 export interface MerchantKnowledge {
   id: string
   merchant_pattern: string

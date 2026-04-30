@@ -27,7 +27,8 @@ function xpProgress(totalXp: number) {
   const level = Math.floor(totalXp / XP_PER_LEVEL_SEGMENT) + 1
   const toNext = inSegment === 0 && totalXp > 0 ? XP_PER_LEVEL_SEGMENT : XP_PER_LEVEL_SEGMENT - inSegment
   const title = LEVEL_TITLES[Math.min(level - 1, LEVEL_TITLES.length - 1)]
-  return { level, progress, toNext, title }
+  const nextTitle = level < LEVEL_TITLES.length ? LEVEL_TITLES[level] : null
+  return { level, progress, toNext, title, nextTitle }
 }
 
 const actionGlow = {
@@ -75,7 +76,9 @@ export default function HomePage() {
 
   const myToday = dailyActivity.find(d => d.user_id === profile?.id)
   const classifiedToday = myToday ? Number(myToday.classified_today) : 0
-  const xp = profile ? xpProgress(profile.total_xp) : { level: 1, progress: 0, toNext: XP_PER_LEVEL_SEGMENT, title: LEVEL_TITLES[0] }
+  const xp = profile
+    ? xpProgress(profile.total_xp)
+    : { level: 1, progress: 0, toNext: XP_PER_LEVEL_SEGMENT, title: LEVEL_TITLES[0], nextTitle: LEVEL_TITLES[1] ?? null }
 
   return (
     <div className="relative z-10 mx-auto flex max-w-lg flex-col px-4 pb-4 pt-5">
@@ -123,12 +126,10 @@ export default function HomePage() {
                 {householdInfo && (
                   <p className="truncate text-[11px] text-surface-400">{householdInfo.name}</p>
                 )}
-                <p className="mt-1.5 text-[10px] font-medium text-surface-500">
-                  Level {xp.level}
+                <p className="mt-1.5 text-[11px] font-semibold">
+                  <span className="text-surface-400">Level {xp.level}</span>
                   <span className="text-surface-600"> · </span>
                   <span className="text-teal-400">{xp.title}</span>
-                  <span className="text-surface-600"> · </span>
-                  <span className="text-surface-500">{xp.toNext} to next</span>
                 </p>
                 <div className="mt-1.5 h-[6px] overflow-hidden rounded-full bg-surface-800/90 ring-1 ring-white/[0.06]">
                   <motion.div
@@ -138,6 +139,14 @@ export default function HomePage() {
                     transition={{ delay: 0.25, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
                   />
                 </div>
+                {xp.nextTitle ? (
+                  <p className="mt-1.5 text-[11px] text-surface-500">
+                    <span className="text-surface-400">{xp.toNext} XP</span> to{' '}
+                    <span className="font-semibold text-emerald-300">{xp.nextTitle}</span>
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-[11px] font-semibold text-emerald-300">Max title reached 👑</p>
+                )}
               </div>
             </div>
           </div>
