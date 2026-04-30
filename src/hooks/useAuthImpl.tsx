@@ -59,11 +59,15 @@ async function signOutIfOrphanProfileError(err: { message: string; code?: string
 
 const SESSION_CHECK_INTERVAL_MS = 5 * 60 * 1000
 
+export type BootStage = 'init' | 'session' | 'profile' | null
+
 interface AuthState {
   user: User | null
   profile: Profile | null
   session: Session | null
   loading: boolean
+  /** Tracks bootstrap progress so the UI can show a determinate progress bar. */
+  bootStage: BootStage
   sessionExpiredReason: string | null
   /** Set when onAuthStateChange fires PASSWORD_RECOVERY so ResetPasswordPage can act. */
   passwordRecoveryActive: boolean
@@ -89,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile: null,
     session: null,
     loading: true,
+    bootStage: 'init',
     sessionExpiredReason: null,
     passwordRecoveryActive: false,
   })
@@ -97,6 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const manualSignOutRef = useRef(false)
   /** true once the initial getSession + applySession has run (prevents double-fire with INITIAL_SESSION). */
   const hadSessionRef = useRef(false)
+  /** true while signIn is handling its own state updates — suppresses onAuthStateChange. */
+  const signingInRef = useRef(false)
 
   // ---- helpers ----
 
@@ -166,12 +173,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cancelled) return
       bootDoneRef.current = true
       setState((prev) =>
-        prev.loading ? { ...prev, loading: false } : prev,
+        prev.loading ? { ...prev, loading: false, bootStage: null } : prev,
       )
     }, 15_000)
 
     const applySession = async (session: Session | null) => {
       const seq = ++applySeq
+      if (session?.user) {
+        setState((prev) => (prev.bootStage ? { ...prev, bootStage: 'profile' } : prev))
+      }
       const profile = session?.user ? await fetchProfile() : null
       if (cancelled || seq !== applySeq) return
       setState((prev) => ({
@@ -180,9 +190,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         session,
         loading: false,
+        bootStage: null,
         passwordRecoveryActive: prev.passwordRecoveryActive,
       }))
     }
+
+    setState((prev) => (prev.bootStage === 'init' ? { ...prev, bootStage: 'session' } : prev))
 
     supabase.auth
       .getSession()
@@ -201,6 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             profile: null,
             session: null,
             loading: false,
+            bootStage: null,
           }))
         }
       })
@@ -213,6 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return
+      if (signingInRef.current) return
       if (!initialDone && event === 'INITIAL_SESSION') return
 
       if (event === 'PASSWORD_RECOVERY') {
@@ -325,14 +340,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try { await supabase.auth.signOut() } catch { /* stale-session cleanup */ }
       finally { manualSignOutRef.current = false }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      if (error) throw new Error(friendlyAuthError(error.message))
-      return data
+      signingInRef.current = true
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+        if (error) throw new Error(friendlyAuthError(error.message))
+
+        const session = data.session
+        const user = data.user ?? session?.user ?? null
+        if (!session || !user) {
+          setState((prev) => ({ ...prev, loading: false, bootStage: null }))
+          return data
+        }
+
+        hadSessionRef.current = true
+        setState((prev) => ({ ...prev, user, session, loading: true, bootStage: 'profile' }))
+
+        const profile = await fetchProfile()
+        setState((prev) => ({
+          ...prev,
+          user,
+          profile,
+          session,
+          loading: false,
+          bootStage: null,
+        }))
+        return data
+      } finally {
+        signingInRef.current = false
+      }
     },
-    [],
+    [fetchProfile],
   )
 
   const signOut = useCallback(async () => {

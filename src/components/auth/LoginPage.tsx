@@ -24,15 +24,6 @@ export default function LoginPage() {
     return () => { clearSessionExpired() }
   }, [clearSessionExpired])
 
-  useEffect(() => {
-    if (!submitting) return
-    const timer = window.setTimeout(() => {
-      setSubmitting(false)
-      setError('Sign-in is taking too long. Please try again.')
-    }, 15_000)
-    return () => window.clearTimeout(timer)
-  }, [submitting])
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -40,11 +31,9 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       await signIn(email, password)
-      // Success — keep submitting=true so the UI stays in "Signing in…" state.
-      // The useEffect watching `user` will navigate away once onAuthStateChange
-      // propagates the new session.
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Sign in failed')
+    } finally {
       setSubmitting(false)
     }
   }
