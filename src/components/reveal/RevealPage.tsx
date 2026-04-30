@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import confetti from 'canvas-confetti'
 import { useAuth } from '../../hooks/useAuth'
 import { useReveal } from '../../hooks/useReveal'
-import { useTransactions, type ExportRow } from '../../hooks/useTransactions'
+import { useTransactions, type ExportRow, type MonthStats } from '../../hooks/useTransactions'
 import SpendingChart from './SpendingChart'
 import MonthlyTrend from './MonthlyTrend'
 import Leaderboard from './Leaderboard'
@@ -96,6 +97,7 @@ export default function RevealPage() {
     getDistinctAccountLast4ForHousehold,
     upsertAccountAlias,
     autoMarkDebitLoads,
+    getMonthStats,
   } = useTransactions(profile?.household_id)
   const [month, setMonth] = useState(getCurrentMonth())
   /** null = all cards; non-null = filter to these last-4 values */
@@ -123,11 +125,73 @@ export default function RevealPage() {
   /** When false, own_transfers are omitted from pie, “Total spent”, monthly trend bars, and tx counts. */
   const [includeOwnTransfers, setIncludeOwnTransfers] = useState(false)
   const [showTransfersHelp, setShowTransfersHelp] = useState(false)
+  const [monthStats, setMonthStats] = useState<MonthStats | null>(null)
+  const [monthStatsLoading, setMonthStatsLoading] = useState(true)
+  const [completionDismissed, setCompletionDismissed] = useState(false)
+  const [celebrationFired, setCelebrationFired] = useState(false)
+  const navigate = useNavigate()
   const catConfig = useCategoryConfig(profile?.household_id)
+
+  const UNCLASSIFIED_BLOCK_THRESHOLD = 0.2
+
+  const hasTransactions = monthStats !== null && monthStats.total_count > 0
+  const allClassified = hasTransactions && monthStats.pending_count === 0
+
+  const noData = monthStats !== null && monthStats.total_count === 0
+
+  const tooManyUnclassified = hasTransactions
+    && (monthStats.pending_count / monthStats.total_count) > UNCLASSIFIED_BLOCK_THRESHOLD
+
+  const showCompletionScreen = allClassified && !completionDismissed
+
+  const loadMonthStats = useCallback(async (m: string) => {
+    setMonthStatsLoading(true)
+    const stats = await getMonthStats(m)
+    setMonthStats(stats)
+    setMonthStatsLoading(false)
+  }, [getMonthStats])
+
+  useEffect(() => {
+    setCompletionDismissed(false)
+    setCelebrationFired(false)
+  }, [month])
+
+  useEffect(() => {
+    if (showCompletionScreen && !celebrationFired) {
+      setCelebrationFired(true)
+      const duration = 2000
+      const end = Date.now() + duration
+      const frame = () => {
+        confetti({
+          particleCount: 4,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0, y: 0.65 },
+          colors: ['#58cc02', '#1cb0f6', '#ff9600', '#ce82ff', '#ffd700'],
+        })
+        confetti({
+          particleCount: 4,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1, y: 0.65 },
+          colors: ['#58cc02', '#1cb0f6', '#ff9600', '#ce82ff', '#ffd700'],
+        })
+        if (Date.now() < end) requestAnimationFrame(frame)
+      }
+      confetti({
+        particleCount: 100,
+        spread: 120,
+        origin: { y: 0.5 },
+        colors: ['#58cc02', '#1cb0f6', '#ff9600', '#ce82ff', '#ffd700'],
+      })
+      frame()
+    }
+  }, [showCompletionScreen, celebrationFired])
 
   useEffect(() => {
     fetchSummary(month, accountFilter?.length ? accountFilter : null, includeOwnTransfers)
-  }, [month, fetchSummary, accountFilter, includeOwnTransfers])
+    loadMonthStats(month)
+  }, [month, fetchSummary, accountFilter, includeOwnTransfers, loadMonthStats])
 
   useEffect(() => {
     if (!profile?.household_id) return
@@ -517,10 +581,163 @@ export default function RevealPage() {
           document.body,
         )}
 
-      {loading ? (
+      {loading || monthStatsLoading ? (
         <div className="mt-12 flex items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
         </div>
+      ) : noData ? (
+        <motion.div
+          className="mt-8 flex flex-col items-center gap-4 px-4 py-8"
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+        >
+          <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-surface-600/30 bg-surface-900/50">
+            <span className="text-4xl">📭</span>
+          </div>
+          <div className="text-center">
+            <p className="text-base font-bold text-surface-100">
+              No data for {formatMonthLabel(month)}
+            </p>
+            <p className="mt-2 text-sm text-surface-400 leading-relaxed">
+              No transactions have been uploaded for this month yet.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/upload')}
+            className="mt-2 flex items-center gap-2 rounded-xl border border-ice/20 bg-ice/5 px-5 py-3 text-sm font-semibold text-ice transition-colors hover:bg-ice/10"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            Upload a statement
+          </button>
+        </motion.div>
+      ) : tooManyUnclassified ? (
+        <motion.div
+          className="mt-8 flex flex-col items-center gap-4 px-4 py-8"
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+        >
+          <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-flame/30 bg-flame/10">
+            <span className="text-4xl">🚧</span>
+          </div>
+          <div className="text-center">
+            <p className="text-base font-bold text-surface-100">
+              Not ready yet
+            </p>
+            <p className="mt-2 text-sm text-surface-400 leading-relaxed">
+              There {monthStats!.pending_count === 1 ? 'is' : 'are'} still{' '}
+              <span className="font-semibold text-flame">{monthStats!.pending_count} unclassified</span>{' '}
+              transaction{monthStats!.pending_count === 1 ? '' : 's'} out of {monthStats!.total_count} for {formatMonthLabel(month)}.
+            </p>
+            <p className="mt-1 text-xs text-surface-500">
+              Classify your transactions first to unlock insights.
+            </p>
+          </div>
+          <div className="mt-2 w-full max-w-xs">
+            <div className="flex items-center justify-between text-xs text-surface-500 mb-1.5">
+              <span>Progress</span>
+              <span className="tabular-nums font-medium">
+                {Math.round(((monthStats!.total_count - monthStats!.pending_count) / monthStats!.total_count) * 100)}%
+              </span>
+            </div>
+            <div className="h-3 w-full overflow-hidden rounded-full bg-surface-900 ring-1 ring-white/[0.06]">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-flame to-duo-green"
+                initial={{ width: 0 }}
+                animate={{
+                  width: `${((monthStats!.total_count - monthStats!.pending_count) / monthStats!.total_count) * 100}%`,
+                }}
+                transition={{ type: 'spring', stiffness: 60, delay: 0.3 }}
+              />
+            </div>
+          </div>
+        </motion.div>
+      ) : showCompletionScreen ? (
+        <motion.div
+          className="mt-8 flex flex-col items-center gap-5 px-4 py-6"
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 80 }}
+        >
+          <motion.div
+            className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-duo-green/40 bg-duo-green/10"
+            animate={{ scale: [1, 1.08, 1] }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <span className="text-5xl">🎉</span>
+          </motion.div>
+
+          <div className="text-center">
+            <p className="text-lg font-bold text-surface-50">
+              Amazing work!
+            </p>
+            <p className="mt-1 text-sm text-surface-400">
+              All <span className="font-semibold text-duo-green">{monthStats!.total_count}</span> transactions
+              for {formatMonthLabel(month)} are classified.
+            </p>
+          </div>
+
+          <motion.div
+            className={`${ui.glassFlat} w-full space-y-3 px-4 py-4`}
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            <p className="text-xs font-semibold text-surface-400">Before we reveal the numbers...</p>
+
+            <button
+              type="button"
+              onClick={() => navigate('/upload')}
+              className="flex w-full items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3 text-left transition-colors hover:bg-white/[0.06]"
+            >
+              <span className="text-xl">💳</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-surface-200">More cards to load?</p>
+                <p className="text-[11px] text-surface-500">Upload additional credit card statements</p>
+              </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-surface-500">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/bets')}
+              className="flex w-full items-center gap-3 rounded-xl border border-ice/20 bg-ice/5 px-4 py-3 text-left transition-colors hover:bg-ice/10"
+            >
+              <span className="text-xl">🎲</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-ice">Place bets first?</p>
+                <p className="text-[11px] text-surface-500">Predict spending before seeing the results</p>
+              </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-ice/60">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </motion.div>
+
+          <motion.div
+            className="w-full"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5 }}
+          >
+            <button
+              type="button"
+              onClick={() => setCompletionDismissed(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-duo-green px-5 py-3.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] transition-all hover:brightness-110 active:translate-y-[1px]"
+            >
+              Reveal the numbers
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </motion.div>
+        </motion.div>
       ) : (
         <>
           {/* Income + Spending + Free Income summary */}

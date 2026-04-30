@@ -22,9 +22,18 @@ export interface HouseholdBet {
   predicted_amount: number
 }
 
+export interface HouseholdBetStatus {
+  user_id: string
+  display_name: string
+  avatar_url: string | null
+  category_count: number
+  is_current_user: boolean
+}
+
 export function useBets(householdId: string | null | undefined) {
   const [myBets, setMyBets] = useState<SavedBet[]>([])
   const [householdBets, setHouseholdBets] = useState<HouseholdBet[]>([])
+  const [householdBetStatus, setHouseholdBetStatus] = useState<HouseholdBetStatus[]>([])
   const [loading, setLoading] = useState(false)
 
   const fetchMyBets = useCallback(async (month: string) => {
@@ -51,6 +60,17 @@ export function useBets(householdId: string | null | undefined) {
     }
   }, [householdId])
 
+  const fetchHouseholdBetStatus = useCallback(async (month: string) => {
+    if (!householdId) return
+    const { data, error } = await supabase.rpc('get_household_bet_status', {
+      p_household_id: householdId,
+      p_month: month,
+    })
+    if (!error && data) {
+      setHouseholdBetStatus(data as HouseholdBetStatus[])
+    }
+  }, [householdId])
+
   const submitBets = useCallback(async (month: string, bets: Bet[]) => {
     if (!householdId) return { error: new Error('No household') }
     const { error } = await supabase.rpc('submit_bets', {
@@ -64,5 +84,14 @@ export function useBets(householdId: string | null | undefined) {
     return { error }
   }, [householdId, fetchMyBets])
 
-  return { myBets, householdBets, loading, fetchMyBets, fetchHouseholdBets, submitBets }
+  return {
+    myBets,
+    householdBets,
+    householdBetStatus,
+    loading,
+    fetchMyBets,
+    fetchHouseholdBets,
+    fetchHouseholdBetStatus,
+    submitBets,
+  }
 }
