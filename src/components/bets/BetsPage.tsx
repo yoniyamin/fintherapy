@@ -125,11 +125,6 @@ export default function BetsPage() {
     return pickBetCategories(bettableCategories, profile.household_id, month)
   }, [profile?.household_id, bettableCategories, month])
 
-  const selectedCategoryIds = useMemo(
-    () => new Set(selectedCategories.map((c) => c.id)),
-    [selectedCategories],
-  )
-
   const loadMonthStats = useCallback(async (m: string) => {
     setStatsLoading(true)
     const stats = await getMonthStats(m)
@@ -551,7 +546,7 @@ function MultiMemberResult({
             <span className={`text-xs font-semibold tabular-nums ${hasPrediction ? 'text-gem' : 'text-surface-600'}`}>
               {hasPrediction ? `€${predicted.toFixed(0)}` : '—'}
             </span>
-            {diff !== null && (
+            {diff !== null && predicted != null && (
               <span className={`min-w-[3.5rem] text-right text-[11px] font-semibold tabular-nums ${
                 Math.abs(diff) < predicted * 0.1 ? 'text-duo-green'
                   : diff > 0 ? 'text-danger' : 'text-flame'
