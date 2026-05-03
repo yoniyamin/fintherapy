@@ -225,7 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return
       if (signingInRef.current) return
       if (!initialDone && event === 'INITIAL_SESSION') return
@@ -243,7 +243,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (session) hadSessionRef.current = true
 
-      await applySession(session)
+      // Never await other Supabase calls inside this callback — it deadlocks the client
+      // ((profile RPC never leaves the browser; websocket connect spins). See Supabase JS docs.)
+      window.setTimeout(() => {
+        if (cancelled) return
+        void applySession(session)
+      }, 0)
     })
 
     return () => {
