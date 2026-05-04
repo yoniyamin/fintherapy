@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   searchMerchant,
-  isSearchConfigured,
   buildMerchantSearchUrl,
   cleanMerchantForSearch,
   type SearchResult,
@@ -23,26 +22,26 @@ export default function MerchantSearchPanel({ open, merchantRaw, onClose }: Merc
   useEffect(() => {
     if (!open || !merchantRaw) return
 
-    if (!isSearchConfigured()) {
-      setError('Search not configured — add VITE_GOOGLE_CSE_KEY and VITE_GOOGLE_CSE_CX to your .env')
-      return
-    }
-
     let cancelled = false
     setLoading(true)
     setError(null)
     setResults([])
 
     searchMerchant(merchantRaw).then(
-      (items) => {
+      (resp) => {
         if (cancelled) return
-        setResults(items)
         setLoading(false)
-        if (items.length === 0) setError('No results found')
+        if (!resp.ok) {
+          setError(resp.error)
+        } else if (resp.results.length === 0) {
+          setError('No results found')
+        } else {
+          setResults(resp.results)
+        }
       },
-      () => {
+      (err) => {
         if (cancelled) return
-        setError('Search failed — check your API key')
+        setError(`Network error: ${err instanceof Error ? err.message : 'unknown'}`)
         setLoading(false)
       },
     )

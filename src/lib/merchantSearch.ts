@@ -52,7 +52,8 @@ export function buildMerchantSearchUrl(merchantRaw: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Google Custom Search API
+// Brave Search API — https://brave.com/search/api
+// Free tier: 2 000 queries / month (1 query / second)
 // ---------------------------------------------------------------------------
 
 export interface SearchResult {
@@ -62,43 +63,72 @@ export interface SearchResult {
   displayLink: string
 }
 
-const CSE_KEY = import.meta.env.VITE_GOOGLE_CSE_KEY as string | undefined
-const CSE_CX = import.meta.env.VITE_GOOGLE_CSE_CX as string | undefined
+const BRAVE_KEY = import.meta.env.VITE_BRAVE_SEARCH_KEY as string | undefined
 
 export function isSearchConfigured(): boolean {
-  return Boolean(CSE_KEY && CSE_CX)
+  return Boolean(BRAVE_KEY)
 }
 
+export type SearchResponse =
+  | { ok: true; results: SearchResult[] }
+  | { ok: false; error: string }
+
 /**
- * Fetches up to `num` search results for the cleaned merchant query.
- * Returns an empty array if the API is not configured or the call fails.
+ * Fetches up to `count` web results for the cleaned merchant query via Brave Search.
  */
 export async function searchMerchant(
   merchantRaw: string,
-  num = 5,
-): Promise<SearchResult[]> {
-  if (!CSE_KEY || !CSE_CX) return []
+  count = 5,
+): Promise<SearchResponse> {
+  if (!BRAVE_KEY) {
+    return { ok: false, error: 'Search not configured — add VITE_BRAVE_SEARCH_KEY to .env' }
+  }
 
   const query = cleanMerchantForSearch(merchantRaw)
-  if (!query) return []
+  if (!query) {
+    return { ok: false, error: 'Could not build a search query from this merchant name' }
+  }
 
-  const url = new URL('https://www.googleapis.com/customsearch/v1')
-  url.searchParams.set('key', CSE_KEY)
-  url.searchParams.set('cx', CSE_CX)
+  const url = new URL('https://api.search.brave.com/res/v1/web/search')
   url.searchParams.set('q', query)
-  url.searchParams.set('num', String(num))
+  url.searchParams.set('count', String(count))
 
-  const res = await fetch(url)
-  if (!res.ok) return []
+  const res = await fetch(url, {
+    headers: {
+      'Accept': 'application/json',
+      'Accept-Encoding': 'gzip',
+      'X-Subscription-Token': BRAVE_KEY,
+    },
+  })
+
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    try {
+      const body = await res.json()
+      msg = body?.message ?? body?.error ?? msg
+    } catch { /* ignore parse errors */ }
+    return { ok: false, error: msg }
+  }
 
   const data = await res.json()
-  const items: Array<{ title?: string; link?: string; snippet?: string; displayLink?: string }> =
-    data.items ?? []
+  const items: Array<{ title?: string; url?: string; description?: string }> =
+    data?.web?.results ?? []
 
-  return items.map((item) => ({
-    title: item.title ?? '',
-    link: item.link ?? '',
-    snippet: item.snippet ?? '',
-    displayLink: item.displayLink ?? '',
-  }))
+  if (items.length === 0) {
+    return { ok: true, results: [] }
+  }
+
+  return {
+    ok: true,
+    results: items.map((item) => {
+      let domain = ''
+      try { domain = new URL(item.url ?? '').hostname } catch { /* */ }
+      return {
+        title: item.title ?? '',
+        link: item.url ?? '',
+        snippet: item.description ?? '',
+        displayLink: domain,
+      }
+    }),
+  }
 }
