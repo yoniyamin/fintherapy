@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, useAnimation, useMotionValue, useTransform } from 'framer-motion'
 import type { MerchantGroup } from '../../stores/classificationStore'
 import { CATEGORIES, type CategoryDef } from '../../lib/constants'
 import { formatAccountLabel } from '../../lib/accountDisplay'
+import MerchantSearchPanel from './MerchantSearchPanel'
 import type { AccountType } from '../../types/database'
 
 interface SwipeCardProps {
@@ -49,6 +50,7 @@ export default function SwipeCard({
   onOpenNote,
   categories,
 }: SwipeCardProps) {
+  const [searchOpen, setSearchOpen] = useState(false)
   const cats = categories ?? CATEGORIES
   const catLookup = useMemo(
     () => Object.fromEntries(cats.map((c) => [c.id, c])) as Record<string, CategoryDef | undefined>,
@@ -263,9 +265,26 @@ export default function SwipeCard({
 
         <div className="text-center">
           <p className="text-xs text-surface-500">{dateRange}</p>
-          <h2 className="mt-2 text-xl font-bold text-surface-50">
-            {group.merchantClean ?? group.merchantRaw}
-          </h2>
+          <div className="mt-2 flex items-center justify-center gap-2">
+            <h2 className="text-xl font-bold text-surface-50">
+              {group.merchantClean ?? group.merchantRaw}
+            </h2>
+            {isTopCard && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSearchOpen(true)
+                }}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-800/60 text-surface-400 transition-all hover:bg-surface-700 hover:text-surface-200 active:scale-90"
+                title="Search Google for this merchant"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                  <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
+                </svg>
+              </button>
+            )}
+          </div>
 
           {predicted && (
             <motion.div
@@ -353,6 +372,14 @@ export default function SwipeCard({
           </p>
         )}
       </div>
+
+      {isTopCard && (
+        <MerchantSearchPanel
+          open={searchOpen}
+          merchantRaw={group.merchantRaw}
+          onClose={() => setSearchOpen(false)}
+        />
+      )}
     </motion.div>
   )
 }

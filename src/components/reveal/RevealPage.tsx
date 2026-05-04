@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { AccountCardEditModal } from '../common/AccountCardEditModal'
 import confetti from 'canvas-confetti'
 import { useAuth } from '../../hooks/useAuth'
 import { useReveal } from '../../hooks/useReveal'
@@ -477,6 +477,7 @@ export default function RevealPage() {
                           <button
                             type="button"
                             className="shrink-0 rounded-md px-2 py-1 text-xs text-ice hover:bg-white/[0.06]"
+                            title="Edit display name, card type, and debit load behavior"
                             onClick={(e) => {
                               e.preventDefault()
                               setAliasDraft({
@@ -486,7 +487,7 @@ export default function RevealPage() {
                               })
                             }}
                           >
-                            Name
+                            Edit
                           </button>
                         </label>
                       )
@@ -505,81 +506,12 @@ export default function RevealPage() {
         </div>
       )}
 
-      {aliasDraft &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="alias-card-title"
-            onClick={() => setAliasDraft(null)}
-          >
-            <div
-              className="w-full max-w-sm rounded-2xl border border-white/10 bg-surface-950 p-4 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <p id="alias-card-title" className="text-xs text-surface-500">
-                Card ···{aliasDraft.last4}
-              </p>
-              <input
-                value={aliasDraft.label}
-                onChange={(e) => setAliasDraft({ ...aliasDraft, label: e.target.value })}
-                placeholder="Display name (e.g. Yonatan)"
-                className={`mt-2 w-full ${ui.input}`}
-                autoFocus
-              />
-              <div className="mt-3">
-                <p className="mb-1.5 text-xs font-medium text-surface-400">Card type</p>
-                <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-surface-900/60 p-1 ring-1 ring-white/[0.06]">
-                  {(['credit', 'debit', null] as const).map((opt) => {
-                    const active = aliasDraft.accountType === opt
-                    const label = opt === null ? 'Unknown' : opt === 'credit' ? 'Credit' : 'Debit'
-                    return (
-                      <button
-                        key={String(opt)}
-                        type="button"
-                        onClick={() => setAliasDraft({ ...aliasDraft, accountType: opt })}
-                        className={`rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${
-                          active
-                            ? opt === 'debit'
-                              ? 'bg-ice/20 text-ice'
-                              : opt === 'credit'
-                                ? 'bg-duo-green/15 text-duo-green'
-                                : 'bg-surface-700/70 text-surface-200'
-                            : 'text-surface-500 hover:bg-white/[0.04]'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    )
-                  })}
-                </div>
-                {aliasDraft.accountType === 'debit' && (
-                  <p className="mt-2 text-[11px] leading-snug text-surface-500">
-                    Future uploads on this card will auto-mark positive-amount loads as own-account transfers.
-                  </p>
-                )}
-              </div>
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-lg px-3 py-2 text-sm text-surface-400"
-                  onClick={() => setAliasDraft(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg bg-duo-green px-4 py-2 text-sm font-bold text-white"
-                  onClick={() => void saveAlias()}
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+      <AccountCardEditModal
+        draft={aliasDraft}
+        onChange={setAliasDraft}
+        onClose={() => setAliasDraft(null)}
+        onSave={() => void saveAlias()}
+      />
 
       {loading || monthStatsLoading ? (
         <div className="mt-12 flex items-center justify-center">

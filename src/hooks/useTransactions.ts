@@ -21,6 +21,13 @@ export interface DailyCount {
   classified_today: number
 }
 
+/** Per household member: how many txs they classified on a given card (last4). */
+export interface AccountClassifiedBreakdownRow {
+  user_id: string
+  display_name: string
+  classified_count: number
+}
+
 export interface DailyActivity {
   user_id: string
   display_name: string
@@ -372,6 +379,24 @@ export function useTransactions(
     return (data as number) ?? 0
   }, [householdId])
 
+  const getClassifiedCountsForAccount = useCallback(async (
+    accountLast4: string,
+  ): Promise<AccountClassifiedBreakdownRow[]> => {
+    if (!householdId) return []
+    const { data, error } = await supabase.rpc('get_classified_counts_for_account', {
+      p_household_id: householdId,
+      p_account_last4: accountLast4.trim(),
+    })
+    if (error || !data) return []
+    return (data as { user_id: string; display_name: string; classified_count: number | string }[]).map(
+      (row) => ({
+        user_id: row.user_id,
+        display_name: row.display_name,
+        classified_count: Number(row.classified_count),
+      }),
+    )
+  }, [householdId])
+
   return {
     transactions,
     autoClassified,
@@ -399,5 +424,6 @@ export function useTransactions(
     setAccountType,
     deleteAccountAlias,
     autoMarkDebitLoads,
+    getClassifiedCountsForAccount,
   }
 }
