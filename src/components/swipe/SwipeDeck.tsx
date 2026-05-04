@@ -141,6 +141,14 @@ export default function SwipeDeck() {
   const [householdLast4List, setHouseholdLast4List] = useState<string[]>([])
   const [accountBreakdown, setAccountBreakdown] = useState<AccountClassifiedBreakdownRow[] | null>(null)
   const [breakdownLoading, setBreakdownLoading] = useState(false)
+  // Bumps when the category picker is dismissed without a selection. SwipeCard watches
+  // this to spring the just-flown-off card back into view, so a swipe-right that opens
+  // the picker can be undone by closing the picker.
+  const [pickerCancelTick, setPickerCancelTick] = useState(0)
+  const handlePickerCancel = useCallback(() => {
+    store.closeCategoryPicker()
+    setPickerCancelTick((v) => v + 1)
+  }, [store])
 
   /** All deck candidates: pending classify queue + already auto-classified items
    *  surfaced as confirmable "Predicted" cards. No-idea deck only uses `fetched`. */
@@ -941,6 +949,7 @@ export default function SwipeDeck() {
                       notePreview={notePreviewForGroup(group.transactions)}
                       onOpenNote={i === 0 ? openNoteModal : undefined}
                       categories={resolvedCategories}
+                      pickerCancelTick={i === 0 ? pickerCancelTick : undefined}
                     />
                   ))
                   .reverse()}
@@ -965,7 +974,7 @@ export default function SwipeDeck() {
       <CategoryPicker
         open={store.showCategoryPicker}
         onSelect={handleCategorySelect}
-        onClose={store.closeCategoryPicker}
+        onClose={handlePickerCancel}
         categories={resolvedCategories}
       />
 

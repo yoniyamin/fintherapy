@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, useAnimation, useMotionValue, useTransform } from 'framer-motion'
 import type { MerchantGroup } from '../../stores/classificationStore'
 import { CATEGORIES, type CategoryDef } from '../../lib/constants'
@@ -28,6 +28,9 @@ interface SwipeCardProps {
   onOpenNote?: () => void
   /** Resolved categories from useCategoryConfig; falls back to hard-coded defaults. */
   categories?: readonly CategoryDef[]
+  /** Increments when the picker is dismissed without a selection. The top card
+   *  springs back to center so a swipe-right that opened the picker can be undone. */
+  pickerCancelTick?: number
 }
 
 const SWIPE_DISTANCE = 90
@@ -49,6 +52,7 @@ export default function SwipeCard({
   notePreview = null,
   onOpenNote,
   categories,
+  pickerCancelTick,
 }: SwipeCardProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const cats = categories ?? CATEGORIES
@@ -135,6 +139,24 @@ export default function SwipeCard({
       })
     }
   }, [isTopCard, group.key, controls, x, y])
+
+  // Picker dismissed without a selection → spring the just-flown-off card back into
+  // view. We only act on a strict change of the tick (not on the initial render) so a
+  // top-card mount with a pre-existing tick doesn't replay the spring.
+  const lastCancelTickRef = useRef(pickerCancelTick)
+  useEffect(() => {
+    if (pickerCancelTick === undefined) return
+    if (pickerCancelTick === lastCancelTickRef.current) return
+    lastCancelTickRef.current = pickerCancelTick
+    if (!isTopCard) return
+    void controls.start({
+      x: 0,
+      y: 0,
+      opacity: 1,
+      rotate: 0,
+      transition: { type: 'spring', stiffness: 320, damping: 28 },
+    })
+  }, [pickerCancelTick, isTopCard, controls])
 
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
