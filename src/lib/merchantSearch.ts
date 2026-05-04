@@ -52,8 +52,8 @@ export function buildMerchantSearchUrl(merchantRaw: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Brave Search API — https://brave.com/search/api
-// Free tier: 2 000 queries / month (1 query / second)
+// Merchant search via our /api/search serverless proxy (Brave Search on the backend).
+// The API key lives server-side only — nothing sensitive in the browser.
 // ---------------------------------------------------------------------------
 
 export interface SearchResult {
@@ -63,49 +63,31 @@ export interface SearchResult {
   displayLink: string
 }
 
-const BRAVE_KEY = import.meta.env.VITE_BRAVE_SEARCH_KEY as string | undefined
-
-export function isSearchConfigured(): boolean {
-  return Boolean(BRAVE_KEY)
-}
-
 export type SearchResponse =
   | { ok: true; results: SearchResult[] }
   | { ok: false; error: string }
 
 /**
- * Fetches up to `count` web results for the cleaned merchant query via Brave Search.
+ * Fetches web results for the cleaned merchant query via our own /api/search proxy.
  */
 export async function searchMerchant(
   merchantRaw: string,
   count = 5,
 ): Promise<SearchResponse> {
-  if (!BRAVE_KEY) {
-    return { ok: false, error: 'Search not configured — add VITE_BRAVE_SEARCH_KEY to .env' }
-  }
-
   const query = cleanMerchantForSearch(merchantRaw)
   if (!query) {
     return { ok: false, error: 'Could not build a search query from this merchant name' }
   }
 
-  const url = new URL('https://api.search.brave.com/res/v1/web/search')
-  url.searchParams.set('q', query)
-  url.searchParams.set('count', String(count))
+  const url = `/api/search?q=${encodeURIComponent(query)}&count=${count}`
 
-  const res = await fetch(url, {
-    headers: {
-      'Accept': 'application/json',
-      'Accept-Encoding': 'gzip',
-      'X-Subscription-Token': BRAVE_KEY,
-    },
-  })
+  const res = await fetch(url)
 
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
     try {
       const body = await res.json()
-      msg = body?.message ?? body?.error ?? msg
+      msg = body?.error?.detail ?? body?.error ?? body?.message ?? msg
     } catch { /* ignore parse errors */ }
     return { ok: false, error: msg }
   }
