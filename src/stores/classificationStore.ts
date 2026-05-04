@@ -23,6 +23,8 @@ interface ClassificationState {
   activeGroup: MerchantGroup | null
 
   load: (txns: Transaction[]) => void
+  /** Rebuild groups from updated txns without resetting session counters. */
+  refreshDeck: (txns: Transaction[]) => void
   advance: (txCount: number) => void
   flag: () => void
   /** Move current group to end of queue (e.g. skip in No idea deck). */
@@ -89,6 +91,17 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
       flaggedCount: 0,
       transferCount: 0,
       showCategoryPicker: false,
+      activeGroup: groups[0] ?? null,
+      activeTransaction: groups[0]?.transactions[0] ?? null,
+    })
+  },
+
+  refreshDeck: (txns) => {
+    const groups = groupByMerchant(txns)
+    set({
+      groups,
+      transactions: txns,
+      currentIndex: 0,
       activeGroup: groups[0] ?? null,
       activeTransaction: groups[0]?.transactions[0] ?? null,
     })

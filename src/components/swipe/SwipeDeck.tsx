@@ -29,7 +29,17 @@ function classifyAccountStorageKey(householdId: string) {
   return `spentwhatt:classifyAccountFilter:${householdId}`
 }
 
-/** Stable key for the deck actually loaded (household + filter + pending ids after filter). */
+/** Context key: changes when the user switches tab / card filter / household.
+ *  Session counters reset only when this changes. */
+function makeContextKey(
+  householdId: string,
+  accountFilter: string | null,
+  deckMode: string,
+): string {
+  return `${householdId}:acct=${accountFilter ?? ''}:${deckMode}`
+}
+
+/** Full fingerprint including transaction ids — used to detect deck content changes. */
 function makeDeckFingerprint(
   householdId: string,
   accountFilter: string | null,
@@ -113,6 +123,7 @@ export default function SwipeDeck() {
   const [catEditorOpen, setCatEditorOpen] = useState(false)
   const store = useClassificationStore()
   const lastSyncedFingerprintRef = useRef<string | null>(null)
+  const lastContextKeyRef = useRef<string | null>(null)
   const prevHouseholdIdRef = useRef<string | undefined>(undefined)
   const deckSyncGenerationRef = useRef(0)
   const [xpFloats, setXpFloats] = useState<{ id: number; amount: number }[]>([])
@@ -296,6 +307,7 @@ export default function SwipeDeck() {
     if (prevHouseholdIdRef.current !== hid) {
       prevHouseholdIdRef.current = hid
       lastSyncedFingerprintRef.current = null
+      lastContextKeyRef.current = null
     }
 
     const deckFp = makeDeckFingerprint(hid, accountFilter, deckFromFetched)
@@ -304,10 +316,18 @@ export default function SwipeDeck() {
       return
     }
 
+    const ctxKey = makeContextKey(hid, accountFilter, deckMode)
+    const contextChanged = ctxKey !== lastContextKeyRef.current
+    lastContextKeyRef.current = ctxKey
+
     const gen = ++deckSyncGenerationRef.current
 
     const init = async () => {
-      store.load(deckFromFetched)
+      if (contextChanged) {
+        store.load(deckFromFetched)
+      } else {
+        store.refreshDeck(deckFromFetched)
+      }
       let finalTxns = allDeckTxns
 
       if (allDeckTxns.length === 0) {
@@ -345,7 +365,11 @@ export default function SwipeDeck() {
           if (merged.length > 0) {
             finalTxns = merged
             const deckAfter = filterTransactionsByAccount(finalTxns, accountFilter)
-            store.load(deckAfter)
+            if (contextChanged) {
+              store.load(deckAfter)
+            } else {
+              store.refreshDeck(deckAfter)
+            }
           }
         }
       } catch {
@@ -369,6 +393,7 @@ export default function SwipeDeck() {
     loading,
     profile?.household_id,
     store.load,
+    store.refreshDeck,
     detectRefunds,
     loadMonthStats,
     deckMode,
@@ -442,6 +467,8 @@ export default function SwipeDeck() {
   const handleCategorySelect = async (categoryId: string) => {
     const group = store.activeGroup
     if (!group || !user) return
+
+    store.closeCategoryPicker()
 
     for (const tx of group.transactions) {
       await classifyTransaction(tx.id, categoryId, user.id)
@@ -703,13 +730,14 @@ export default function SwipeDeck() {
               {cardChipList.map((last4) => {
                 const cardType = accountTypes.get(last4) ?? null
                 const hasPendingHere = deckMode === 'pending' && last4WithPendingWork.has(last4)
+                const isSelected = accountFilter === last4
                 return (
-                  <div key={last4} className="flex items-center gap-1">
+                  <div key={last4} className="flex items-center gap-0.5">
                     <button
                       type="button"
                       onClick={() => setAccountFilterPersist(last4)}
                       className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                        accountFilter === last4
+                        isSelected
                           ? 'bg-duo-green/25 text-duo-green'
                           : 'text-surface-500 hover:bg-surface-800/60 hover:text-surface-300'
                       }`}
@@ -723,21 +751,26 @@ export default function SwipeDeck() {
                       )}
                       {formatAccountLabel(last4, accountAliases)}
                     </button>
-                    <button
-                      type="button"
-                      className="shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold text-ice hover:bg-white/[0.08]"
-                      title="Edit display name, card type, and debit load behavior"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setAliasDraft({
-                          last4,
-                          label: accountAliases.get(last4) ?? '',
-                          accountType: cardType,
-                        })
-                      }}
-                    >
-                      Edit
-                    </button>
+                    {isSelected && (
+                      <button
+                        type="button"
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ice/70 transition-colors hover:bg-white/[0.08] hover:text-ice"
+                        title="Edit display name and card type"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          setAliasDraft({
+                            last4,
+                            label: accountAliases.get(last4) ?? '',
+                            accountType: cardType,
+                          })
+                        }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                          <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474Z" />
+                          <path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 14 9v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 )
               })}
