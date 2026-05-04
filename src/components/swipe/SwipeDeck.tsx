@@ -417,8 +417,13 @@ export default function SwipeDeck() {
 
       const txCount = group.count
       const xpEarned = txCount * XP_VALUES.CLASSIFY_EASY
-      await awardXp(user.id, xpEarned)
+      // Advance before any await: pairing this with removeTransactions in the same
+      // sync block means the deck-sync useEffect's refreshDeck rebuilds groups with
+      // the classified item already gone, so the new currentIndex=0 still points at
+      // the correct next card. Awaiting awardXp first let refreshDeck reset to 0
+      // and then advance bump to 1, skipping a card on every fast swipe.
       store.advance(txCount)
+      await awardXp(user.id, xpEarned)
 
       xpCounter.current += 1
       const floatId = xpCounter.current
@@ -478,9 +483,10 @@ export default function SwipeDeck() {
 
     const txCount = group.count
     const xpEarned = txCount * XP_VALUES.CLASSIFY_MANUAL
-    await awardXp(user.id, xpEarned)
-
+    // See handleSwipeRight — advance must run synchronously with removeTransactions
+    // so the deck-sync useEffect doesn't reset currentIndex between the two awaits.
     store.advance(txCount)
+    await awardXp(user.id, xpEarned)
 
     xpCounter.current += 1
     const floatId = xpCounter.current
