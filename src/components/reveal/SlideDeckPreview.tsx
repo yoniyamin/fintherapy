@@ -209,7 +209,6 @@ export default function SlideDeckPreview({
                   txCount={filteredTransactions.length}
                   income={income}
                   categoryCount={filteredSummary.length}
-                  month={month}
                   prevMonth={prevMonth}
                 />
               )}
@@ -339,10 +338,10 @@ function TitleSlide({ month, totalSpent, txCount }: { month: string; totalSpent:
 }
 
 function OverviewSlide({
-  totalSpent, prevTotalSpent, txCount, income, categoryCount, month, prevMonth,
+  totalSpent, prevTotalSpent, txCount, income, categoryCount, prevMonth,
 }: {
   totalSpent: number; prevTotalSpent: number | null; txCount: number
-  income: number | null; categoryCount: number; month: string; prevMonth: string
+  income: number | null; categoryCount: number; prevMonth: string
 }) {
   const freeIncome = income != null ? income - totalSpent : null
   const spendDelta = prevTotalSpent != null ? getDelta(totalSpent, prevTotalSpent) : null

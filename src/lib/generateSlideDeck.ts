@@ -208,7 +208,7 @@ function addCategoryBreakdownSlide(
     chartValues.push(otherTotal)
   }
 
-  slide.addChart(pptx.charts.DOUGHNUT, [{ name: 'Spending', labels: chartLabels, values: chartValues }], {
+  slide.addChart(pptx.ChartType.doughnut, [{ name: 'Spending', labels: chartLabels, values: chartValues }], {
     x: 0.3,
     y: 1.0,
     w: 4.2,
@@ -335,7 +335,7 @@ function addMonthlyTrendSlide(pptx: PptxGenJS, monthlyTotals: MonthlyTotal[], se
   })
   const values = monthlyTotals.map((d) => Number(d.total_amount))
 
-  slide.addChart(pptx.charts.BAR, [{ name: 'Spending', labels, values }], {
+  slide.addChart(pptx.ChartType.bar, [{ name: 'Spending', labels, values }], {
     x: 0.5,
     y: 1.0,
     w: 9.0,
@@ -534,7 +534,7 @@ function addIncomeVsSpendingSlide(pptx: PptxGenJS, monthlyTotals: MonthlyTotal[]
   const spendingValues = monthlyTotals.map((d) => Number(d.total_amount))
   const incomeValues = monthlyTotals.map(() => income)
 
-  slide.addChart(pptx.charts.LINE, [
+  slide.addChart(pptx.ChartType.line, [
     { name: 'Income', labels, values: incomeValues },
     { name: 'Spending', labels, values: spendingValues },
   ], {
