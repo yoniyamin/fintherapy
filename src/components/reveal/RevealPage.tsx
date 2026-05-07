@@ -15,6 +15,10 @@ import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import type { AccountType, Transaction } from '../../types/database'
 import { ui } from '../../lib/uiClasses'
 import { formatAccountLabel } from '../../lib/accountDisplay'
+import { generateSlideDeck, downloadBlob } from '../../lib/generateSlideDeck'
+import SlideDeckPreview from './SlideDeckPreview'
+import { supabase } from '../../lib/supabase'
+import type { CategorySummary } from '../../hooks/useReveal'
 
 function getCurrentMonth(): string {
   const now = new Date()
@@ -122,6 +126,11 @@ export default function RevealPage() {
   const [drillTxns, setDrillTxns] = useState<Transaction[]>([])
   const [drillLoading, setDrillLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [generatingPpt, setGeneratingPpt] = useState<'idle' | 'generating' | 'done'>('idle')
+  const [showDeckPreview, setShowDeckPreview] = useState(false)
+  const [previewTransactions, setPreviewTransactions] = useState<ExportRow[]>([])
+  const [prevMonthSummary, setPrevMonthSummary] = useState<CategorySummary[] | null>(null)
+  const [loadingPreview, setLoadingPreview] = useState(false)
   /** When false, own_transfers are omitted from pie, “Total spent”, monthly trend bars, and tx counts. */
   const [includeOwnTransfers, setIncludeOwnTransfers] = useState(false)
   const [showTransfersHelp, setShowTransfersHelp] = useState(false)
@@ -354,6 +363,64 @@ export default function RevealPage() {
     setExporting(false)
   }
 
+  const handleOpenPreview = async () => {
+    if (loadingPreview) return
+    setLoadingPreview(true)
+    try {
+      const [rows, prevSumRes] = await Promise.all([
+        getExportData(month),
+        (() => {
+          const [y, m] = month.split('-').map(Number)
+          const prev = new Date(y, m - 2)
+          const prevMonth = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`
+          return profile?.household_id
+            ? supabase.rpc('get_monthly_summary', {
+                p_household_id: profile.household_id,
+                p_billing_month: prevMonth,
+                p_account_last4s: null,
+              })
+            : Promise.resolve({ data: null, error: null })
+        })(),
+      ])
+      setPreviewTransactions(rows)
+      if (prevSumRes.data && !prevSumRes.error) {
+        setPrevMonthSummary(prevSumRes.data as CategorySummary[])
+      } else {
+        setPrevMonthSummary(null)
+      }
+      setShowDeckPreview(true)
+    } catch (e) {
+      console.error('Failed to load preview data:', e)
+    }
+    setLoadingPreview(false)
+  }
+
+  const handleGeneratePpt = async () => {
+    if (generatingPpt === 'generating') return
+    setGeneratingPpt('generating')
+    try {
+      const rows = previewTransactions.length > 0 ? previewTransactions : await getExportData(month)
+      const categoryLookup: Record<string, { icon: string; label: string }> = Object.fromEntries(
+        catConfig.categories.map((c) => [c.id, { icon: c.icon, label: c.label }]),
+      )
+      const blob = await generateSlideDeck({
+        month,
+        summary,
+        prevMonthSummary,
+        monthlyTotals,
+        income: householdIncome,
+        transactions: rows,
+        categoryLookup,
+      })
+      downloadBlob(blob, `spending-report-${month}.pptx`)
+      setGeneratingPpt('done')
+      setTimeout(() => setGeneratingPpt('idle'), 2000)
+    } catch (e) {
+      console.error('Slide deck generation failed:', e)
+      setGeneratingPpt('idle')
+    }
+  }
+
   return (
     <div className={`${ui.screen} ${ui.page}`}>
       <motion.div
@@ -393,6 +460,23 @@ export default function RevealPage() {
             </svg>
           )}
           CSV
+        </button>
+        <button
+          type="button"
+          onClick={handleOpenPreview}
+          disabled={loadingPreview || summary.length === 0}
+          className="flex items-center gap-1.5 rounded-xl border border-purple-400/20 bg-purple-500/5 px-3 py-2.5 text-sm text-purple-300 transition-colors hover:bg-purple-500/10 disabled:opacity-40"
+        >
+          {loadingPreview ? (
+            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-purple-400 border-t-transparent" />
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+          )}
+          Slides
         </button>
       </div>
 
@@ -650,6 +734,33 @@ export default function RevealPage() {
                 <polyline points="9 18 15 12 9 6" />
               </svg>
             </button>
+
+            <motion.button
+              type="button"
+              onClick={handleOpenPreview}
+              disabled={loadingPreview}
+              className="flex w-full items-center gap-3 rounded-xl border border-purple-400/20 bg-purple-500/5 px-4 py-3 text-left transition-colors hover:bg-purple-500/10 disabled:opacity-60"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.15, type: 'spring', stiffness: 200 }}
+            >
+              {loadingPreview ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-purple-400 border-t-transparent" />
+              ) : (
+                <span className="text-xl">📊</span>
+              )}
+              <div className="flex-1">
+                <p className="text-sm font-medium text-purple-300">
+                  {loadingPreview ? 'Loading...' : 'Monthly report'}
+                </p>
+                <p className="text-[11px] text-surface-500">Preview your spending summary & download as slides</p>
+              </div>
+              {!loadingPreview && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400/60">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              )}
+            </motion.button>
           </motion.div>
 
           <motion.div
@@ -817,6 +928,26 @@ export default function RevealPage() {
             onMarkTransfer={handleMarkTransfer}
             accountAliases={aliasMap}
             categories={catConfig.categories}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Slide deck interactive preview */}
+      <AnimatePresence>
+        {showDeckPreview && (
+          <SlideDeckPreview
+            month={month}
+            summary={summary}
+            prevMonthSummary={prevMonthSummary}
+            monthlyTotals={monthlyTotals}
+            income={householdIncome}
+            transactions={previewTransactions}
+            categoryLookup={Object.fromEntries(
+              catConfig.categories.map((c) => [c.id, { icon: c.icon, label: c.label }]),
+            )}
+            onClose={() => setShowDeckPreview(false)}
+            onDownload={handleGeneratePpt}
+            downloading={generatingPpt === 'generating'}
           />
         )}
       </AnimatePresence>
