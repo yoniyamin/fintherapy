@@ -74,6 +74,14 @@ function defaultRecentHistoryRange(): { from: string; to: string } {
   return { from: isoDateLocal(from), to: isoDateLocal(to) }
 }
 
+/** Pull-down dismiss thresholds for the Recent & revise bottom sheet (matches deck swipe feel). */
+const RECENT_SHEET_DISMISS_OFFSET_Y = 80
+const RECENT_SHEET_DISMISS_VELOCITY_Y = 480
+/** Cap rubber-band drag when pulling the sheet down from scroll-top inside the Recent list. */
+const RECENT_SHEET_MAX_SCROLL_PULL_PX = 440
+/** Require this much pull-from-top before a fast downward flick can dismiss (avoids fling-scroll false positives). */
+const RECENT_SHEET_VELOCITY_PULL_MIN = 28
+
 function historicalGroupKey(t: Transaction): string {
   return `${t.merchant_raw.toLowerCase().trim()}\u0000${t.billing_month?.trim() ?? ''}\u0000${t.category ?? ''}\u0000${t.status}`
 }
@@ -273,6 +281,17 @@ export default function SwipeDeck() {
   }, [])
 
   const [recentPanelOpen, setRecentPanelOpen] = useState(false)
+  const recentScrollPullRef = useRef(0)
+  const recentScrollGestureRef = useRef<{
+    startY: number
+    lastY: number
+    lastTime: number
+  } | null>(null)
+  const recentScrollRef = useRef<HTMLDivElement>(null)
+  /** Extra translate for pull-from-scroll-top; composes under Framer Motion's sheet transform. */
+  const [recentScrollPullPx, setRecentScrollPullPx] = useState(0)
+  /** True between touchstart and touchend on the scroll zone — disables transform transition while dragging. */
+  const [recentScrollTouchActive, setRecentScrollTouchActive] = useState(false)
   const [recentHistoryRange, setRecentHistoryRange] = useState(defaultRecentHistoryRange)
   const [historyRecentActions, setHistoryRecentActions] = useState<SessionAction[]>([])
   const [historyRecentLoading, setHistoryRecentLoading] = useState(false)
@@ -401,6 +420,99 @@ export default function SwipeDeck() {
     if (!recentPanelOpen || !profile?.household_id) return
     void loadHistoryRecentActions()
   }, [recentPanelOpen, profile?.household_id, loadHistoryRecentActions])
+
+  useEffect(() => {
+    if (recentPanelOpen) return
+    recentScrollGestureRef.current = null
+    recentScrollPullRef.current = 0
+    setRecentScrollPullPx(0)
+    setRecentScrollTouchActive(false)
+  }, [recentPanelOpen])
+
+  useEffect(() => {
+    const el = recentScrollRef.current
+    if (!recentPanelOpen || !el) return
+
+    const maxPull = RECENT_SHEET_MAX_SCROLL_PULL_PX
+
+    const applyPull = (px: number) => {
+      const next = Math.max(0, Math.min(px, maxPull))
+      recentScrollPullRef.current = next
+      setRecentScrollPullPx(next)
+    }
+
+    const endGesture = () => {
+      recentScrollGestureRef.current = null
+      setRecentScrollTouchActive(false)
+    }
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      const t = e.touches[0]
+      recentScrollGestureRef.current = {
+        startY: t.clientY,
+        lastY: t.clientY,
+        lastTime: e.timeStamp ?? performance.now(),
+      }
+      setRecentScrollTouchActive(true)
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      const g = recentScrollGestureRef.current
+      if (!g || e.touches.length !== 1) return
+      const t = e.touches[0]
+      const scrollTop = el.scrollTop
+      const dy = t.clientY - g.startY
+
+      g.lastY = t.clientY
+      g.lastTime = e.timeStamp ?? performance.now()
+
+      if (scrollTop > 1) {
+        applyPull(0)
+        return
+      }
+
+      if (dy > 0) {
+        e.preventDefault()
+        applyPull(dy)
+        return
+      }
+
+      applyPull(0)
+    }
+
+    const onTouchEndOrCancel = (e: TouchEvent) => {
+      const g = recentScrollGestureRef.current
+      const dt = Math.max(e.timeStamp - (g?.lastTime ?? e.timeStamp), 1 / 240)
+      const vx = e.changedTouches[0]
+        ? ((e.changedTouches[0].clientY - (g?.lastY ?? e.changedTouches[0].clientY)) / dt) * 1000
+        : 0
+      endGesture()
+
+      const pull = recentScrollPullRef.current
+      if (
+        pull > RECENT_SHEET_DISMISS_OFFSET_Y ||
+        (pull >= RECENT_SHEET_VELOCITY_PULL_MIN && vx > RECENT_SHEET_DISMISS_VELOCITY_Y)
+      ) {
+        setRecentPanelOpen(false)
+        applyPull(0)
+        return
+      }
+      applyPull(0)
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEndOrCancel, { passive: true })
+    el.addEventListener('touchcancel', onTouchEndOrCancel, { passive: true })
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEndOrCancel)
+      el.removeEventListener('touchcancel', onTouchEndOrCancel)
+    }
+  }, [recentPanelOpen])
 
   /** Cards to show in the classify picker: any household card + pending queue + aliases. */
   const classifyCardPicklist = useMemo(() => {
@@ -1473,18 +1585,57 @@ export default function SwipeDeck() {
                   onClick={() => setRecentPanelOpen(false)}
                 />
                 <motion.div
-                  className="fixed inset-x-0 bottom-0 z-[111] max-h-[85vh] overflow-y-auto rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 px-4 pt-3 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl pb-[max(2.5rem,env(safe-area-inset-bottom))]"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="recent-panel-title"
+                  className="fixed inset-x-0 bottom-0 z-[111] flex max-h-[85vh] flex-col overflow-hidden rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
                   initial={{ y: '100%' }}
                   animate={{ y: 0 }}
                   exit={{ y: '100%' }}
                   transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                  drag="y"
+                  dragConstraints={{ top: 0, left: 0, right: 0, bottom: 0 }}
+                  dragElastic={0.22}
+                  dragMomentum={false}
+                  onDragStart={() => {
+                    recentScrollPullRef.current = 0
+                    setRecentScrollPullPx(0)
+                  }}
+                  onDragEnd={(_, info) => {
+                    if (
+                      info.offset.y > RECENT_SHEET_DISMISS_OFFSET_Y ||
+                      info.velocity.y > RECENT_SHEET_DISMISS_VELOCITY_Y
+                    ) {
+                      setRecentPanelOpen(false)
+                      return
+                    }
+                    recentScrollPullRef.current = 0
+                    setRecentScrollPullPx(0)
+                  }}
                 >
-                  <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
-                  <h3 className="mb-1 text-center text-base font-bold text-surface-50">Recent & revise</h3>
-                  <p className="mb-3 text-center text-[11px] text-surface-500">
-                    This session plus transactions classified in the date range below (newest first). Optionally limit to one card.
-                  </p>
-
+                  <div
+                    className={`flex min-h-0 flex-1 flex-col ${
+                      recentScrollTouchActive ? '' : 'transition-transform duration-[220ms] ease-out'
+                    }`}
+                    style={
+                      recentScrollPullPx > 0
+                        ? { transform: `translateY(${recentScrollPullPx}px)` }
+                        : undefined
+                    }
+                  >
+                  <div className="shrink-0 cursor-grab touch-none px-4 pb-2 pt-3 select-none active:cursor-grabbing">
+                    <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" aria-hidden />
+                    <h3 id="recent-panel-title" className="mb-1 text-center text-base font-bold text-surface-50">
+                      Recent & revise
+                    </h3>
+                    <p className="mb-3 text-center text-[11px] text-surface-500">
+                      This session plus transactions classified in the date range below (newest first). Optionally limit to one card.
+                    </p>
+                  </div>
+                  <div
+                    ref={recentScrollRef}
+                    className="flex min-h-0 flex-1 touch-pan-y flex-col overflow-y-auto overscroll-y-contain px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]"
+                  >
                   <div className={`${ui.glassFlat} mb-4 space-y-3 p-3`}>
                     <label className="flex flex-col gap-1">
                       <span className="text-[11px] font-medium text-surface-400">
@@ -1654,6 +1805,8 @@ export default function SwipeDeck() {
                   >
                     Close
                   </button>
+                  </div>
+                  </div>
                 </motion.div>
               </>
             )}
