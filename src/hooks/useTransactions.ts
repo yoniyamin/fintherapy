@@ -263,6 +263,30 @@ export function useTransactions(
     return { error }
   }
 
+  /** Transactions classified between inclusive calendar dates (by classified_at). Optional card filter (last 4). */
+  const getTransactionsClassifiedInDateRange = useCallback(
+    async (
+      fromIsoDate: string,
+      toIsoDate: string,
+      accountLast4?: string | null,
+    ): Promise<{ txs: Transaction[]; error: Error | null }> => {
+      if (!householdId) return { txs: [], error: new Error('No household') }
+
+      const last4 = accountLast4?.trim() ?? ''
+
+      const { data, error } = await supabase.rpc('get_transactions_classified_in_date_range', {
+        p_household_id: householdId,
+        p_from: fromIsoDate,
+        p_to: toIsoDate,
+        p_account_last4: last4 === '' ? null : last4,
+      })
+
+      if (error) return { txs: [], error: new Error(error.message) }
+      return { txs: (data as Transaction[]) ?? [], error: null }
+    },
+    [householdId],
+  )
+
   /** Rewrites billing_month from tx_date wherever they differ (RPC returns rows updated). */
   const syncBillingMonthFromTxDate = useCallback(async (): Promise<{
     error: Error | null
@@ -456,6 +480,7 @@ export function useTransactions(
     getTransactionsByCategory,
     reclassifyTransaction,
     revertToPending,
+    getTransactionsClassifiedInDateRange,
     syncBillingMonthFromTxDate,
     getExportData,
     getHouseholdInfo,

@@ -51,6 +51,8 @@ export interface Transaction {
   category: string | null
   status: 'auto' | 'manual' | 'pending' | 'flagged' | 'transfer' | 'offset'
   classified_by: string | null
+  /** When this row was last classified / confirmed / marked transfer (server time). */
+  classified_at?: string | null
   batch_id: string | null
   /** Optional note from the classify screen; persisted per transaction. */
   user_note?: string | null

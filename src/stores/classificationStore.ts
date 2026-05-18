@@ -68,10 +68,17 @@ interface ClassificationState {
   activeTransaction: Transaction | null
 }
 
+/** Buckets pending/auto deck rows: same merchant text may repeat across billing_month — never stack across months. */
+function classifyStackKey(tx: Transaction): string {
+  const merchant = tx.merchant_raw.toLowerCase().trim()
+  const bm = tx.billing_month?.trim() ?? ''
+  return `${merchant}\u0000${bm}`
+}
+
 function groupByMerchant(txns: Transaction[]): MerchantGroup[] {
   const map = new Map<string, Transaction[]>()
   for (const tx of txns) {
-    const key = tx.merchant_raw.toLowerCase().trim()
+    const key = classifyStackKey(tx)
     const existing = map.get(key)
     if (existing) existing.push(tx)
     else map.set(key, [tx])

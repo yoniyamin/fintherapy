@@ -15,15 +15,122 @@ import { AccountCardEditModal, type AccountCardEditDraft } from '../common/Accou
 import Confetti from '../common/Confetti'
 import { Link, useLocation } from 'react-router-dom'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
+import { invalidateFlaggedCount } from '../../lib/flaggedCountInvalidate'
 import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import { XP_VALUES } from '../../lib/constants'
 import { ui } from '../../lib/uiClasses'
 import { formatAccountLabel } from '../../lib/accountDisplay'
 import type { AccountType, Transaction } from '../../types/database'
 
-function getCurrentMonth(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+function aggregateMonthStats(parts: MonthStats[]): MonthStats {
+  const empty: MonthStats = {
+    total_count: 0,
+    classified_count: 0,
+    pending_count: 0,
+    transfer_count: 0,
+    offset_count: 0,
+    flagged_count: 0,
+  }
+  return parts.reduce((acc, s) => ({
+    total_count: acc.total_count + Number(s.total_count),
+    classified_count: acc.classified_count + Number(s.classified_count),
+    pending_count: acc.pending_count + Number(s.pending_count),
+    transfer_count: acc.transfer_count + Number(s.transfer_count),
+    offset_count: acc.offset_count + Number(s.offset_count),
+    flagged_count: acc.flagged_count + Number(s.flagged_count),
+  }), empty)
+}
+
+/** Billing months present on the deck (YYYY-MM), sorted ascending — drives classify progress stats. */
+function distinctBillingMonthsFromDeck(txns: Transaction[]): string[] {
+  const s = new Set<string>()
+  for (const t of txns) {
+    const bm = t.billing_month?.trim()
+    if (bm) s.add(bm)
+  }
+  return Array.from(s).sort()
+}
+
+function formatMonthsProgressLabel(monthsSorted: string[]): string {
+  if (monthsSorted.length === 0) return 'Classify progress'
+  if (monthsSorted.length === 1) return `${monthsSorted[0]} progress`
+  if (monthsSorted.length <= 3) return `${monthsSorted.join(' · ')} progress`
+  const first = monthsSorted[0]!
+  const last = monthsSorted[monthsSorted.length - 1]!
+  return `${monthsSorted.length} months (${first}–${last}) progress`
+}
+
+function isoDateLocal(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function defaultRecentHistoryRange(): { from: string; to: string } {
+  const to = new Date()
+  const from = new Date(to)
+  from.setDate(from.getDate() - 7)
+  return { from: isoDateLocal(from), to: isoDateLocal(to) }
+}
+
+function historicalGroupKey(t: Transaction): string {
+  return `${t.merchant_raw.toLowerCase().trim()}\u0000${t.billing_month?.trim() ?? ''}\u0000${t.category ?? ''}\u0000${t.status}`
+}
+
+/** Groups classified rows for the Recent sheet (manual/auto/transfer), newest classify first. */
+function buildHistoricalRecentActions(txs: Transaction[]): SessionAction[] {
+  let syntheticId = -1
+  const buckets = new Map<string, Transaction[]>()
+  for (const t of txs) {
+    const k = historicalGroupKey(t)
+    const arr = buckets.get(k)
+    if (arr) arr.push(t)
+    else buckets.set(k, [t])
+  }
+  const groups = [...buckets.values()]
+  groups.sort((a, b) => {
+    const ta = Math.max(...a.map((x) => new Date(x.classified_at ?? 0).getTime()))
+    const tb = Math.max(...b.map((x) => new Date(x.classified_at ?? 0).getTime()))
+    return tb - ta
+  })
+  return groups.map((transactions) => {
+    const first = transactions[0]!
+    const kind: SessionActionKind =
+      first.status === 'transfer'
+        ? 'transfer'
+        : first.status === 'auto'
+          ? 'auto-confirmed'
+          : 'classified'
+    const totalAmount = transactions.reduce((sum, t) => sum + Number(t.amount), 0)
+    const tsMax = Math.max(...transactions.map((t) => new Date(t.classified_at ?? 0).getTime()))
+    return {
+      id: syntheticId--,
+      kind,
+      category: first.category,
+      merchantRaw: first.merchant_raw,
+      merchantClean: first.merchant_clean,
+      txSnapshots: transactions.map((t) => ({ ...t })),
+      totalAmount,
+      count: transactions.length,
+      timestamp: tsMax,
+    }
+  })
+}
+
+function formatRecentRowWhen(tsMs: number): string {
+  if (!Number.isFinite(tsMs) || tsMs <= 0) return ''
+  return new Date(tsMs).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+type RecentPanelEntry = {
+  origin: 'session' | 'history'
+  action: SessionAction
 }
 
 function classifyAccountStorageKey(householdId: string) {
@@ -118,6 +225,7 @@ export default function SwipeDeck() {
     setTransactionsUserNote,
     getDistinctAccountLast4ForHousehold,
     getClassifiedCountsForAccount,
+    getTransactionsClassifiedInDateRange,
   } = useTransactions(profile?.household_id, deckMode)
   const { learnMerchant, confirmAutoClassified } = useMerchantKnowledge(profile?.household_id)
   const { onlineUsers } = usePresence(profile?.household_id, user?.id, profile?.display_name)
@@ -165,8 +273,18 @@ export default function SwipeDeck() {
   }, [])
 
   const [recentPanelOpen, setRecentPanelOpen] = useState(false)
-  /** When non-null, the picker is being opened in "reclassify a recent action" mode for this action id. */
-  const [recentReclassifyTarget, setRecentReclassifyTarget] = useState<SessionAction | null>(null)
+  const [recentHistoryRange, setRecentHistoryRange] = useState(defaultRecentHistoryRange)
+  const [historyRecentActions, setHistoryRecentActions] = useState<SessionAction[]>([])
+  const [historyRecentLoading, setHistoryRecentLoading] = useState(false)
+  const [historyRecentError, setHistoryRecentError] = useState<string | null>(null)
+  const [historyRecentCapNotice, setHistoryRecentCapNotice] = useState<string | null>(null)
+  /** null = all cards for the classified-at range query */
+  const [recentHistoryAccountLast4, setRecentHistoryAccountLast4] = useState<string | null>(null)
+  /** When non-null, the picker is opened from the Recent panel for a previously-actioned group. */
+  const [recentReclassifyTarget, setRecentReclassifyTarget] = useState<{
+    action: SessionAction
+    origin: 'session' | 'history'
+  } | null>(null)
 
   /** All deck candidates: pending classify queue + already auto-classified items
    *  surfaced as confirmable "Predicted" cards. No-idea deck only uses `fetched`. */
@@ -193,6 +311,96 @@ export default function SwipeDeck() {
     () => filterTransactionsByAccount(allDeckTxns, accountFilter),
     [allDeckTxns, accountFilter],
   )
+
+  const distinctBillingMonthsInDeck = useMemo(
+    () => distinctBillingMonthsFromDeck(deckFromFetched),
+    [deckFromFetched],
+  )
+
+  const mergedRecentEntries = useMemo((): RecentPanelEntry[] => {
+    const af = recentHistoryAccountLast4?.trim() ?? ''
+    const matchesCard = (t: Transaction) =>
+      af === '' || (t.account_last4?.trim() ?? '') === af
+
+    const sessionEntries: RecentPanelEntry[] = [...store.sessionHistory]
+      .reverse()
+      .filter((action) => af === '' || action.txSnapshots.every(matchesCard))
+      .map((action) => ({
+        origin: 'session' as const,
+        action,
+      }))
+    const sessionTxIds = new Set<string>()
+    for (const se of sessionEntries) {
+      for (const t of se.action.txSnapshots) sessionTxIds.add(t.id)
+    }
+    const histEntries: RecentPanelEntry[] = []
+    for (const action of historyRecentActions) {
+      const snaps = action.txSnapshots.filter((t) => !sessionTxIds.has(t.id))
+      if (snaps.length === 0) continue
+      if (snaps.length === action.txSnapshots.length) {
+        histEntries.push({ origin: 'history', action })
+        continue
+      }
+      const totalAmount = snaps.reduce((sum, t) => sum + Number(t.amount), 0)
+      const tsMax = Math.max(...snaps.map((t) => new Date(t.classified_at ?? 0).getTime()))
+      histEntries.push({
+        origin: 'history',
+        action: {
+          ...action,
+          txSnapshots: snaps,
+          count: snaps.length,
+          totalAmount,
+          timestamp: tsMax,
+        },
+      })
+    }
+    return [...sessionEntries, ...histEntries].sort(
+      (a, b) => b.action.timestamp - a.action.timestamp,
+    )
+  }, [store.sessionHistory, historyRecentActions, recentHistoryAccountLast4])
+
+  const loadHistoryRecentActions = useCallback(async () => {
+    if (!profile?.household_id) return
+    setHistoryRecentLoading(true)
+    setHistoryRecentError(null)
+    setHistoryRecentCapNotice(null)
+    const { txs, error } = await getTransactionsClassifiedInDateRange(
+      recentHistoryRange.from,
+      recentHistoryRange.to,
+      recentHistoryAccountLast4,
+    )
+    setHistoryRecentLoading(false)
+    if (error) {
+      setHistoryRecentError(error.message)
+      setHistoryRecentActions([])
+      return
+    }
+    setHistoryRecentActions(buildHistoricalRecentActions(txs))
+    if (txs.length >= 500) {
+      setHistoryRecentCapNotice(
+        'Showing up to 500 transactions — narrow the date range, pick one card, or both.',
+      )
+    }
+  }, [
+    profile?.household_id,
+    getTransactionsClassifiedInDateRange,
+    recentHistoryRange.from,
+    recentHistoryRange.to,
+    recentHistoryAccountLast4,
+  ])
+
+  useEffect(() => {
+    setRecentHistoryRange(defaultRecentHistoryRange())
+    setRecentHistoryAccountLast4(null)
+    setHistoryRecentActions([])
+    setHistoryRecentError(null)
+    setHistoryRecentCapNotice(null)
+  }, [profile?.household_id])
+
+  useEffect(() => {
+    if (!recentPanelOpen || !profile?.household_id) return
+    void loadHistoryRecentActions()
+  }, [recentPanelOpen, profile?.household_id, loadHistoryRecentActions])
 
   /** Cards to show in the classify picker: any household card + pending queue + aliases. */
   const classifyCardPicklist = useMemo(() => {
@@ -321,9 +529,16 @@ export default function SwipeDeck() {
   }, [accountAliases, profile?.display_name, distinctLast4InPending, accountFilter, setAccountFilterPersist])
 
   const loadMonthStats = useCallback(async () => {
-    const stats = await getMonthStats(getCurrentMonth())
-    if (stats) setMonthStats(stats)
-  }, [getMonthStats])
+    const months = distinctBillingMonthsInDeck
+    if (months.length === 0) {
+      setMonthStats(null)
+      return
+    }
+    const rows = await Promise.all(months.map((m) => getMonthStats(m)))
+    const ok = rows.filter((x): x is MonthStats => x != null)
+    if (ok.length === 0) setMonthStats(null)
+    else setMonthStats(ok.length === 1 ? ok[0]! : aggregateMonthStats(ok))
+  }, [distinctBillingMonthsInDeck, getMonthStats])
 
   useEffect(() => {
     if (loading) return
@@ -506,6 +721,7 @@ export default function SwipeDeck() {
     store.flag()
     const action = recordSessionAction(group, 'flagged', null)
     showUndoToast(action)
+    invalidateFlaggedCount()
   }
 
   const handleTransfer = async () => {
@@ -518,12 +734,13 @@ export default function SwipeDeck() {
     store.markTransfer()
     const action = recordSessionAction(group, 'transfer', OWN_TRANSFERS_CATEGORY_ID)
     showUndoToast(action)
+    invalidateFlaggedCount()
   }
 
   const handleCategorySelect = async (categoryId: string) => {
     // Re-classify mode: the picker was opened from the Recent panel for a previously-actioned group.
     if (recentReclassifyTarget) {
-      const target = recentReclassifyTarget
+      const { action: target, origin } = recentReclassifyTarget
       setRecentReclassifyTarget(null)
       store.closeCategoryPicker()
       if (!user) return
@@ -531,13 +748,12 @@ export default function SwipeDeck() {
         await reclassifyTransaction(tx.id, categoryId, user.id)
       }
       learnMerchant(target.merchantRaw, categoryId)
-      // If the action was flagged (had no XP impact), reclassifying it now counts as a classification.
-      if (target.kind === 'flagged') {
+      if (origin === 'session') {
         store.updateActionInHistory(target.id, 'classified', categoryId)
-        // Note: we don't retroactively award XP here — the action originally added no points.
       } else {
-        store.updateActionInHistory(target.id, 'classified', categoryId)
+        await loadHistoryRecentActions()
       }
+      invalidateFlaggedCount()
       return
     }
 
@@ -571,12 +787,13 @@ export default function SwipeDeck() {
       setGroupToasts(prev => [...prev, { id: toastId, count: txCount }])
       setTimeout(() => setGroupToasts(prev => prev.filter(t => t.id !== toastId)), 1300)
     }
+    invalidateFlaggedCount()
   }
 
   /** Server-side undo: clear category/status back to pending, then drop the row
    *  back into the deck so the user can re-handle it. Removes from session history. */
   const handleRevertAction = useCallback(
-    async (action: SessionAction) => {
+    async (action: SessionAction, origin: 'session' | 'history') => {
       for (const tx of action.txSnapshots) {
         await revertToPending(tx.id)
       }
@@ -585,35 +802,52 @@ export default function SwipeDeck() {
         status: 'pending',
         category: null,
         classified_by: null,
+        classified_at: null,
       }))
       addPendingTransactions(reverted)
-      store.rollbackAction(action.id)
-      setUndoToast((cur) => (cur?.id === action.id ? null : cur))
+      if (origin === 'session') {
+        store.rollbackAction(action.id)
+        setUndoToast((cur) => (cur?.id === action.id ? null : cur))
+      }
+      if (origin === 'history') {
+        await loadHistoryRecentActions()
+      }
+      invalidateFlaggedCount()
     },
-    [revertToPending, addPendingTransactions, store],
+    [revertToPending, addPendingTransactions, store, loadHistoryRecentActions],
   )
 
   /** Convert any prior action into a "marked as transfer". Used from the Recent panel. */
   const handleConvertActionToTransfer = useCallback(
-    async (action: SessionAction) => {
+    async (action: SessionAction, origin: 'session' | 'history') => {
       if (!user) return
       for (const tx of action.txSnapshots) {
         await markTransfer(tx.id, user.id)
       }
-      store.updateActionInHistory(action.id, 'transfer', OWN_TRANSFERS_CATEGORY_ID)
+      if (origin === 'session') {
+        store.updateActionInHistory(action.id, 'transfer', OWN_TRANSFERS_CATEGORY_ID)
+      } else {
+        await loadHistoryRecentActions()
+      }
+      invalidateFlaggedCount()
     },
-    [markTransfer, user, store],
+    [markTransfer, user, store, loadHistoryRecentActions],
   )
 
   /** Move a prior action into the No idea queue. */
   const handleConvertActionToFlagged = useCallback(
-    async (action: SessionAction) => {
+    async (action: SessionAction, origin: 'session' | 'history') => {
       for (const tx of action.txSnapshots) {
         await flagTransaction(tx.id)
       }
-      store.updateActionInHistory(action.id, 'flagged', null)
+      if (origin === 'session') {
+        store.updateActionInHistory(action.id, 'flagged', null)
+      } else {
+        await loadHistoryRecentActions()
+      }
+      invalidateFlaggedCount()
     },
-    [flagTransaction, store],
+    [flagTransaction, store, loadHistoryRecentActions],
   )
 
   const openNoteModal = useCallback(() => {
@@ -819,18 +1053,17 @@ export default function SwipeDeck() {
           <button
             type="button"
             onClick={() => setRecentPanelOpen(true)}
-            disabled={store.sessionHistory.length === 0}
-            className="ml-auto flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold text-surface-500 transition-colors hover:bg-white/[0.06] hover:text-surface-300 disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Re-classify or undo recent actions in this session"
+            className="ml-auto flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold text-surface-500 transition-colors hover:bg-white/[0.06] hover:text-surface-300"
+            title="Revise classifications from this session or by classified date range"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 12a9 9 0 1 0 3-6.7" />
               <polyline points="3 4 3 10 9 10" />
             </svg>
             Recent
-            {store.sessionHistory.length > 0 && (
+            {mergedRecentEntries.length > 0 && (
               <span className="rounded-full bg-surface-800 px-1.5 text-[10px] tabular-nums text-surface-300">
-                {store.sessionHistory.length}
+                {mergedRecentEntries.length}
               </span>
             )}
           </button>
@@ -943,7 +1176,7 @@ export default function SwipeDeck() {
             <ProgressBar
               current={monthClassified + store.classifiedTxCount}
               total={monthTotal}
-              label={`${getCurrentMonth()} progress`}
+              label={formatMonthsProgressLabel(distinctBillingMonthsInDeck)}
             />
           </div>
         )}
@@ -1202,7 +1435,7 @@ export default function SwipeDeck() {
                     onClick={() => {
                       const a = undoToast
                       if (!a) return
-                      void handleRevertAction(a)
+                      void handleRevertAction(a, 'session')
                     }}
                     className="rounded-lg border border-duo-green/40 bg-duo-green/15 px-2.5 py-1 text-xs font-bold text-duo-green transition-colors hover:bg-duo-green/25"
                   >
@@ -1226,7 +1459,7 @@ export default function SwipeDeck() {
           document.body,
         )}
 
-      {/* Recent panel — full session history with per-action change/revert controls. */}
+      {/* Recent panel — session actions + DB rows classified in a date range (classified_at). */}
       {typeof document !== 'undefined' &&
         createPortal(
           <AnimatePresence>
@@ -1247,18 +1480,87 @@ export default function SwipeDeck() {
                   transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                 >
                   <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
-                  <h3 className="mb-1 text-center text-base font-bold text-surface-50">Recent actions</h3>
-                  <p className="mb-4 text-center text-[11px] text-surface-500">
-                    Made a mistake? Re-classify, mark as transfer, or send back to the deck.
+                  <h3 className="mb-1 text-center text-base font-bold text-surface-50">Recent & revise</h3>
+                  <p className="mb-3 text-center text-[11px] text-surface-500">
+                    This session plus transactions classified in the date range below (newest first). Optionally limit to one card.
                   </p>
 
-                  {store.sessionHistory.length === 0 ? (
+                  <div className={`${ui.glassFlat} mb-4 space-y-3 p-3`}>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] font-medium text-surface-400">
+                        Card <span className="font-normal text-surface-500">(range query)</span>
+                      </span>
+                      <select
+                        value={recentHistoryAccountLast4 ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value.trim()
+                          setRecentHistoryAccountLast4(v === '' ? null : v)
+                        }}
+                        className={`block w-full rounded-xl px-2 py-2 text-xs ${ui.select}`}
+                      >
+                        <option value="">All cards</option>
+                        {classifyCardPicklist.map((last4) => (
+                          <option key={last4} value={last4}>
+                            {formatAccountLabel(last4, accountAliases)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <p className="text-[11px] font-medium text-surface-400">
+                      Classified date range <span className="font-normal text-surface-500">(when you tapped classify)</span>
+                    </p>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-[10px] uppercase tracking-wide text-surface-500">From</span>
+                        <input
+                          type="date"
+                          value={recentHistoryRange.from}
+                          onChange={(e) =>
+                            setRecentHistoryRange((r) => ({ ...r, from: e.target.value }))
+                          }
+                          className={ui.inputDate}
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-[10px] uppercase tracking-wide text-surface-500">To</span>
+                        <input
+                          type="date"
+                          value={recentHistoryRange.to}
+                          onChange={(e) =>
+                            setRecentHistoryRange((r) => ({ ...r, to: e.target.value }))
+                          }
+                          className={ui.inputDate}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        disabled={historyRecentLoading || !profile?.household_id}
+                        onClick={() => void loadHistoryRecentActions()}
+                        className="rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-2 text-xs font-bold text-white shadow-[0_8px_24px_-10px_rgba(88,204,2,0.45)] disabled:cursor-not-allowed disabled:opacity-40 active:translate-y-[1px] active:border-b"
+                      >
+                        {historyRecentLoading ? 'Loading…' : 'Load range'}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-surface-500">
+                      Range results reload when you change the card or dates (same as opening this panel). Tap Load range to refresh without changing filters.
+                    </p>
+                    {historyRecentError && (
+                      <p className="text-xs font-medium text-danger">{historyRecentError}</p>
+                    )}
+                    {historyRecentCapNotice && (
+                      <p className="text-xs text-duo-green">{historyRecentCapNotice}</p>
+                    )}
+                  </div>
+
+                  {mergedRecentEntries.length === 0 ? (
                     <p className="py-8 text-center text-sm text-surface-500">
-                      Nothing here yet — actions you take in this session will appear here.
+                      Nothing to show yet — classify something this session or widen the date range above.
                     </p>
                   ) : (
                     <ul className="space-y-2">
-                      {[...store.sessionHistory].reverse().map((h) => {
+                      {mergedRecentEntries.map((entry) => {
+                        const h = entry.action
                         const catLabel =
                           h.category === OWN_TRANSFERS_CATEGORY_ID
                             ? 'Transfer'
@@ -1271,18 +1573,31 @@ export default function SwipeDeck() {
                             : h.kind === 'transfer'
                               ? { label: 'Transfer', cls: 'bg-ice/15 text-ice' }
                               : { label: catLabel ?? 'Classified', cls: 'bg-duo-green/15 text-duo-green' }
+                        const whenLabel = formatRecentRowWhen(h.timestamp)
                         return (
                           <li
-                            key={h.id}
+                            key={`${entry.origin}-${h.id}`}
                             className="rounded-2xl border border-white/[0.06] bg-surface-950/40 p-3"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-surface-100">
-                                  {h.merchantClean ?? h.merchantRaw}
-                                </p>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="truncate text-sm font-semibold text-surface-100">
+                                    {h.merchantClean ?? h.merchantRaw}
+                                  </p>
+                                  <span
+                                    className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+                                      entry.origin === 'session'
+                                        ? 'bg-surface-800 text-surface-400'
+                                        : 'bg-gem/15 text-gem'
+                                    }`}
+                                  >
+                                    {entry.origin === 'session' ? 'Session' : 'Range'}
+                                  </span>
+                                </div>
                                 <p className="mt-0.5 text-[11px] text-surface-500">
                                   {h.count} tx · {h.totalAmount.toFixed(2)}
+                                  {whenLabel ? ` · ${whenLabel}` : ''}
                                 </p>
                               </div>
                               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${stateBadge.cls}`}>
@@ -1293,7 +1608,7 @@ export default function SwipeDeck() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setRecentReclassifyTarget(h)
+                                  setRecentReclassifyTarget({ action: h, origin: entry.origin })
                                   store.openCategoryPicker()
                                 }}
                                 className="rounded-lg border border-white/[0.08] bg-surface-900/80 px-2.5 py-1 text-[11px] font-semibold text-surface-200 hover:bg-surface-800"
@@ -1303,7 +1618,7 @@ export default function SwipeDeck() {
                               {h.kind !== 'transfer' && (
                                 <button
                                   type="button"
-                                  onClick={() => void handleConvertActionToTransfer(h)}
+                                  onClick={() => void handleConvertActionToTransfer(h, entry.origin)}
                                   className="rounded-lg border border-ice/30 bg-ice/10 px-2.5 py-1 text-[11px] font-semibold text-ice hover:bg-ice/15"
                                 >
                                   Mark as transfer
@@ -1312,7 +1627,7 @@ export default function SwipeDeck() {
                               {h.kind !== 'flagged' && (
                                 <button
                                   type="button"
-                                  onClick={() => void handleConvertActionToFlagged(h)}
+                                  onClick={() => void handleConvertActionToFlagged(h, entry.origin)}
                                   className="rounded-lg border border-flame/30 bg-flame/10 px-2.5 py-1 text-[11px] font-semibold text-flame hover:bg-flame/15"
                                 >
                                   Send to No idea
@@ -1320,7 +1635,7 @@ export default function SwipeDeck() {
                               )}
                               <button
                                 type="button"
-                                onClick={() => void handleRevertAction(h)}
+                                onClick={() => void handleRevertAction(h, entry.origin)}
                                 className="ml-auto rounded-lg border border-white/[0.08] bg-surface-900/80 px-2.5 py-1 text-[11px] font-semibold text-surface-300 hover:bg-surface-800"
                               >
                                 Back to deck

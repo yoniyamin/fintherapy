@@ -13,6 +13,9 @@ export const ui = {
   glassInset: 'rounded-2xl border border-white/[0.06] bg-surface-950/45',
   input:
     'rounded-xl border border-white/[0.08] bg-surface-950/55 px-4 py-3 text-sm text-surface-50 placeholder-surface-500 outline-none transition-colors focus:border-teal-500/40 focus:ring-1 focus:ring-teal-500/20',
+  /** Dark field + `.input-date-dark` in index.css lights up WebKit/Blink calendar glyph. */
+  inputDate:
+    'input-date-dark rounded-xl border border-white/[0.08] bg-surface-950/55 px-2 py-2 text-xs text-surface-50 outline-none transition-colors focus:border-teal-500/40 focus:ring-1 focus:ring-teal-500/20',
   select:
     'rounded-xl border border-white/[0.08] bg-surface-950/55 px-3 py-2.5 text-sm text-surface-50 outline-none transition-colors focus:border-teal-500/40 focus:ring-1 focus:ring-teal-500/20',
   tabShell: 'flex gap-1 rounded-xl border border-white/[0.06] bg-surface-950/45 p-1 backdrop-blur-sm',
