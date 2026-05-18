@@ -104,6 +104,21 @@ export function useTransactions(
     setAutoClassified((prev) => prev.filter((t) => !idSet.has(t.id)))
   }, [])
 
+  /** Re-add (or prepend) transactions to the pending state, e.g. after an Undo / revert-to-pending.
+   *  Existing rows with matching ids are replaced so callers can patch status/category. */
+  const addPendingTransactions = useCallback((txns: Transaction[]) => {
+    if (txns.length === 0) return
+    setTransactions((prev) => {
+      const idSet = new Set(txns.map((t) => t.id))
+      const without = prev.filter((t) => !idSet.has(t.id))
+      return [...txns, ...without]
+    })
+    setAutoClassified((prev) => {
+      const idSet = new Set(txns.map((t) => t.id))
+      return prev.filter((t) => !idSet.has(t.id))
+    })
+  }, [])
+
   const classifyTransaction = async (
     txId: string,
     category: string,
@@ -238,6 +253,31 @@ export function useTransactions(
 
     return { error }
   }
+
+  const revertToPending = async (txId: string) => {
+    if (!householdId) return { error: new Error('No household') }
+    const { error } = await supabase.rpc('revert_to_pending', {
+      p_household_id: householdId,
+      p_tx_id: txId,
+    })
+    return { error }
+  }
+
+  /** Rewrites billing_month from tx_date wherever they differ (RPC returns rows updated). */
+  const syncBillingMonthFromTxDate = useCallback(async (): Promise<{
+    error: Error | null
+    updatedCount: number
+  }> => {
+    if (!householdId) return { error: new Error('No household'), updatedCount: 0 }
+
+    const { data, error } = await supabase.rpc('sync_billing_month_from_tx_date', {
+      p_household_id: householdId,
+    })
+
+    if (error) return { error: new Error(error.message), updatedCount: 0 }
+    const n = typeof data === 'number' ? data : Number(data ?? 0)
+    return { error: null, updatedCount: Number.isFinite(n) ? n : 0 }
+  }, [householdId])
 
   const getExportData = useCallback(async (billingMonth: string): Promise<ExportRow[]> => {
     if (!householdId) return []
@@ -403,6 +443,7 @@ export function useTransactions(
     loading,
     fetchPending,
     removeTransactions,
+    addPendingTransactions,
     classifyTransaction,
     flagTransaction,
     setTransactionsUserNote,
@@ -414,6 +455,8 @@ export function useTransactions(
     getDailyActivity,
     getTransactionsByCategory,
     reclassifyTransaction,
+    revertToPending,
+    syncBillingMonthFromTxDate,
     getExportData,
     getHouseholdInfo,
     getLeaderboard,

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useClassificationStore } from '../../stores/classificationStore'
+import { useClassificationStore, type SessionAction, type SessionActionKind } from '../../stores/classificationStore'
 import { useTransactions, type MonthStats, type AccountClassifiedBreakdownRow } from '../../hooks/useTransactions'
+import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
 import { useMerchantKnowledge } from '../../hooks/useMerchantKnowledge'
 import { usePresence } from '../../hooks/usePresence'
 import { useAuth } from '../../hooks/useAuth'
@@ -110,7 +111,9 @@ export default function SwipeDeck() {
   const flaggedQueueCount = useFlaggedCount(profile?.household_id)
   const {
     transactions: fetched, autoClassified, loading,
-    removeTransactions, classifyTransaction, flagTransaction, markTransfer,
+    removeTransactions, addPendingTransactions,
+    classifyTransaction, flagTransaction, markTransfer,
+    reclassifyTransaction, revertToPending,
     detectRefunds, awardXp, getMonthStats, getAccountAliases, upsertAccountAlias,
     setTransactionsUserNote,
     getDistinctAccountLast4ForHousehold,
@@ -149,6 +152,21 @@ export default function SwipeDeck() {
     store.closeCategoryPicker()
     setPickerCancelTick((v) => v + 1)
   }, [store])
+
+  /** Most recent action used by the transient Undo toast. Auto-clears after a short window. */
+  const [undoToast, setUndoToast] = useState<SessionAction | null>(null)
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showUndoToast = useCallback((action: SessionAction) => {
+    setUndoToast(action)
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
+    undoTimerRef.current = setTimeout(() => {
+      setUndoToast((cur) => (cur?.id === action.id ? null : cur))
+    }, 5000)
+  }, [])
+
+  const [recentPanelOpen, setRecentPanelOpen] = useState(false)
+  /** When non-null, the picker is being opened in "reclassify a recent action" mode for this action id. */
+  const [recentReclassifyTarget, setRecentReclassifyTarget] = useState<SessionAction | null>(null)
 
   /** All deck candidates: pending classify queue + already auto-classified items
    *  surfaced as confirmable "Predicted" cards. No-idea deck only uses `fetched`. */
@@ -407,6 +425,25 @@ export default function SwipeDeck() {
     deckMode,
   ])
 
+  const recordSessionAction = useCallback(
+    (
+      group: { merchantRaw: string; merchantClean: string | null; transactions: Transaction[]; totalAmount: number; count: number },
+      kind: SessionActionKind,
+      category: string | null,
+    ): SessionAction => {
+      return store.recordAction({
+        kind,
+        category,
+        merchantRaw: group.merchantRaw,
+        merchantClean: group.merchantClean,
+        txSnapshots: group.transactions.map((t) => ({ ...t })),
+        totalAmount: group.totalAmount,
+        count: group.count,
+      })
+    },
+    [store],
+  )
+
   const handleSwipeRight = async () => {
     const group = store.activeGroup
     if (!group || !user) {
@@ -431,6 +468,8 @@ export default function SwipeDeck() {
       // the correct next card. Awaiting awardXp first let refreshDeck reset to 0
       // and then advance bump to 1, skipping a card on every fast swipe.
       store.advance(txCount)
+      const action = recordSessionAction(group, 'auto-confirmed', predicted)
+      showUndoToast(action)
       await awardXp(user.id, xpEarned)
 
       xpCounter.current += 1
@@ -465,6 +504,8 @@ export default function SwipeDeck() {
     }
     removeTransactions(group.transactions.map((t) => t.id))
     store.flag()
+    const action = recordSessionAction(group, 'flagged', null)
+    showUndoToast(action)
   }
 
   const handleTransfer = async () => {
@@ -475,9 +516,31 @@ export default function SwipeDeck() {
     }
     removeTransactions(group.transactions.map((t) => t.id))
     store.markTransfer()
+    const action = recordSessionAction(group, 'transfer', OWN_TRANSFERS_CATEGORY_ID)
+    showUndoToast(action)
   }
 
   const handleCategorySelect = async (categoryId: string) => {
+    // Re-classify mode: the picker was opened from the Recent panel for a previously-actioned group.
+    if (recentReclassifyTarget) {
+      const target = recentReclassifyTarget
+      setRecentReclassifyTarget(null)
+      store.closeCategoryPicker()
+      if (!user) return
+      for (const tx of target.txSnapshots) {
+        await reclassifyTransaction(tx.id, categoryId, user.id)
+      }
+      learnMerchant(target.merchantRaw, categoryId)
+      // If the action was flagged (had no XP impact), reclassifying it now counts as a classification.
+      if (target.kind === 'flagged') {
+        store.updateActionInHistory(target.id, 'classified', categoryId)
+        // Note: we don't retroactively award XP here — the action originally added no points.
+      } else {
+        store.updateActionInHistory(target.id, 'classified', categoryId)
+      }
+      return
+    }
+
     const group = store.activeGroup
     if (!group || !user) return
 
@@ -494,6 +557,8 @@ export default function SwipeDeck() {
     // See handleSwipeRight — advance must run synchronously with removeTransactions
     // so the deck-sync useEffect doesn't reset currentIndex between the two awaits.
     store.advance(txCount)
+    const action = recordSessionAction(group, 'classified', categoryId)
+    showUndoToast(action)
     await awardXp(user.id, xpEarned)
 
     xpCounter.current += 1
@@ -507,6 +572,49 @@ export default function SwipeDeck() {
       setTimeout(() => setGroupToasts(prev => prev.filter(t => t.id !== toastId)), 1300)
     }
   }
+
+  /** Server-side undo: clear category/status back to pending, then drop the row
+   *  back into the deck so the user can re-handle it. Removes from session history. */
+  const handleRevertAction = useCallback(
+    async (action: SessionAction) => {
+      for (const tx of action.txSnapshots) {
+        await revertToPending(tx.id)
+      }
+      const reverted: Transaction[] = action.txSnapshots.map((t) => ({
+        ...t,
+        status: 'pending',
+        category: null,
+        classified_by: null,
+      }))
+      addPendingTransactions(reverted)
+      store.rollbackAction(action.id)
+      setUndoToast((cur) => (cur?.id === action.id ? null : cur))
+    },
+    [revertToPending, addPendingTransactions, store],
+  )
+
+  /** Convert any prior action into a "marked as transfer". Used from the Recent panel. */
+  const handleConvertActionToTransfer = useCallback(
+    async (action: SessionAction) => {
+      if (!user) return
+      for (const tx of action.txSnapshots) {
+        await markTransfer(tx.id, user.id)
+      }
+      store.updateActionInHistory(action.id, 'transfer', OWN_TRANSFERS_CATEGORY_ID)
+    },
+    [markTransfer, user, store],
+  )
+
+  /** Move a prior action into the No idea queue. */
+  const handleConvertActionToFlagged = useCallback(
+    async (action: SessionAction) => {
+      for (const tx of action.txSnapshots) {
+        await flagTransaction(tx.id)
+      }
+      store.updateActionInHistory(action.id, 'flagged', null)
+    },
+    [flagTransaction, store],
+  )
 
   const openNoteModal = useCallback(() => {
     const g = useClassificationStore.getState().activeGroup
@@ -710,8 +818,26 @@ export default function SwipeDeck() {
           </Link>
           <button
             type="button"
+            onClick={() => setRecentPanelOpen(true)}
+            disabled={store.sessionHistory.length === 0}
+            className="ml-auto flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold text-surface-500 transition-colors hover:bg-white/[0.06] hover:text-surface-300 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Re-classify or undo recent actions in this session"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12a9 9 0 1 0 3-6.7" />
+              <polyline points="3 4 3 10 9 10" />
+            </svg>
+            Recent
+            {store.sessionHistory.length > 0 && (
+              <span className="rounded-full bg-surface-800 px-1.5 text-[10px] tabular-nums text-surface-300">
+                {store.sessionHistory.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
             onClick={() => setCatEditorOpen(true)}
-            className="ml-auto rounded-full p-1.5 text-surface-500 transition-colors hover:bg-white/[0.06] hover:text-surface-300"
+            className="rounded-full p-1.5 text-surface-500 transition-colors hover:bg-white/[0.06] hover:text-surface-300"
             title="Edit categories"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1045,6 +1171,180 @@ export default function SwipeDeck() {
         onClose={() => setCatEditorOpen(false)}
         config={catConfig}
       />
+
+      {/* Transient Undo toast — surfaces after every classify / flag / transfer action. */}
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {undoToast && (
+              <motion.div
+                key={undoToast.id}
+                className="fixed inset-x-0 z-[200] flex justify-center px-4"
+                style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5.5rem)' }}
+                initial={{ y: 30, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 30, opacity: 0 }}
+                transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+              >
+                <div className="flex w-full max-w-sm items-center gap-2 rounded-2xl border border-white/10 bg-surface-950/95 px-3 py-2.5 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+                  <span className="flex-1 truncate text-xs text-surface-200">
+                    {undoToast.kind === 'flagged'
+                      ? 'Marked as No idea'
+                      : undoToast.kind === 'transfer'
+                        ? 'Marked as transfer'
+                        : `Classified as ${
+                            resolvedCategories.find((c) => c.id === undoToast.category)?.label ?? undoToast.category
+                          }`}
+                    <span className="ml-1 text-surface-500">· {undoToast.merchantClean ?? undoToast.merchantRaw}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const a = undoToast
+                      if (!a) return
+                      void handleRevertAction(a)
+                    }}
+                    className="rounded-lg border border-duo-green/40 bg-duo-green/15 px-2.5 py-1 text-xs font-bold text-duo-green transition-colors hover:bg-duo-green/25"
+                  >
+                    Undo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUndoToast(null)}
+                    aria-label="Dismiss"
+                    className="rounded-md p-1 text-surface-500 hover:bg-white/[0.06] hover:text-surface-300"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
+
+      {/* Recent panel — full session history with per-action change/revert controls. */}
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {recentPanelOpen && (
+              <>
+                <motion.div
+                  className="fixed inset-0 z-[110] bg-black/55 backdrop-blur-sm"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setRecentPanelOpen(false)}
+                />
+                <motion.div
+                  className="fixed inset-x-0 bottom-0 z-[111] max-h-[85vh] overflow-y-auto rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 px-4 pt-3 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl pb-[max(2.5rem,env(safe-area-inset-bottom))]"
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  exit={{ y: '100%' }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                >
+                  <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+                  <h3 className="mb-1 text-center text-base font-bold text-surface-50">Recent actions</h3>
+                  <p className="mb-4 text-center text-[11px] text-surface-500">
+                    Made a mistake? Re-classify, mark as transfer, or send back to the deck.
+                  </p>
+
+                  {store.sessionHistory.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-surface-500">
+                      Nothing here yet — actions you take in this session will appear here.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {[...store.sessionHistory].reverse().map((h) => {
+                        const catLabel =
+                          h.category === OWN_TRANSFERS_CATEGORY_ID
+                            ? 'Transfer'
+                            : h.category
+                              ? resolvedCategories.find((c) => c.id === h.category)?.label ?? h.category
+                              : null
+                        const stateBadge =
+                          h.kind === 'flagged'
+                            ? { label: 'No idea', cls: 'bg-flame/15 text-flame' }
+                            : h.kind === 'transfer'
+                              ? { label: 'Transfer', cls: 'bg-ice/15 text-ice' }
+                              : { label: catLabel ?? 'Classified', cls: 'bg-duo-green/15 text-duo-green' }
+                        return (
+                          <li
+                            key={h.id}
+                            className="rounded-2xl border border-white/[0.06] bg-surface-950/40 p-3"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-surface-100">
+                                  {h.merchantClean ?? h.merchantRaw}
+                                </p>
+                                <p className="mt-0.5 text-[11px] text-surface-500">
+                                  {h.count} tx · {h.totalAmount.toFixed(2)}
+                                </p>
+                              </div>
+                              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${stateBadge.cls}`}>
+                                {stateBadge.label}
+                              </span>
+                            </div>
+                            <div className="mt-2.5 flex flex-wrap gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRecentReclassifyTarget(h)
+                                  store.openCategoryPicker()
+                                }}
+                                className="rounded-lg border border-white/[0.08] bg-surface-900/80 px-2.5 py-1 text-[11px] font-semibold text-surface-200 hover:bg-surface-800"
+                              >
+                                Change category
+                              </button>
+                              {h.kind !== 'transfer' && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleConvertActionToTransfer(h)}
+                                  className="rounded-lg border border-ice/30 bg-ice/10 px-2.5 py-1 text-[11px] font-semibold text-ice hover:bg-ice/15"
+                                >
+                                  Mark as transfer
+                                </button>
+                              )}
+                              {h.kind !== 'flagged' && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleConvertActionToFlagged(h)}
+                                  className="rounded-lg border border-flame/30 bg-flame/10 px-2.5 py-1 text-[11px] font-semibold text-flame hover:bg-flame/15"
+                                >
+                                  Send to No idea
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => void handleRevertAction(h)}
+                                className="ml-auto rounded-lg border border-white/[0.08] bg-surface-900/80 px-2.5 py-1 text-[11px] font-semibold text-surface-300 hover:bg-surface-800"
+                              >
+                                Back to deck
+                              </button>
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setRecentPanelOpen(false)}
+                    className="mt-5 w-full rounded-xl border border-white/[0.1] bg-surface-800/80 py-2.5 text-sm font-semibold text-surface-300 hover:bg-surface-700"
+                  >
+                    Close
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
     </div>
   )
 }

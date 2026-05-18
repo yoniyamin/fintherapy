@@ -12,6 +12,24 @@ export interface MerchantGroup {
   count: number
 }
 
+export type SessionActionKind = 'classified' | 'auto-confirmed' | 'flagged' | 'transfer'
+
+/** A user action taken during this classify session. Used by the Undo toast
+ *  and the Recent panel to re-classify or revert mistakes. */
+export interface SessionAction {
+  id: number
+  kind: SessionActionKind
+  /** Category id at time of action; null for flagged. 'own_transfers' for transfer. */
+  category: string | null
+  merchantRaw: string
+  merchantClean: string | null
+  /** Pristine snapshots (status='pending', category=null) — used to re-inject the group when reverting. */
+  txSnapshots: Transaction[]
+  totalAmount: number
+  count: number
+  timestamp: number
+}
+
 interface ClassificationState {
   groups: MerchantGroup[]
   currentIndex: number
@@ -21,6 +39,8 @@ interface ClassificationState {
   transferCount: number
   showCategoryPicker: boolean
   activeGroup: MerchantGroup | null
+
+  sessionHistory: SessionAction[]
 
   load: (txns: Transaction[]) => void
   /** Rebuild groups from updated txns without resetting session counters. */
@@ -35,6 +55,13 @@ interface ClassificationState {
   reset: () => void
   /** Apply the same note to all listed transaction ids (local state after RPC save). */
   setNotesOnTransactions: (txIds: string[], note: string | null) => void
+
+  /** Record an action so it shows up in Undo / Recent UIs. Returns the recorded action. */
+  recordAction: (a: Omit<SessionAction, 'id' | 'timestamp'>) => SessionAction
+  /** Remove an action from history and roll back the corresponding counter (used on revert-to-pending). */
+  rollbackAction: (actionId: number) => void
+  /** Replace an action's kind/category in history (used when reclassifying / marking transfer from Recent). */
+  updateActionInHistory: (actionId: number, kind: SessionActionKind, category: string | null) => void
 
   /** @deprecated kept for compatibility */
   transactions: Transaction[]
@@ -67,6 +94,8 @@ function groupByMerchant(txns: Transaction[]): MerchantGroup[] {
   })
 }
 
+let nextActionId = 1
+
 export const useClassificationStore = create<ClassificationState>((set, get) => ({
   groups: [],
   currentIndex: 0,
@@ -76,6 +105,8 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
   transferCount: 0,
   showCategoryPicker: false,
   activeGroup: null,
+
+  sessionHistory: [],
 
   transactions: [],
   activeTransaction: null,
@@ -93,6 +124,7 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
       showCategoryPicker: false,
       activeGroup: groups[0] ?? null,
       activeTransaction: groups[0]?.transactions[0] ?? null,
+      sessionHistory: [],
     })
   },
 
@@ -193,5 +225,47 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
       showCategoryPicker: false,
       activeGroup: null,
       activeTransaction: null,
+      sessionHistory: [],
     }),
+
+  recordAction: (a) => {
+    const action: SessionAction = {
+      ...a,
+      id: nextActionId++,
+      timestamp: Date.now(),
+    }
+    set((state) => ({ sessionHistory: [...state.sessionHistory, action] }))
+    return action
+  },
+
+  rollbackAction: (actionId) => {
+    set((state) => {
+      const target = state.sessionHistory.find((h) => h.id === actionId)
+      if (!target) return state
+      const nextHistory = state.sessionHistory.filter((h) => h.id !== actionId)
+      const patch: Partial<ClassificationState> = { sessionHistory: nextHistory }
+      switch (target.kind) {
+        case 'classified':
+        case 'auto-confirmed':
+          patch.completedCount = Math.max(0, state.completedCount - 1)
+          patch.classifiedTxCount = Math.max(0, state.classifiedTxCount - target.count)
+          break
+        case 'flagged':
+          patch.flaggedCount = Math.max(0, state.flaggedCount - 1)
+          break
+        case 'transfer':
+          patch.transferCount = Math.max(0, state.transferCount - 1)
+          break
+      }
+      return patch as ClassificationState
+    })
+  },
+
+  updateActionInHistory: (actionId, kind, category) => {
+    set((state) => ({
+      sessionHistory: state.sessionHistory.map((h) =>
+        h.id === actionId ? { ...h, kind, category, timestamp: Date.now() } : h,
+      ),
+    }))
+  },
 }))

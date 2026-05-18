@@ -95,26 +95,14 @@ function detectDelimiter(text: string): string {
   return ','
 }
 
-function getCurrentMonth(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
 function formatMonthLabel(value: string): string {
   const [year, month] = value.split('-')
   const date = new Date(Number(year), Number(month) - 1)
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
-function getMonthOptions(): { value: string; label: string }[] {
-  const options: { value: string; label: string }[] = []
-  const now = new Date()
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i)
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    options.push({ value, label: formatMonthLabel(value) })
-  }
-  return options
+function billingMonthFromTxDate(txDate: string): string {
+  return txDate.slice(0, 7)
 }
 
 type RawRow = Record<string, string>
@@ -130,6 +118,7 @@ export default function UploadPage() {
     detectRefunds,
     autoMarkDebitLoads,
     setAccountType,
+    syncBillingMonthFromTxDate,
   } = useTransactions(profile?.household_id)
   const [accountAliases, setAccountAliases] = useState<Map<string, string>>(new Map())
   const [accountTypes, setAccountTypes] = useState<Map<string, AccountType>>(new Map())
@@ -176,16 +165,48 @@ export default function UploadPage() {
     amount: '',
     date: '',
   })
-  const [billingMonth, setBillingMonth] = useState(getCurrentMonth())
   const [accountLast4, setAccountLast4] = useState('')
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState<
-    { count: number; inserted: number; autoCount: number; loadCount: number } | null
+    {
+      count: number
+      inserted: number
+      autoCount: number
+      loadCount: number
+      monthsTouched: string[]
+    } | null
   >(null)
   const [error, setError] = useState<string | null>(null)
   const [pendingTypePrompt, setPendingTypePrompt] = useState<string | null>(null)
+  const [bucketSyncBusy, setBucketSyncBusy] = useState(false)
+  const [bucketSyncFeedback, setBucketSyncFeedback] = useState<{ text: string; ok: boolean } | null>(null)
 
-  const monthOptions = getMonthOptions()
+  const handleSyncBillingBuckets = useCallback(async () => {
+    if (!profile?.household_id) return
+    if (
+      !window.confirm(
+        'Update all transactions so each row’s month bucket matches its transaction date? Use this if totals appeared under the wrong month.',
+      )
+    ) {
+      return
+    }
+    setBucketSyncBusy(true)
+    setBucketSyncFeedback(null)
+    const { error, updatedCount } = await syncBillingMonthFromTxDate()
+    setBucketSyncBusy(false)
+    if (error) {
+      setBucketSyncFeedback({ text: error.message, ok: false })
+      return
+    }
+    invalidatePendingTransactionsInflight(profile.household_id)
+    setBucketSyncFeedback({
+      text:
+        updatedCount === 0
+          ? 'Month buckets already match transaction dates.'
+          : `Updated ${updatedCount} transaction${updatedCount !== 1 ? 's' : ''}. Refresh reveal/classify if already open.`,
+      ok: true,
+    })
+  }, [profile?.household_id, syncBillingMonthFromTxDate])
 
   const currentStep = result ? 2 : file ? 1 : 0
 
@@ -292,12 +313,13 @@ export default function UploadPage() {
           const rows = results.data
             .map((row) => {
               const merchant_raw = (row[merchantKey] ?? '').trim()
+              const tx_date = parseDate(dateKey ? row[dateKey] ?? '' : '')
               return {
                 uploaded_by: profile.id,
                 merchant_raw,
                 amount: amountAsSpend(merchant_raw, parseAmount(row[amountKey] ?? '')),
-                tx_date: parseDate(dateKey ? row[dateKey] ?? '' : ''),
-                billing_month: billingMonth,
+                tx_date,
+                billing_month: billingMonthFromTxDate(tx_date),
                 account_last4: accountLast4 || null,
               }
             })
@@ -325,14 +347,23 @@ export default function UploadPage() {
             const autoCount = insertedCount > 0 ? await autoClassify() : 0
             const last4 = accountLast4.trim()
             const isDebit = !!last4 && accountTypes.get(last4) === 'debit'
-            const loadCount =
-              insertedCount > 0 && isDebit
-                ? await autoMarkDebitLoads(last4, billingMonth)
-                : 0
+            const monthsTouched = Array.from(new Set(rows.map((r) => r.billing_month))).sort()
+            let loadCount = 0
+            if (insertedCount > 0 && isDebit) {
+              for (const bm of monthsTouched) {
+                loadCount += await autoMarkDebitLoads(last4, bm)
+              }
+            }
             if (loadCount > 0) {
               invalidatePendingTransactionsInflight(profile.household_id!)
             }
-            setResult({ count: rows.length, inserted: insertedCount, autoCount, loadCount })
+            setResult({
+              count: rows.length,
+              inserted: insertedCount,
+              autoCount,
+              loadCount,
+              monthsTouched,
+            })
             void refreshAccountPickers()
             setFile(null)
             setPreview([])
@@ -352,6 +383,28 @@ export default function UploadPage() {
         Import a CSV from your bank. We auto-detect columns (EN / ES / CA); you can map them manually if
         needed.
       </p>
+
+      <div className="mt-4 rounded-xl border border-white/[0.08] bg-surface-950/40 px-4 py-3">
+        <p className="text-xs text-surface-400">
+          If imported rows show under the wrong calendar month (bucket disagrees with each row’s date), run a
+          one-time repair for this household.
+        </p>
+        <button
+          type="button"
+          disabled={!profile?.household_id || bucketSyncBusy}
+          onClick={() => void handleSyncBillingBuckets()}
+          className="mt-2 text-xs font-semibold text-ice underline decoration-ice/40 underline-offset-2 hover:decoration-ice disabled:pointer-events-none disabled:opacity-40"
+        >
+          {bucketSyncBusy ? 'Aligning…' : 'Align month buckets from transaction dates'}
+        </button>
+        {bucketSyncFeedback && (
+          <p
+            className={`mt-2 text-xs ${bucketSyncFeedback.ok ? 'text-duo-green' : 'text-danger'}`}
+          >
+            {bucketSyncFeedback.text}
+          </p>
+        )}
+      </div>
 
       {/* Step indicator */}
       <div className={`${ui.glassFlat} mt-6 flex items-center gap-2 p-3`}>
@@ -376,26 +429,8 @@ export default function UploadPage() {
         ))}
       </div>
 
-      {/* Month + Account fields */}
-      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <label htmlFor="billing-month" className="block text-sm font-medium text-surface-300">
-            Billing Month
-          </label>
-          <select
-            id="billing-month"
-            value={billingMonth}
-            onChange={(e) => setBillingMonth(e.target.value)}
-            className={`mt-1.5 block w-full ${ui.select}`}
-          >
-            {monthOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
+      {/* Account field — billing month is derived from each row's tx_date */}
+      <div className="mt-6">
         <div>
           <label htmlFor="account-last4" className="block text-sm font-medium text-surface-300">
             Account (last 4)
@@ -515,7 +550,7 @@ export default function UploadPage() {
       {file && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
           <span className="rounded-full bg-surface-800 px-2.5 py-1 font-medium text-surface-400">
-            {formatMonthLabel(billingMonth)}
+            Months auto-detected from dates
           </span>
           {accountLast4 && (
             <span className="rounded-full bg-surface-800 px-2.5 py-1 font-medium text-surface-400">
@@ -614,7 +649,11 @@ export default function UploadPage() {
               </p>
             )}
             <p className="mt-1 text-sm text-surface-400">
-              {formatMonthLabel(billingMonth)}
+              {result.monthsTouched.length === 0
+                ? 'No months detected'
+                : result.monthsTouched.length === 1
+                  ? formatMonthLabel(result.monthsTouched[0]!)
+                  : `${result.monthsTouched.length} months · ${formatMonthLabel(result.monthsTouched[0]!)} – ${formatMonthLabel(result.monthsTouched[result.monthsTouched.length - 1]!)}`}
               {accountLast4 ? ` · ${formatAccountLabel(accountLast4, accountAliases)}` : ''}
             </p>
             <Link
