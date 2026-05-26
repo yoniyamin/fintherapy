@@ -102,17 +102,12 @@ export default function ComparisonTable({ data, months, categoryLookup }: Props)
         Month-over-Month Comparison
       </p>
 
-      <div className="relative mt-3">
-        {/* Scroll fade hint */}
-        {canScroll && !scrolledToEnd && (
-          <div className="pointer-events-none absolute right-0 top-0 bottom-0 z-20 w-8 bg-gradient-to-l from-[rgba(15,23,42,0.85)] to-transparent" />
-        )}
-
-        <div ref={scrollRef} className="-mx-4 overflow-x-auto px-0 scrollbar-hide">
+      <div className="relative mt-3 overflow-hidden">
+        <div ref={scrollRef} className="overflow-x-auto scrollbar-hide">
           <table className="w-full text-xs" style={{ minWidth: Math.max(360, sorted.length * 72 + 160) }}>
             <thead>
               <tr className="border-b border-white/[0.06]">
-                <th className="sticky left-0 z-10 bg-surface-950/90 backdrop-blur-md py-2 pl-4 pr-2 text-left font-semibold text-surface-400 whitespace-nowrap">
+                <th className="sticky left-0 z-10 bg-surface-950/95 py-2 pl-0 pr-2 text-left font-semibold text-surface-400 whitespace-nowrap shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]">
                   Category
                 </th>
                 {sorted.map(m => (
@@ -120,7 +115,7 @@ export default function ComparisonTable({ data, months, categoryLookup }: Props)
                     {formatMonth(m)}
                   </th>
                 ))}
-                <th className="px-3 py-2 pr-4 text-right font-semibold text-surface-400 whitespace-nowrap">
+                <th className="sticky right-0 z-10 bg-surface-950/95 px-3 py-2 pr-0 text-right font-semibold text-surface-400 whitespace-nowrap shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.5)]">
                   Trend
                 </th>
               </tr>
@@ -131,7 +126,7 @@ export default function ComparisonTable({ data, months, categoryLookup }: Props)
                   key={row.category}
                   className={`border-b border-white/[0.03] ${row.flagged ? 'bg-amber-500/[0.03]' : ''}`}
                 >
-                  <td className="sticky left-0 z-10 bg-surface-950/90 backdrop-blur-md py-2 pl-4 pr-2">
+                  <td className={`sticky left-0 z-10 py-2 pl-0 pr-2 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] ${row.flagged ? 'bg-amber-500/[0.06]' : 'bg-surface-950/95'}`}>
                     <div className="flex items-center gap-1.5">
                       {row.flagged && <span className="text-[10px] text-amber-400" title="Grew significantly">&#9888;</span>}
                       <span className="text-[13px]">{row.icon}</span>
@@ -154,7 +149,7 @@ export default function ComparisonTable({ data, months, categoryLookup }: Props)
                       </td>
                     )
                   })}
-                  <td className="px-3 py-2 pr-4 text-right tabular-nums whitespace-nowrap">
+                  <td className={`sticky right-0 z-10 px-3 py-2 pr-0 text-right tabular-nums whitespace-nowrap shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.5)] ${row.flagged ? 'bg-amber-500/[0.06]' : 'bg-surface-950/95'}`}>
                     <TrendBadge pct={row.totalPctChange} />
                   </td>
                 </tr>
@@ -167,7 +162,7 @@ export default function ComparisonTable({ data, months, categoryLookup }: Props)
         {canScroll && !scrolledToEnd && (
           <div className="mt-2 flex justify-center">
             <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2.5 py-0.5 text-[10px] text-surface-400">
-              Swipe for more <span className="text-surface-500">&rarr;</span>
+              Swipe months <span className="text-surface-500">&rarr;</span>
             </span>
           </div>
         )}
