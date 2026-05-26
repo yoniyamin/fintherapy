@@ -7,6 +7,7 @@ const navItems = [
   { to: '/', label: 'Home', icon: HomeIcon, activeIcon: HomeIconFilled },
   { to: '/classify', label: 'Classify', icon: SwipeIcon, activeIcon: SwipeIconFilled },
   { to: '/reveal', label: 'Reveal', icon: RevealIcon, activeIcon: RevealIconFilled },
+  { to: '/analysis', label: 'Analysis', icon: AnalysisIcon, activeIcon: AnalysisIconFilled },
   { to: '/bets', label: 'Bets', icon: BetsIcon, activeIcon: BetsIconFilled },
 ]
 
@@ -177,6 +178,28 @@ function RevealIconFilled() {
       <path d="M18 20V10" />
       <path d="M12 20V4" />
       <path d="M6 20v-6" />
+    </svg>
+  )
+}
+
+function AnalysisIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 21H4a1 1 0 0 1-1-1V3" />
+      <path d="M7 17l4-4 4 4 6-6" />
+    </svg>
+  )
+}
+
+function AnalysisIconFilled() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 21H4a1 1 0 0 1-1-1V3" />
+      <path d="M7 17l4-4 4 4 6-6" />
+      <circle cx="7" cy="17" r="1.5" fill="currentColor" />
+      <circle cx="11" cy="13" r="1.5" fill="currentColor" />
+      <circle cx="15" cy="17" r="1.5" fill="currentColor" />
+      <circle cx="21" cy="11" r="1.5" fill="currentColor" />
     </svg>
   )
 }

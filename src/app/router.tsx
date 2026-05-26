@@ -11,6 +11,7 @@ import UploadPage from '../components/upload/UploadPage'
 import SwipeDeck from '../components/swipe/SwipeDeck'
 import RevealPage from '../components/reveal/RevealPage'
 import BetsPage from '../components/bets/BetsPage'
+import AnalysisPage from '../components/analysis/AnalysisPage'
 
 export const router = createBrowserRouter([
   {
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
       { path: 'classify/no-idea', element: <SwipeDeck /> },
       { path: 'classify', element: <SwipeDeck /> },
       { path: 'reveal', element: <RevealPage /> },
+      { path: 'analysis', element: <AnalysisPage /> },
       { path: 'bets', element: <BetsPage /> },
     ],
   },
