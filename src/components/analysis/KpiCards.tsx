@@ -13,11 +13,6 @@ interface Props {
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
-function pctChange(from: number, to: number): number {
-  if (from === 0) return 0
-  return ((to - from) / Math.abs(from)) * 100
-}
-
 function formatMonth(m: string): string {
   const [y, mo] = m.split('-')
   return new Date(Number(y), Number(mo) - 1).toLocaleDateString('en-US', { month: 'short' })

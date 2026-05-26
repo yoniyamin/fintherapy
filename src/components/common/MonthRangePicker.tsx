@@ -28,19 +28,6 @@ function formatMonthFull(value: string): string {
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
-function getMonthsBetween(from: string, to: string): string[] {
-  const months: string[] = []
-  const [fy, fm] = from.split('-').map(Number)
-  const [ty, tm] = to.split('-').map(Number)
-  let y = fy, m = fm
-  while (y < ty || (y === ty && m <= tm)) {
-    months.push(`${y}-${String(m).padStart(2, '0')}`)
-    m++
-    if (m > 12) { m = 1; y++ }
-  }
-  return months
-}
-
 function getChipLabel(sel: MonthSelection): string {
   if (sel.mode === 'single') return formatMonthFull(sel.months[0])
   if (sel.mode === 'year') return `${sel.year} (${sel.months.length} months)`

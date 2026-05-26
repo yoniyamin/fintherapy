@@ -815,7 +815,6 @@ function drawPage2(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean) {
 
   const txDateW = 20
   const txMerchantW = isLandscape ? 95 : 52
-  const txCatW = isLandscape ? 40 : 30
 
   // Header
   drawCard(pdf, mx, y, contentW, 7)

@@ -597,7 +597,7 @@ export function downloadBlob(blob: Blob, filename: string) {
    ═══════════════════════════════════════════════════════════ */
 
 import { buildDailyTotals, type CategoryTrendPoint } from '../hooks/useMultiMonthReveal'
-import { generateInsights, getHealthSummary, getBiggestMover, getSpendingPredictability } from './advisorInsights'
+import { generateInsights, getHealthSummary } from './advisorInsights'
 
 export interface MultiMonthSlideDeckInput {
   months: string[]
@@ -645,7 +645,6 @@ export async function generateMultiMonthSlideDeck(input: MultiMonthSlideDeckInpu
 
   const health = getHealthSummary(insightInput)
   const insights = generateInsights(insightInput)
-  const mover = getBiggestMover(input.summaryByMonth, sorted, input.categoryLookup)
 
   const pptx = new PptxGenJS()
   pptx.layout = 'LAYOUT_WIDE'

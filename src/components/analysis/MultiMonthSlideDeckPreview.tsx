@@ -9,7 +9,7 @@ import type { CategorySummary } from '../../hooks/useReveal'
 import type { ExportRow } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
 import {
-  generateInsights, getHealthSummary, getBiggestMover,
+  generateInsights, getHealthSummary,
   type AdvisorInsight, type HealthSummary,
 } from '../../lib/advisorInsights'
 
@@ -84,7 +84,6 @@ export default function MultiMonthSlideDeckPreview({
 
   const health = useMemo(() => getHealthSummary(insightInput), [insightInput])
   const insights = useMemo(() => generateInsights(insightInput), [insightInput])
-  const biggestMover = useMemo(() => getBiggestMover(data.summaryByMonth, sorted, categoryLookup), [data.summaryByMonth, sorted, categoryLookup])
 
   const slides = useMemo(() => {
     const s = [
@@ -155,10 +154,10 @@ export default function MultiMonthSlideDeckPreview({
               {currentSlide.id === 'big-picture' && <BigPictureSlide totalSpent={totalSpent} avgMonthly={avgMonthly} monthCount={sorted.length} income={data.householdIncome} health={health} />}
               {currentSlide.id === 'trajectory' && <TrajectorySlide monthlyTotals={data.monthlyTotals} income={data.householdIncome} />}
               {currentSlide.id === 'where-money-goes' && <WhereMoneyGoesSlide summary={filteredSummary} total={totalSpent} categoryLookup={categoryLookup} />}
-              {currentSlide.id === 'how-changing' && <HowChangingSlide trend={data.categoryTrend} months={sorted} aggregated={data.aggregatedSummary} categoryLookup={categoryLookup} income={data.householdIncome} />}
-              {currentSlide.id === 'biggest-movers' && <BiggestMoversSlide summaryByMonth={data.summaryByMonth} months={sorted} categoryLookup={categoryLookup} mover={biggestMover} />}
+              {currentSlide.id === 'how-changing' && <HowChangingSlide trend={data.categoryTrend} months={sorted} aggregated={data.aggregatedSummary} categoryLookup={categoryLookup} />}
+              {currentSlide.id === 'biggest-movers' && <BiggestMoversSlide summaryByMonth={data.summaryByMonth} months={sorted} categoryLookup={categoryLookup} />}
               {currentSlide.id === 'top-transactions' && <TopTransactionsSlide transactions={filteredTransactions} categoryLookup={categoryLookup} />}
-              {currentSlide.id === 'advisor-summary' && <AdvisorSummarySlide insights={insights} income={data.householdIncome} avgMonthly={avgMonthly} health={health} />}
+              {currentSlide.id === 'advisor-summary' && <AdvisorSummarySlide insights={insights} income={data.householdIncome} avgMonthly={avgMonthly} />}
             </div>
           </motion.div>
         </AnimatePresence>
@@ -262,7 +261,7 @@ function TrajectorySlide({ monthlyTotals, income }: { monthlyTotals: import('../
             <BarChart data={chartData} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
               <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
-              <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11 }} formatter={(value: number) => [fmt(value), 'Spent']} />
+              <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11 }} formatter={(value) => [fmt(Number(value ?? 0)), 'Spent']} />
               {income != null && income > 0 && <ReferenceLine y={income} stroke="#64748b" strokeDasharray="6 4" label={{ value: 'Income', position: 'right', fill: '#64748b', fontSize: 9 }} />}
               <Bar dataKey="amount" radius={[6, 6, 0, 0]} maxBarSize={28} fill="#6366F1" />
             </BarChart>
@@ -323,7 +322,7 @@ function WhereMoneyGoesSlide({ summary, total, categoryLookup }: { summary: Cate
   )
 }
 
-function HowChangingSlide({ trend, months, aggregated, categoryLookup, income }: { trend: CategoryTrendPoint[]; months: string[]; aggregated: CategorySummary[]; categoryLookup: Record<string, { icon: string; label: string }>; income: number | null }) {
+function HowChangingSlide({ trend, months, aggregated, categoryLookup }: { trend: CategoryTrendPoint[]; months: string[]; aggregated: CategorySummary[]; categoryLookup: Record<string, { icon: string; label: string }> }) {
   const top5 = aggregated.filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID).slice(0, 5).map(c => c.category)
   const labels = top5.map(c => categoryLookup[c]?.label ?? c)
 
@@ -346,7 +345,7 @@ function HowChangingSlide({ trend, months, aggregated, categoryLookup, income }:
             <LineChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
               <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
-              <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11 }} formatter={(value: number) => [fmt(value), '']} />
+              <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11 }} formatter={(value) => [fmt(Number(value ?? 0)), '']} />
               <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconType="circle" iconSize={6} />
               {labels.map((label, i) => <Line key={label} type="monotone" dataKey={label} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 2 }} />)}
             </LineChart>
@@ -357,7 +356,7 @@ function HowChangingSlide({ trend, months, aggregated, categoryLookup, income }:
   )
 }
 
-function BiggestMoversSlide({ summaryByMonth, months, categoryLookup, mover }: { summaryByMonth: Map<string, CategorySummary[]>; months: string[]; categoryLookup: Record<string, { icon: string; label: string }>; mover: ReturnType<typeof getBiggestMover> }) {
+function BiggestMoversSlide({ summaryByMonth, months, categoryLookup }: { summaryByMonth: Map<string, CategorySummary[]>; months: string[]; categoryLookup: Record<string, { icon: string; label: string }> }) {
   const first = summaryByMonth.get(months[0]) ?? []
   const last = summaryByMonth.get(months[months.length - 1]) ?? []
   const firstMap = new Map(first.map(c => [c.category, Number(c.total_amount)]))
@@ -422,7 +421,7 @@ function TopTransactionsSlide({ transactions, categoryLookup }: { transactions: 
   )
 }
 
-function AdvisorSummarySlide({ insights, income, avgMonthly, health }: { insights: AdvisorInsight[]; income: number | null; avgMonthly: number; health: HealthSummary }) {
+function AdvisorSummarySlide({ insights, income, avgMonthly }: { insights: AdvisorInsight[]; income: number | null; avgMonthly: number }) {
   const savingsRate = income != null && income > 0 ? Math.round(((income - avgMonthly) / income) * 100) : null
 
   return (

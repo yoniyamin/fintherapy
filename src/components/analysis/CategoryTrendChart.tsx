@@ -103,7 +103,7 @@ export default function CategoryTrendChart({ data, months, categoryLookup }: Pro
             <Tooltip
               contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 12 }}
               labelStyle={{ color: '#e2e8f0', fontWeight: 600 }}
-              formatter={(value: number) => [fmt(value), '']}
+              formatter={(value) => [fmt(Number(value ?? 0)), '']}
             />
             <Legend
               iconType="circle"
