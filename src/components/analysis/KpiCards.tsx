@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
 import { getSpendingPredictability, getBiggestMover } from '../../lib/advisorInsights'
@@ -104,69 +104,30 @@ export default function KpiCards({ data, months, categoryLookup }: Props) {
     return result
   }, [avgMonthly, totalSpent, sorted.length, savingsRateData, biggestMover, predictability])
 
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [canScroll, setCanScroll] = useState(false)
-  const [scrolledToEnd, setScrolledToEnd] = useState(false)
-
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-
-    const check = () => {
-      const hasOverflow = el.scrollWidth > el.clientWidth + 2
-      setCanScroll(hasOverflow)
-      setScrolledToEnd(hasOverflow && el.scrollLeft + el.clientWidth >= el.scrollWidth - 4)
-    }
-
-    check()
-    el.addEventListener('scroll', check, { passive: true })
-    const ro = new ResizeObserver(check)
-    ro.observe(el)
-    return () => { el.removeEventListener('scroll', check); ro.disconnect() }
-  }, [cards])
-
   return (
-    <div className="relative">
-      {/* Right fade hint */}
-      {canScroll && !scrolledToEnd && (
-        <div className="pointer-events-none absolute right-0 top-0 bottom-0 z-10 w-10 bg-gradient-to-l from-[rgba(15,23,42,0.9)] to-transparent" />
-      )}
-
-      <div ref={scrollRef} className="-mx-5 overflow-x-auto px-5 scrollbar-hide">
-        <div className="flex gap-3 pb-2" style={{ width: 'max-content' }}>
-          {cards.map((card, i) => (
-            <motion.div
-              key={card.title}
-              className={`${ui.glassFlat} w-52 shrink-0 px-4 py-3.5`}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05 }}
-            >
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">
-                {card.title}
-              </p>
-              <p className={`mt-1 text-xl font-bold ${card.color}`}>
-                {card.value}
-              </p>
-              <p className="mt-0.5 text-[11px] text-surface-400">
-                {card.context}
-              </p>
-              <p className="mt-2 text-xs leading-relaxed text-surface-300">
-                {card.insight}
-              </p>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* Swipe hint */}
-      {canScroll && !scrolledToEnd && (
-        <div className="mt-1 flex justify-center">
-          <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2.5 py-0.5 text-[10px] text-surface-400">
-            Swipe for more <span className="text-surface-500">&rarr;</span>
-          </span>
-        </div>
-      )}
+    <div className="grid grid-cols-2 gap-3">
+      {cards.map((card, i) => (
+        <motion.div
+          key={card.title}
+          className={`${ui.glassFlat} min-w-0 px-4 py-3.5`}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: i * 0.05 }}
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">
+            {card.title}
+          </p>
+          <p className={`mt-1 text-xl font-bold ${card.color}`}>
+            {card.value}
+          </p>
+          <p className="mt-0.5 text-[11px] text-surface-400">
+            {card.context}
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-surface-300">
+            {card.insight}
+          </p>
+        </motion.div>
+      ))}
     </div>
   )
 }
