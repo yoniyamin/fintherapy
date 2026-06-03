@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import { useAuth } from '../../hooks/useAuth'
@@ -108,53 +108,64 @@ export default function BetsPage() {
   const { getMonthStats } = useTransactions(profile?.household_id)
   const { categories: CATEGORIES } = useCategoryConfig(profile?.household_id)
   const [month, setMonth] = useState(getCurrentMonth())
-  const [tab, setTab] = useState<Tab>('predict')
-  const [amounts, setAmounts] = useState<Record<string, string>>({})
+  const [userTab, setUserTab] = useState<Tab>('predict')
+  const [draftAmounts, setDraftAmounts] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [monthStats, setMonthStats] = useState<MonthStats | null>(null)
-  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsLoadedMonth, setStatsLoadedMonth] = useState<string | null>(null)
   const monthOptions = getMonthOptions()
 
   const bettableCategories = CATEGORIES.filter((c) => c.id !== OWN_TRANSFERS_CATEGORY_ID)
   const allClassified = monthStats !== null && monthStats.total_count > 0 && monthStats.pending_count === 0
+  const statsLoading = statsLoadedMonth !== month
+  const tab = allClassified ? 'results' : userTab
   const isMultiMember = householdBetStatus.length > 1
+
+  const persistedAmounts = useMemo(() => {
+    const existing: Record<string, string> = {}
+    myBets.forEach((b) => {
+      existing[b.category] = String(b.predicted_amount)
+    })
+    return existing
+  }, [myBets])
+
+  const amounts = useMemo(
+    () => ({ ...persistedAmounts, ...draftAmounts }),
+    [persistedAmounts, draftAmounts],
+  )
 
   const selectedCategories = useMemo(() => {
     if (!profile?.household_id || bettableCategories.length === 0) return []
     return pickBetCategories(bettableCategories, profile.household_id, month)
-  }, [profile?.household_id, bettableCategories, month])
+  }, [profile, bettableCategories, month])
 
-  const loadMonthStats = useCallback(async (m: string) => {
-    setStatsLoading(true)
-    const stats = await getMonthStats(m)
-    setMonthStats(stats)
-    setStatsLoading(false)
-  }, [getMonthStats])
+  const handleMonthChange = (value: string) => {
+    setMonth(value)
+    setDraftAmounts({})
+    setStatsLoadedMonth(null)
+  }
 
   useEffect(() => {
+    let cancelled = false
     fetchMyBets(month)
     fetchSummary(month)
     fetchHouseholdBetStatus(month)
-    loadMonthStats(month)
-  }, [month, fetchMyBets, fetchSummary, fetchHouseholdBetStatus, loadMonthStats])
+    void getMonthStats(month).then((stats) => {
+      if (cancelled) return
+      setMonthStats(stats)
+      setStatsLoadedMonth(month)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [month, fetchMyBets, fetchSummary, fetchHouseholdBetStatus, getMonthStats])
 
   useEffect(() => {
     if (allClassified) {
-      setTab('results')
       fetchHouseholdBets(month)
     }
   }, [allClassified, fetchHouseholdBets, month])
-
-  useEffect(() => {
-    if (myBets.length > 0) {
-      const existing: Record<string, string> = {}
-      myBets.forEach((b) => {
-        existing[b.category] = String(b.predicted_amount)
-      })
-      setAmounts(existing)
-    }
-  }, [myBets])
 
   const handleSubmit = async () => {
     setSubmitting(true)
@@ -248,7 +259,7 @@ export default function BetsPage() {
       <div className="mt-6">
         <select
           value={month}
-          onChange={(e) => setMonth(e.target.value)}
+          onChange={(e) => handleMonthChange(e.target.value)}
           className={`w-full ${ui.select}`}
         >
           {monthOptions.map((opt) => (
@@ -322,7 +333,7 @@ export default function BetsPage() {
           <button
             key={t}
             type="button"
-            onClick={() => !allClassified || t === 'results' ? setTab(t) : undefined}
+            onClick={() => !allClassified || t === 'results' ? setUserTab(t) : undefined}
             className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all ${
               tab === t ? ui.tabActive : ui.tabIdle
             } ${allClassified && t === 'predict' ? 'opacity-40 cursor-not-allowed' : ''}`}
@@ -367,7 +378,7 @@ export default function BetsPage() {
                   min="0"
                   step="10"
                   value={amounts[cat.id] ?? ''}
-                  onChange={(e) => setAmounts((prev) => ({ ...prev, [cat.id]: e.target.value }))}
+                  onChange={(e) => setDraftAmounts((prev) => ({ ...prev, [cat.id]: e.target.value }))}
                   className={`w-20 px-2.5 py-1.5 text-right text-sm tabular-nums ${ui.input}`}
                   placeholder="0"
                 />

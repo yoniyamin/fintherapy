@@ -116,10 +116,11 @@ export default function RevealPage() {
   const [retroResult, setRetroResult] = useState<{ last4: string; count: number } | null>(null)
   const [cardsOpen, setCardsOpen] = useState(false)
   const cardsPanelRef = useRef<HTMLDivElement>(null)
-  const [incomeInput, setIncomeInput] = useState('')
+  const [incomeDraft, setIncomeDraft] = useState<string | null>(null)
   const [editingIncome, setEditingIncome] = useState(false)
   const incomeRef = useRef<HTMLInputElement>(null)
   const monthOptions = getMonthOptions()
+  const incomeInput = incomeDraft ?? (householdIncome !== null ? String(householdIncome) : '')
 
   // Drill-down state
   const [drillCategory, setDrillCategory] = useState<string | null>(null)
@@ -135,9 +136,9 @@ export default function RevealPage() {
   const [includeOwnTransfers, setIncludeOwnTransfers] = useState(false)
   const [showTransfersHelp, setShowTransfersHelp] = useState(false)
   const [monthStats, setMonthStats] = useState<MonthStats | null>(null)
-  const [monthStatsLoading, setMonthStatsLoading] = useState(true)
+  const [statsLoadedMonth, setStatsLoadedMonth] = useState<string | null>(null)
   const [completionDismissed, setCompletionDismissed] = useState(false)
-  const [celebrationFired, setCelebrationFired] = useState(false)
+  const celebrationFiredRef = useRef(false)
   const navigate = useNavigate()
   const catConfig = useCategoryConfig(profile?.household_id)
 
@@ -152,22 +153,18 @@ export default function RevealPage() {
     && (monthStats.pending_count / monthStats.total_count) > UNCLASSIFIED_BLOCK_THRESHOLD
 
   const showCompletionScreen = allClassified && !completionDismissed
+  const monthStatsLoading = statsLoadedMonth !== month
 
-  const loadMonthStats = useCallback(async (m: string) => {
-    setMonthStatsLoading(true)
-    const stats = await getMonthStats(m)
-    setMonthStats(stats)
-    setMonthStatsLoading(false)
-  }, [getMonthStats])
-
-  useEffect(() => {
+  const handleMonthChange = (value: string) => {
+    setMonth(value)
     setCompletionDismissed(false)
-    setCelebrationFired(false)
-  }, [month])
+    celebrationFiredRef.current = false
+    setStatsLoadedMonth(null)
+  }
 
   useEffect(() => {
-    if (showCompletionScreen && !celebrationFired) {
-      setCelebrationFired(true)
+    if (showCompletionScreen && !celebrationFiredRef.current) {
+      celebrationFiredRef.current = true
       const duration = 2000
       const end = Date.now() + duration
       const frame = () => {
@@ -195,12 +192,20 @@ export default function RevealPage() {
       })
       frame()
     }
-  }, [showCompletionScreen, celebrationFired])
+  }, [showCompletionScreen])
 
   useEffect(() => {
+    let cancelled = false
     fetchSummary(month, accountFilter?.length ? accountFilter : null, includeOwnTransfers)
-    loadMonthStats(month)
-  }, [month, fetchSummary, accountFilter, includeOwnTransfers, loadMonthStats])
+    void getMonthStats(month).then((stats) => {
+      if (cancelled) return
+      setMonthStats(stats)
+      setStatsLoadedMonth(month)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [month, fetchSummary, accountFilter, includeOwnTransfers, getMonthStats])
 
   useEffect(() => {
     if (!profile?.household_id) return
@@ -245,12 +250,6 @@ export default function RevealPage() {
     return () => document.removeEventListener('mousedown', onDown)
   }, [cardsOpen])
 
-  useEffect(() => {
-    if (householdIncome !== null) {
-      setIncomeInput(String(householdIncome))
-    }
-  }, [householdIncome])
-
   const spendingSummary = summary.filter(
     (s) => includeOwnTransfers || s.category !== OWN_TRANSFERS_CATEGORY_ID,
   )
@@ -267,23 +266,27 @@ export default function RevealPage() {
     if (val > 0) {
       await setIncome(val)
     }
+    setIncomeDraft(null)
     setEditingIncome(false)
   }
 
   const handleIncomeKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleIncomeSave()
-    if (e.key === 'Escape') setEditingIncome(false)
+    if (e.key === 'Escape') {
+      setIncomeDraft(null)
+      setEditingIncome(false)
+    }
   }
 
   const accountRpcFilter = accountFilter?.length ? accountFilter : null
 
-  const handleCategoryClick = useCallback(async (categoryId: string) => {
+  const handleCategoryClick = async (categoryId: string) => {
     setDrillCategory(categoryId)
     setDrillLoading(true)
     const txns = await getTransactionsByCategory(month, categoryId, accountRpcFilter)
     setDrillTxns(txns)
     setDrillLoading(false)
-  }, [month, getTransactionsByCategory, accountRpcFilter])
+  }
 
   const handleReclassify = useCallback(async (txId: string, newCategory: string) => {
     if (!user) return
@@ -437,7 +440,7 @@ export default function RevealPage() {
       <div className="mt-6 flex gap-2">
         <select
           value={month}
-          onChange={(e) => setMonth(e.target.value)}
+          onChange={(e) => handleMonthChange(e.target.value)}
           className={`flex-1 ${ui.select}`}
         >
           {monthOptions.map((opt) => (
@@ -800,7 +803,7 @@ export default function RevealPage() {
                     min="0"
                     step="100"
                     value={incomeInput}
-                    onChange={(e) => setIncomeInput(e.target.value)}
+                    onChange={(e) => setIncomeDraft(e.target.value)}
                     onBlur={handleIncomeSave}
                     onKeyDown={handleIncomeKeyDown}
                     autoFocus

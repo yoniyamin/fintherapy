@@ -1,37 +1,25 @@
-import { useMemo, useState, useRef, useLayoutEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import type { DailyTotal } from '../../hooks/useMultiMonthReveal'
 import { detectDayOfWeekPattern } from '../../lib/advisorInsights'
 import { ui } from '../../lib/uiClasses'
 
-function CalendarTooltip({ tooltip }: { tooltip: { date: string; amount: number; count: number; el: HTMLElement } }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState({ left: 0, top: 0 })
+function computeTooltipPos(el: HTMLElement, tipW = 180, tipH = 48) {
+  const cellRect = el.getBoundingClientRect()
+  const pad = 8
+  let left = cellRect.left + cellRect.width / 2 - tipW / 2
+  let top = cellRect.top - tipH - pad
+  if (top < 4) top = cellRect.bottom + pad
+  if (left < 4) left = 4
+  if (left + tipW > window.innerWidth - 4) left = window.innerWidth - tipW - 4
+  return { left, top }
+}
 
-  useLayoutEffect(() => {
-    const cellRect = tooltip.el.getBoundingClientRect()
-    const tipEl = ref.current
-    if (!tipEl) return
-
-    const tipW = tipEl.offsetWidth
-    const tipH = tipEl.offsetHeight
-    const pad = 8
-
-    let left = cellRect.left + cellRect.width / 2 - tipW / 2
-    let top = cellRect.top - tipH - pad
-
-    if (top < 4) top = cellRect.bottom + pad
-    if (left < 4) left = 4
-    if (left + tipW > window.innerWidth - 4) left = window.innerWidth - tipW - 4
-
-    setPos({ left, top })
-  }, [tooltip.el])
-
+function CalendarTooltip({ tooltip }: { tooltip: { date: string; amount: number; count: number; left: number; top: number } }) {
   return (
     <div
-      ref={ref}
       className="pointer-events-none fixed z-[200] rounded-lg border border-white/[0.1] bg-surface-950/95 px-3 py-2 text-xs shadow-lg backdrop-blur-md"
-      style={{ left: pos.left, top: pos.top }}
+      style={{ left: tooltip.left, top: tooltip.top }}
     >
       <p className="font-medium text-surface-200">{tooltip.date}</p>
       <p className="mt-0.5 text-surface-400">
@@ -82,7 +70,7 @@ function getIntensityClass(amount: number, max: number): string {
 }
 
 export default function CalendarHeatmap({ dailyTotals, months }: Props) {
-  const [tooltip, setTooltip] = useState<{ date: string; amount: number; count: number; el: HTMLElement } | null>(null)
+  const [tooltip, setTooltip] = useState<{ date: string; amount: number; count: number; left: number; top: number } | null>(null)
 
   const dailyMap = useMemo(() => {
     const map = new Map<string, DailyTotal>()
@@ -165,7 +153,9 @@ export default function CalendarHeatmap({ dailyTotals, months }: Props) {
                             key={di}
                             className={`${cellSize} cursor-pointer rounded-[3px] transition-colors ${getIntensityClass(amount, maxAmount)}`}
                           onMouseEnter={(e) => {
-                            setTooltip({ date: dateStr, amount, count, el: e.currentTarget as HTMLElement })
+                            const el = e.currentTarget as HTMLElement
+                            const { left, top } = computeTooltipPos(el)
+                            setTooltip({ date: dateStr, amount, count, left, top })
                           }}
                           onMouseLeave={() => setTooltip(null)}
                             title={`${dateStr}: ${fmt(amount)} (${count} txns)`}

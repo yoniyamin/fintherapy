@@ -14,35 +14,40 @@ interface MerchantSearchPanelProps {
   onClose: () => void
 }
 
+type SearchSnapshot = {
+  merchant: string
+  loading: boolean
+  error: string | null
+  results: SearchResult[]
+}
+
 export default function MerchantSearchPanel({ open, merchantRaw, onClose }: MerchantSearchPanelProps) {
-  const [results, setResults] = useState<SearchResult[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [searchSnapshot, setSearchSnapshot] = useState<SearchSnapshot | null>(null)
 
   useEffect(() => {
     if (!open || !merchantRaw) return
 
     let cancelled = false
-    setLoading(true)
-    setError(null)
-    setResults([])
 
     searchMerchant(merchantRaw).then(
       (resp) => {
         if (cancelled) return
-        setLoading(false)
         if (!resp.ok) {
-          setError(resp.error)
+          setSearchSnapshot({ merchant: merchantRaw, loading: false, error: resp.error, results: [] })
         } else if (resp.results.length === 0) {
-          setError('No results found')
+          setSearchSnapshot({ merchant: merchantRaw, loading: false, error: 'No results found', results: [] })
         } else {
-          setResults(resp.results)
+          setSearchSnapshot({ merchant: merchantRaw, loading: false, error: null, results: resp.results })
         }
       },
       (err) => {
         if (cancelled) return
-        setError(`Network error: ${err instanceof Error ? err.message : 'unknown'}`)
-        setLoading(false)
+        setSearchSnapshot({
+          merchant: merchantRaw,
+          loading: false,
+          error: `Network error: ${err instanceof Error ? err.message : 'unknown'}`,
+          results: [],
+        })
       },
     )
 
@@ -50,6 +55,12 @@ export default function MerchantSearchPanel({ open, merchantRaw, onClose }: Merc
   }, [open, merchantRaw])
 
   if (typeof document === 'undefined') return null
+
+  const activeSearch = open && merchantRaw ? merchantRaw : null
+  const snapshot = activeSearch && searchSnapshot?.merchant === activeSearch ? searchSnapshot : null
+  const loading = Boolean(activeSearch && (!snapshot || snapshot.loading))
+  const error = snapshot?.error ?? null
+  const results = snapshot?.results ?? []
 
   const cleanedQuery = cleanMerchantForSearch(merchantRaw)
   const googleUrl = buildMerchantSearchUrl(merchantRaw)

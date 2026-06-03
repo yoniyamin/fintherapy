@@ -7,7 +7,7 @@ interface ProgressBarProps {
 }
 
 export default function ProgressBar({ current, total, label }: ProgressBarProps) {
-  const pct = total > 0 ? (current / total) * 100 : 0
+  const pct = total > 0 ? Math.min(100, (current / total) * 100) : 0
 
   return (
     <div className="w-full">

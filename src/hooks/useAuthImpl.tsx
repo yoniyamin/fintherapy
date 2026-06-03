@@ -1,6 +1,4 @@
 import {
-  createContext,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -11,25 +9,8 @@ import {
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../types/database'
-
-// ---------------------------------------------------------------------------
-// Friendly error messages
-// ---------------------------------------------------------------------------
-
-const ERROR_MAP: [test: RegExp, friendly: string][] = [
-  [/invalid login credentials/i, 'Wrong email or password. Please try again.'],
-  [/user already registered/i, 'An account with this email already exists.'],
-  [/email not confirmed/i, 'Please confirm your email before signing in.'],
-  [/signup is disabled/i, 'Signups are currently disabled. Contact an admin.'],
-  [/rate limit/i, 'Too many attempts. Please wait a moment and try again.'],
-]
-
-export function friendlyAuthError(raw: string): string {
-  for (const [re, friendly] of ERROR_MAP) {
-    if (re.test(raw)) return friendly
-  }
-  return raw
-}
+import { friendlyAuthError } from './authErrors'
+import { AuthContext, type AuthContextValue, type BootStage } from './authContext'
 
 // ---------------------------------------------------------------------------
 // Orphan session detection (user row deleted from DB while JWT still valid)
@@ -59,8 +40,6 @@ async function signOutIfOrphanProfileError(err: { message: string; code?: string
 
 const SESSION_CHECK_INTERVAL_MS = 5 * 60 * 1000
 
-export type BootStage = 'init' | 'session' | 'profile' | null
-
 interface AuthState {
   user: User | null
   profile: Profile | null
@@ -72,16 +51,6 @@ interface AuthState {
   /** Set when onAuthStateChange fires PASSWORD_RECOVERY so ResetPasswordPage can act. */
   passwordRecoveryActive: boolean
 }
-
-export interface AuthContextValue extends AuthState {
-  signUp: (email: string, password: string, displayName: string) => Promise<unknown>
-  signIn: (email: string, password: string) => Promise<unknown>
-  signOut: () => Promise<unknown>
-  refreshProfile: (options?: { untilHouseholdId?: boolean }) => Promise<Profile | null>
-  clearSessionExpired: () => void
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null)
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -405,12 +374,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext)
-  if (!ctx) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
-  return ctx
 }

@@ -1,9 +1,23 @@
+/* eslint-disable react-hooks/set-state-in-effect -- deck sync, session restore, and sheet reset rely on intentional effect writes */
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
-import { useClassificationStore, type SessionAction, type SessionActionKind } from '../../stores/classificationStore'
+import { AnimatePresence, motion, useDragControls } from 'framer-motion'
+import { useClassificationStore, type MerchantGroup, type SessionAction, type SessionActionKind } from '../../stores/classificationStore'
 import { useTransactions, type MonthStats, type AccountClassifiedBreakdownRow } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import {
+  classifyAccountStorageKey,
+  classifyMonthStorageKey,
+  countFlaggedByMonth,
+  countPendingMonthsPerCard,
+  countPendingStacksByMonth,
+  distinctBillingMonthsFromTxns,
+  filterTransactionsByAccount,
+  filterTransactionsByBillingMonth,
+  formatBillingMonthLabel,
+  oldestPendingBillingMonth,
+} from '../../lib/classifyDeckScope'
+import { supabase } from '../../lib/supabase'
 import { useMerchantKnowledge } from '../../hooks/useMerchantKnowledge'
 import { usePresence } from '../../hooks/usePresence'
 import { useAuth } from '../../hooks/useAuth'
@@ -43,21 +57,19 @@ function aggregateMonthStats(parts: MonthStats[]): MonthStats {
 
 /** Billing months present on the deck (YYYY-MM), sorted ascending — drives classify progress stats. */
 function distinctBillingMonthsFromDeck(txns: Transaction[]): string[] {
-  const s = new Set<string>()
-  for (const t of txns) {
-    const bm = t.billing_month?.trim()
-    if (bm) s.add(bm)
-  }
-  return Array.from(s).sort()
+  return distinctBillingMonthsFromTxns(txns)
 }
 
-function formatMonthsProgressLabel(monthsSorted: string[]): string {
+function formatMonthsProgressLabel(monthsSorted: string[], monthFilter: string | null): string {
+  if (monthFilter) return `${formatBillingMonthLabel(monthFilter)} progress`
   if (monthsSorted.length === 0) return 'Classify progress'
-  if (monthsSorted.length === 1) return `${monthsSorted[0]} progress`
-  if (monthsSorted.length <= 3) return `${monthsSorted.join(' · ')} progress`
+  if (monthsSorted.length === 1) return `${formatBillingMonthLabel(monthsSorted[0]!)} progress`
+  if (monthsSorted.length <= 3) {
+    return monthsSorted.map(formatBillingMonthLabel).join(' · ') + ' progress'
+  }
   const first = monthsSorted[0]!
   const last = monthsSorted[monthsSorted.length - 1]!
-  return `${monthsSorted.length} months (${first}–${last}) progress`
+  return `${monthsSorted.length} months (${formatBillingMonthLabel(first)}–${formatBillingMonthLabel(last)}) progress`
 }
 
 function isoDateLocal(d: Date): string {
@@ -141,38 +153,95 @@ type RecentPanelEntry = {
   action: SessionAction
 }
 
-function classifyAccountStorageKey(householdId: string) {
-  return `spentwhatt:classifyAccountFilter:${householdId}`
+function MonthCaughtUpPanel({
+  monthFilter,
+  accountFilter,
+  accountAliases,
+  nextMonth,
+  onContinue,
+}: {
+  monthFilter: string
+  accountFilter: string | null
+  accountAliases: Map<string, string>
+  nextMonth: string | null
+  onContinue: () => void
+}) {
+  const cardLabel = accountFilter
+    ? formatAccountLabel(accountFilter, accountAliases)
+    : 'all cards'
+  return (
+    <>
+      <Confetti key={`month-${monthFilter}`} active={true} count={28} />
+      <motion.div
+        className="flex flex-col items-center gap-4 px-1 text-center"
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: 'spring', damping: 17 }}
+      >
+        <motion.div
+          className="text-5xl"
+          animate={{ rotate: [0, -6, 6, 0], scale: [1, 1.06, 1] }}
+          transition={{ duration: 0.6, ease: 'easeInOut' }}
+        >
+          ✓
+        </motion.div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold text-surface-50">
+            {formatBillingMonthLabel(monthFilter)} done!
+          </h2>
+          <p className="text-sm leading-relaxed text-surface-400">
+            {accountFilter ? (
+              <>
+                Nothing left for{' '}
+                <span className="font-semibold text-duo-green">{cardLabel}</span> in this month.
+              </>
+            ) : (
+              <>This billing month is fully classified.</>
+            )}
+            {nextMonth ? (
+              <>
+                {' '}
+                Next up:{' '}
+                <span className="font-semibold text-gem">{formatBillingMonthLabel(nextMonth)}</span>.
+              </>
+            ) : null}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onContinue}
+          className="rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
+        >
+          {nextMonth ? `Continue to ${formatBillingMonthLabel(nextMonth)}` : 'Continue'}
+        </button>
+      </motion.div>
+    </>
+  )
 }
 
-/** Context key: changes when the user switches tab / card filter / household.
+/** Context key: changes when the user switches tab / card / month filter / household.
  *  Session counters reset only when this changes. */
 function makeContextKey(
   householdId: string,
   accountFilter: string | null,
+  monthFilter: string | null,
   deckMode: string,
 ): string {
-  return `${householdId}:acct=${accountFilter ?? ''}:${deckMode}`
+  return `${householdId}:acct=${accountFilter ?? ''}:month=${monthFilter ?? ''}:${deckMode}`
 }
 
 /** Full fingerprint including transaction ids — used to detect deck content changes. */
 function makeDeckFingerprint(
   householdId: string,
   accountFilter: string | null,
+  monthFilter: string | null,
   deckTxns: { id: string }[],
 ): string {
   const af = accountFilter ?? ''
-  if (deckTxns.length === 0) return `${householdId}:acct=${af}:`
+  const mf = monthFilter ?? ''
+  if (deckTxns.length === 0) return `${householdId}:acct=${af}:month=${mf}:`
   const ids = deckTxns.map((t) => t.id).sort().join(',')
-  return `${householdId}:acct=${af}:${ids}`
-}
-
-function filterTransactionsByAccount(
-  txns: Transaction[],
-  accountFilter: string | null,
-): Transaction[] {
-  if (accountFilter == null) return txns
-  return txns.filter((t) => (t.account_last4?.trim() ?? '') === accountFilter)
+  return `${householdId}:acct=${af}:month=${mf}:${ids}`
 }
 
 function noteDraftFromGroup(txs: { user_note?: string | null }[]): string {
@@ -226,7 +295,7 @@ export default function SwipeDeck() {
   const flaggedQueueCount = useFlaggedCount(profile?.household_id)
   const {
     transactions: fetched, autoClassified, loading,
-    removeTransactions, addPendingTransactions,
+    removeTransactions, addPendingTransactions, refetchFresh,
     classifyTransaction, flagTransaction, markTransfer,
     reclassifyTransaction, revertToPending,
     detectRefunds, awardXp, getMonthStats, getAccountAliases, upsertAccountAlias,
@@ -252,6 +321,12 @@ export default function SwipeDeck() {
   const [refundsOffset, setRefundsOffset] = useState(0)
   const hasRefreshedProfile = useRef(false)
   const [accountFilter, setAccountFilter] = useState<string | null>(null)
+  const [monthFilter, setMonthFilter] = useState<string | null>(null)
+  const monthAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [deckVerifyState, setDeckVerifyState] = useState<'idle' | 'verifying' | 'confirmed'>('idle')
+  const [actionError, setActionError] = useState<string | null>(null)
+  const recentDragControls = useDragControls()
+  const [flaggedFootnoteTxns, setFlaggedFootnoteTxns] = useState<Transaction[]>([])
   const [accountAliases, setAccountAliases] = useState<Map<string, string>>(new Map())
   const [aliasDraft, setAliasDraft] = useState<AccountCardEditDraft | null>(null)
   const [accountTypes, setAccountTypes] = useState<Map<string, AccountType>>(new Map())
@@ -326,15 +401,76 @@ export default function SwipeDeck() {
     [distinctLast4InPending],
   )
 
+  const pendingMonthsPerCard = useMemo(
+    () => countPendingMonthsPerCard(allDeckTxns),
+    [allDeckTxns],
+  )
+
   const deckFromFetched = useMemo(
     () => filterTransactionsByAccount(allDeckTxns, accountFilter),
     [allDeckTxns, accountFilter],
   )
 
-  const distinctBillingMonthsInDeck = useMemo(
+  const monthsInScope = useMemo(
     () => distinctBillingMonthsFromDeck(deckFromFetched),
     [deckFromFetched],
   )
+
+  const shouldShowMonthChips = monthsInScope.length >= 2
+
+  const effectiveMonthFilter = useMemo(() => {
+    if (!shouldShowMonthChips) return null
+    if (monthFilter && deckFromFetched.some((t) => t.billing_month?.trim() === monthFilter)) {
+      return monthFilter
+    }
+    return oldestPendingBillingMonth(deckFromFetched)
+  }, [shouldShowMonthChips, monthFilter, deckFromFetched])
+
+  const deckScoped = useMemo(
+    () => filterTransactionsByBillingMonth(deckFromFetched, effectiveMonthFilter),
+    [deckFromFetched, effectiveMonthFilter],
+  )
+
+  const stacksByMonth = useMemo(
+    () => countPendingStacksByMonth(deckFromFetched),
+    [deckFromFetched],
+  )
+
+  const flaggedByMonth = useMemo(
+    () => countFlaggedByMonth(flaggedFootnoteTxns, accountFilter),
+    [flaggedFootnoteTxns, accountFilter],
+  )
+
+  const distinctBillingMonthsInDeck = useMemo(
+    () => (effectiveMonthFilter ? [effectiveMonthFilter] : monthsInScope),
+    [effectiveMonthFilter, monthsInScope],
+  )
+
+  const nextPendingMonthAfter = useCallback(
+    (current: string | null) => {
+      if (!current) return oldestPendingBillingMonth(deckFromFetched)
+      const idx = monthsInScope.indexOf(current)
+      for (let i = idx + 1; i < monthsInScope.length; i++) {
+        const m = monthsInScope[i]!
+        if ((stacksByMonth.get(m) ?? 0) > 0) return m
+      }
+      return null
+    },
+    [monthsInScope, stacksByMonth, deckFromFetched],
+  )
+
+  const showCardCaughtUp =
+    !loading && accountFilter != null && deckFromFetched.length === 0
+
+  const showMonthCaughtUp =
+    !loading &&
+    !showCardCaughtUp &&
+    effectiveMonthFilter != null &&
+    deckScoped.length === 0 &&
+    deckFromFetched.length > 0 &&
+    monthsInScope.some(
+      (m) => m !== effectiveMonthFilter && (stacksByMonth.get(m) ?? 0) > 0,
+    )
 
   const mergedRecentEntries = useMemo((): RecentPanelEntry[] => {
     const af = recentHistoryAccountLast4?.trim() ?? ''
@@ -529,8 +665,52 @@ export default function SwipeDeck() {
     return Array.from(s).sort()
   }, [distinctLast4InPending, householdLast4List, accountAliases])
 
-  const showCardCaughtUp =
-    deckMode === 'pending' && accountFilter != null && deckFromFetched.length === 0 && !loading
+  useEffect(() => {
+    const hid = profile?.household_id
+    if (!hid || deckMode !== 'pending') return
+    let cancelled = false
+    void supabase.rpc('get_flagged_transactions', { p_household_id: hid }).then(({ data, error }) => {
+      if (cancelled || error || !data) return
+      setFlaggedFootnoteTxns(data as Transaction[])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.household_id, deckMode, fetched.length, flaggedQueueCount])
+
+  const setMonthFilterPersist = useCallback(
+    (next: string | null) => {
+      setMonthFilter(next)
+      const hid = profile?.household_id
+      if (!hid) return
+      try {
+        if (next == null) sessionStorage.removeItem(classifyMonthStorageKey(hid))
+        else sessionStorage.setItem(classifyMonthStorageKey(hid), next)
+      } catch {
+        /* ignore */
+      }
+    },
+    [profile?.household_id],
+  )
+
+  const advanceToNextMonth = useCallback(
+    (fromMonth: string) => {
+      const next = nextPendingMonthAfter(fromMonth)
+      if (next) setMonthFilterPersist(next)
+    },
+    [nextPendingMonthAfter, setMonthFilterPersist],
+  )
+
+  useEffect(() => {
+    if (!showMonthCaughtUp || !effectiveMonthFilter) return
+    if (monthAdvanceTimerRef.current) clearTimeout(monthAdvanceTimerRef.current)
+    monthAdvanceTimerRef.current = setTimeout(() => {
+      advanceToNextMonth(effectiveMonthFilter)
+    }, 3200)
+    return () => {
+      if (monthAdvanceTimerRef.current) clearTimeout(monthAdvanceTimerRef.current)
+    }
+  }, [showMonthCaughtUp, effectiveMonthFilter, advanceToNextMonth])
 
   useEffect(() => {
     const hid = profile?.household_id
@@ -571,8 +751,20 @@ export default function SwipeDeck() {
       } catch {
         /* ignore */
       }
+      if (next == null) {
+        const globalMonths = distinctBillingMonthsFromTxns(allDeckTxns)
+        if (globalMonths.length < 2) setMonthFilterPersist(null)
+      } else {
+        const cardTxns = filterTransactionsByAccount(allDeckTxns, next)
+        const cardMonths = distinctBillingMonthsFromTxns(cardTxns)
+        if (cardMonths.length >= 2) {
+          setMonthFilterPersist(oldestPendingBillingMonth(cardTxns))
+        } else {
+          setMonthFilterPersist(null)
+        }
+      }
     },
-    [profile?.household_id],
+    [profile?.household_id, allDeckTxns, setMonthFilterPersist],
   )
 
   useEffect(() => {
@@ -613,11 +805,19 @@ export default function SwipeDeck() {
     const hid = profile?.household_id
     if (!hid) return
     try {
-      const raw = sessionStorage.getItem(classifyAccountStorageKey(hid))
-      if (raw === null || raw === '') setAccountFilter(null)
-      else setAccountFilter(raw)
+      const rawMonth = sessionStorage.getItem(classifyMonthStorageKey(hid))
+      const rawAcct = sessionStorage.getItem(classifyAccountStorageKey(hid))
+      queueMicrotask(() => {
+        if (rawMonth === null || rawMonth === '') setMonthFilter(null)
+        else setMonthFilter(rawMonth)
+        if (rawAcct === null || rawAcct === '') setAccountFilter(null)
+        else setAccountFilter(rawAcct)
+      })
     } catch {
-      setAccountFilter(null)
+      queueMicrotask(() => {
+        setMonthFilter(null)
+        setAccountFilter(null)
+      })
     }
   }, [profile?.household_id])
 
@@ -663,29 +863,31 @@ export default function SwipeDeck() {
       lastContextKeyRef.current = null
     }
 
-    const deckFp = makeDeckFingerprint(hid, accountFilter, deckFromFetched)
+    const deckFp = makeDeckFingerprint(hid, accountFilter, effectiveMonthFilter, deckScoped)
     if (deckFp === lastSyncedFingerprintRef.current) {
       void loadMonthStats()
       return
     }
 
-    const ctxKey = makeContextKey(hid, accountFilter, deckMode)
+    const ctxKey = makeContextKey(hid, accountFilter, effectiveMonthFilter, deckMode)
     const contextChanged = ctxKey !== lastContextKeyRef.current
     lastContextKeyRef.current = ctxKey
 
     const gen = ++deckSyncGenerationRef.current
+    /** Mark synced before load/refreshDeck — refreshDeck re-renders immediately while init is still async. */
+    lastSyncedFingerprintRef.current = deckFp
 
     const init = async () => {
+      const { load, refreshDeck } = useClassificationStore.getState()
       if (contextChanged) {
-        store.load(deckFromFetched)
+        load(deckScoped)
       } else {
-        store.refreshDeck(deckFromFetched)
+        refreshDeck(deckScoped)
       }
       let finalTxns = allDeckTxns
 
       if (allDeckTxns.length === 0) {
         if (gen !== deckSyncGenerationRef.current) return
-        lastSyncedFingerprintRef.current = deckFp
         return
       }
 
@@ -694,7 +896,11 @@ export default function SwipeDeck() {
         lastSyncedFingerprintRef.current = makeDeckFingerprint(
           hid,
           accountFilter,
-          filterTransactionsByAccount(finalTxns, accountFilter),
+          effectiveMonthFilter,
+          filterTransactionsByBillingMonth(
+            filterTransactionsByAccount(finalTxns, accountFilter),
+            effectiveMonthFilter,
+          ),
         )
         return
       }
@@ -704,10 +910,9 @@ export default function SwipeDeck() {
         if (gen !== deckSyncGenerationRef.current) return
         setRefundsOffset(offsetCount)
         if (offsetCount > 0) {
-          const supa = (await import('../../lib/supabase')).supabase
           const [pendingRes, autoRes] = await Promise.all([
-            supa.rpc('get_pending_transactions', { p_household_id: hid }),
-            supa.rpc('get_auto_classified_transactions', { p_household_id: hid }),
+            supabase.rpc('get_pending_transactions', { p_household_id: hid }),
+            supabase.rpc('get_auto_classified_transactions', { p_household_id: hid }),
           ])
           if (gen !== deckSyncGenerationRef.current) return
           const refreshedPending =
@@ -717,11 +922,15 @@ export default function SwipeDeck() {
           const merged = [...refreshedPending, ...refreshedAuto]
           if (merged.length > 0) {
             finalTxns = merged
-            const deckAfter = filterTransactionsByAccount(finalTxns, accountFilter)
+            const deckAfter = filterTransactionsByBillingMonth(
+              filterTransactionsByAccount(finalTxns, accountFilter),
+              effectiveMonthFilter,
+            )
+            const { load: loadAfter, refreshDeck: refreshAfter } = useClassificationStore.getState()
             if (contextChanged) {
-              store.load(deckAfter)
+              loadAfter(deckAfter)
             } else {
-              store.refreshDeck(deckAfter)
+              refreshAfter(deckAfter)
             }
           }
         }
@@ -732,7 +941,11 @@ export default function SwipeDeck() {
       lastSyncedFingerprintRef.current = makeDeckFingerprint(
         hid,
         accountFilter,
-        filterTransactionsByAccount(finalTxns, accountFilter),
+        effectiveMonthFilter,
+        filterTransactionsByBillingMonth(
+          filterTransactionsByAccount(finalTxns, accountFilter),
+          effectiveMonthFilter,
+        ),
       )
     }
 
@@ -741,12 +954,12 @@ export default function SwipeDeck() {
   }, [
     fetched,
     allDeckTxns,
+    deckScoped,
     deckFromFetched,
     accountFilter,
+    effectiveMonthFilter,
     loading,
     profile?.household_id,
-    store.load,
-    store.refreshDeck,
     detectRefunds,
     loadMonthStats,
     deckMode,
@@ -771,29 +984,44 @@ export default function SwipeDeck() {
     [store],
   )
 
+  /** Runs an async RPC per tx; on first failure re-injects the group and surfaces an error. */
+  const runGroupRpc = useCallback(
+    async (
+      group: MerchantGroup,
+      rpc: (txId: string) => Promise<{ error: unknown }>,
+    ): Promise<boolean> => {
+      for (const tx of group.transactions) {
+        const { error } = await rpc(tx.id)
+        if (error) {
+          addPendingTransactions(group.transactions.map((t) => ({ ...t })))
+          setActionError('Could not save — try again. Your stack was put back.')
+          setTimeout(() => setActionError(null), 5000)
+          return false
+        }
+      }
+      return true
+    },
+    [addPendingTransactions],
+  )
+
   const handleSwipeRight = async () => {
     const group = store.activeGroup
     if (!group || !user) {
       store.openCategoryPicker()
       return
     }
-    // Predicted card → 1-tap confirm. No-prediction card → fall back to picker.
     if (deckMode === 'pending' && group.predictedCategory) {
       const predicted = group.predictedCategory
-      for (const tx of group.transactions) {
-        await confirmAutoClassified(tx.id, user.id)
-      }
-      // Boost the merchant→category mapping confidence so future uploads stick.
+      const ok = await runGroupRpc(group, async (txId) => {
+        await confirmAutoClassified(txId, user.id)
+        return { error: null }
+      })
+      if (!ok) return
       learnMerchant(group.merchantRaw, predicted)
       removeTransactions(group.transactions.map((t) => t.id))
 
       const txCount = group.count
       const xpEarned = txCount * XP_VALUES.CLASSIFY_EASY
-      // Advance before any await: pairing this with removeTransactions in the same
-      // sync block means the deck-sync useEffect's refreshDeck rebuilds groups with
-      // the classified item already gone, so the new currentIndex=0 still points at
-      // the correct next card. Awaiting awardXp first let refreshDeck reset to 0
-      // and then advance bump to 1, skipping a card on every fast swipe.
       store.advance(txCount)
       const action = recordSessionAction(group, 'auto-confirmed', predicted)
       showUndoToast(action)
@@ -826,9 +1054,8 @@ export default function SwipeDeck() {
     }
     const group = store.activeGroup
     if (!group) return
-    for (const tx of group.transactions) {
-      await flagTransaction(tx.id)
-    }
+    const ok = await runGroupRpc(group, (txId) => flagTransaction(txId))
+    if (!ok) return
     removeTransactions(group.transactions.map((t) => t.id))
     store.flag()
     const action = recordSessionAction(group, 'flagged', null)
@@ -839,9 +1066,8 @@ export default function SwipeDeck() {
   const handleTransfer = async () => {
     const group = store.activeGroup
     if (!group || !user) return
-    for (const tx of group.transactions) {
-      await markTransfer(tx.id, user.id)
-    }
+    const ok = await runGroupRpc(group, (txId) => markTransfer(txId, user.id))
+    if (!ok) return
     removeTransactions(group.transactions.map((t) => t.id))
     store.markTransfer()
     const action = recordSessionAction(group, 'transfer', OWN_TRANSFERS_CATEGORY_ID)
@@ -874,9 +1100,8 @@ export default function SwipeDeck() {
 
     store.closeCategoryPicker()
 
-    for (const tx of group.transactions) {
-      await classifyTransaction(tx.id, categoryId, user.id)
-    }
+    const ok = await runGroupRpc(group, (txId) => classifyTransaction(txId, categoryId, user.id))
+    if (!ok) return
     learnMerchant(group.merchantRaw, categoryId)
     removeTransactions(group.transactions.map((t) => t.id))
 
@@ -985,8 +1210,33 @@ export default function SwipeDeck() {
     deckMode === 'no-idea'
       ? store.completedCount + store.transferCount
       : store.completedCount + store.flaggedCount + store.transferCount
-  const isDone = total > 0 && processed >= total
+  /** Remaining stacks in deck; after refreshDeck currentIndex resets to 0 so this equals groups.length. */
+  const remainingStacks = Math.max(0, total - store.currentIndex)
+  /** Stable session denominator — processed + remaining, not shrinking groups.length alone. */
+  const sessionStackTotal = processed + remainingStacks
+  const sessionStackCurrent = Math.min(processed, sessionStackTotal)
+  const isHouseholdQueueEmpty = allDeckTxns.length === 0
+  const isDone =
+    !loading && isHouseholdQueueEmpty && store.sessionHistory.length > 0
   const visibleCards = store.groups.slice(store.currentIndex, store.currentIndex + 3)
+  const nextStackPreview = store.groups[store.currentIndex + 1]
+  const useScopedProgress = accountFilter != null || effectiveMonthFilter != null
+  const scopedStackTotal = sessionStackTotal
+  const scopedTxTotal = deckScoped.length
+
+
+  useEffect(() => {
+    if (!isDone) return
+    let cancelled = false
+    queueMicrotask(() => setDeckVerifyState('verifying'))
+    void refetchFresh().then(() => {
+      if (cancelled) return
+      setDeckVerifyState('confirmed')
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isDone, refetchFresh])
 
   useEffect(() => {
     if (isDone && !hasRefreshedProfile.current) {
@@ -1003,7 +1253,7 @@ export default function SwipeDeck() {
     )
   }
 
-  if (total === 0 && !showCardCaughtUp) {
+  if (total === 0 && !showCardCaughtUp && !showMonthCaughtUp) {
     if (deckMode === 'no-idea') {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
@@ -1057,7 +1307,16 @@ export default function SwipeDeck() {
     )
   }
 
-  if (isDone) {
+  if (isDone && deckVerifyState === 'verifying') {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
+        <p className="text-sm text-surface-400">Checking for remaining transactions…</p>
+      </div>
+    )
+  }
+
+  if (isDone && deckVerifyState === 'confirmed' && allDeckTxns.length === 0) {
     const totalXp = store.classifiedTxCount * XP_VALUES.CLASSIFY_MANUAL
     return (
       <>
@@ -1235,6 +1494,11 @@ export default function SwipeDeck() {
                         />
                       )}
                       {formatAccountLabel(last4, accountAliases)}
+                      {(pendingMonthsPerCard.get(last4) ?? 0) > 1 && (
+                        <span className="rounded bg-surface-800/80 px-1 py-0.5 text-[9px] tabular-nums text-surface-400">
+                          {pendingMonthsPerCard.get(last4)} mo
+                        </span>
+                      )}
                     </button>
                     {isSelected && (
                       <button
@@ -1260,6 +1524,99 @@ export default function SwipeDeck() {
                 )
               })}
             </div>
+            {accountFilter != null && cardChipShowAll && (
+              <p className="text-center text-[10px] text-surface-500">
+                Viewing{' '}
+                <span className="font-semibold text-surface-300">
+                  {formatAccountLabel(accountFilter, accountAliases)}
+                </span>{' '}
+                only ·{' '}
+                <button
+                  type="button"
+                  onClick={() => setAccountFilterPersist(null)}
+                  className="font-semibold text-duo-green underline-offset-2 hover:underline"
+                >
+                  all cards
+                </button>
+              </p>
+            )}
+            {accountFilter != null && classifyCardPicklist.length > 1 && (
+              <p className="text-center text-[10px] text-surface-500">
+                {classifyCardPicklist.filter((c) => c !== accountFilter && last4WithPendingWork.has(c)).length}{' '}
+                other card
+                {classifyCardPicklist.filter((c) => c !== accountFilter && last4WithPendingWork.has(c)).length !== 1
+                  ? 's'
+                  : ''}{' '}
+                may still have items
+              </p>
+            )}
+          </div>
+        )}
+
+        {shouldShowMonthChips && (
+          <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-white/[0.06] bg-surface-950/35 px-3 py-2.5 backdrop-blur-sm">
+            <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-surface-500">
+              Billing month
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {monthsInScope.map((bm) => {
+                const pendingStacks = stacksByMonth.get(bm) ?? 0
+                const isCleared = pendingStacks === 0
+                const isActive = effectiveMonthFilter === bm
+                const flaggedCount = flaggedByMonth.get(bm) ?? 0
+                return (
+                  <button
+                    key={bm}
+                    type="button"
+                    onClick={() => setMonthFilterPersist(bm)}
+                    className={`inline-flex flex-col items-center gap-0.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                      isActive
+                        ? 'bg-gem/25 text-gem'
+                        : isCleared
+                          ? 'bg-surface-800/40 text-surface-500'
+                          : 'text-surface-500 hover:bg-surface-800/60 hover:text-surface-300'
+                    }`}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {isCleared ? (
+                        <span className="text-[10px] text-duo-green" aria-hidden>
+                          ✓
+                        </span>
+                      ) : (
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-duo-green shadow-[0_0_8px_rgba(88,204,2,0.7)]"
+                          aria-hidden
+                        />
+                      )}
+                      {formatBillingMonthLabel(bm)}
+                      {!isCleared && pendingStacks > 0 && (
+                        <span className="text-[9px] tabular-nums text-surface-400">{pendingStacks}</span>
+                      )}
+                    </span>
+                    {flaggedCount > 0 && (
+                      <span className="text-[9px] font-medium text-flame/90">
+                        {flaggedCount} in No idea
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {effectiveMonthFilter && shouldShowMonthChips && !showCardCaughtUp && !showMonthCaughtUp && (
+          <div className="mb-2 rounded-xl border border-gem/20 bg-gem/[0.06] px-3 py-2 text-center text-[11px] leading-snug text-surface-400">
+            Focus:{' '}
+            <span className="font-semibold text-gem">{formatBillingMonthLabel(effectiveMonthFilter)}</span>
+            {accountFilter ? (
+              <>
+                {' '}
+                · {formatAccountLabel(accountFilter, accountAliases)}
+              </>
+            ) : null}
+            {' — '}
+            other months are waiting
           </div>
         )}
 
@@ -1282,21 +1639,59 @@ export default function SwipeDeck() {
           </div>
         )}
 
-        {/* Month-level progress */}
-        {monthTotal > 0 && (
+        {/* Month-level progress — household view only when unscoped */}
+        {!useScopedProgress && monthTotal > 0 && (
           <div className="mb-2 rounded-2xl border border-white/[0.06] bg-surface-950/35 px-3 py-2.5 backdrop-blur-sm">
             <ProgressBar
-              current={monthClassified + store.classifiedTxCount}
+              current={monthClassified}
               total={monthTotal}
-              label={formatMonthsProgressLabel(distinctBillingMonthsInDeck)}
+              label={formatMonthsProgressLabel(distinctBillingMonthsInDeck, effectiveMonthFilter)}
             />
           </div>
         )}
 
+        {/* Scoped deck progress */}
+        {useScopedProgress && scopedStackTotal > 0 && !showCardCaughtUp && !showMonthCaughtUp && (
+          <div className="mb-2 rounded-2xl border border-white/[0.06] bg-surface-950/35 px-3 py-2.5 backdrop-blur-sm">
+            <ProgressBar
+              current={sessionStackCurrent}
+              total={scopedStackTotal}
+              label={
+                effectiveMonthFilter
+                  ? `${formatBillingMonthLabel(effectiveMonthFilter)} · ${sessionStackCurrent} of ${scopedStackTotal} stacks`
+                  : `${sessionStackCurrent} of ${scopedStackTotal} stacks`
+              }
+            />
+            <p className="mt-1 text-center text-[10px] text-surface-500">
+              {scopedTxTotal} transaction{scopedTxTotal !== 1 ? 's' : ''} in this focus
+            </p>
+          </div>
+        )}
+
         {/* Session progress */}
-        {!showCardCaughtUp && (
+        {!showCardCaughtUp && !showMonthCaughtUp && !useScopedProgress && (
           <div className="rounded-2xl border border-white/[0.06] bg-surface-950/35 px-3 py-2.5 backdrop-blur-sm">
-            <ProgressBar current={processed} total={total} label="This session" />
+            <ProgressBar
+              current={sessionStackCurrent}
+              total={sessionStackTotal}
+              label={
+                effectiveMonthFilter
+                  ? `This month · ${sessionStackCurrent} of ${sessionStackTotal} stacks`
+                  : 'This session'
+              }
+            />
+            {nextStackPreview && (
+              <p className="mt-1 truncate text-center text-[10px] text-surface-500">
+                Up next: {nextStackPreview.merchantClean ?? nextStackPreview.merchantRaw}
+              </p>
+            )}
+          </div>
+        )}
+        {showMonthCaughtUp && effectiveMonthFilter && (
+          <div className="rounded-2xl border border-gem/20 bg-gem/[0.07] px-3 py-2.5 backdrop-blur-sm">
+            <p className="text-center text-xs font-semibold text-gem">
+              {formatBillingMonthLabel(effectiveMonthFilter)} cleared — nice work!
+            </p>
           </div>
         )}
         {showCardCaughtUp && (
@@ -1306,7 +1701,7 @@ export default function SwipeDeck() {
             </p>
           </div>
         )}
-        {deckMode === 'pending' && !showCardCaughtUp && (
+        {deckMode === 'pending' && !showCardCaughtUp && !showMonthCaughtUp && (
           <p className="mt-2 text-center text-[11px] leading-snug text-surface-500">
             Swipe right to categorize, or left if you have no idea — those go to the No idea tab.
           </p>
@@ -1320,7 +1715,15 @@ export default function SwipeDeck() {
 
       <div className="relative flex-1 px-4 py-6">
         <div className="relative mx-auto h-full max-w-sm">
-          {showCardCaughtUp && accountFilter ? (
+          {showMonthCaughtUp && effectiveMonthFilter ? (
+            <MonthCaughtUpPanel
+              monthFilter={effectiveMonthFilter}
+              accountFilter={accountFilter}
+              accountAliases={accountAliases}
+              nextMonth={nextPendingMonthAfter(effectiveMonthFilter)}
+              onContinue={() => advanceToNextMonth(effectiveMonthFilter)}
+            />
+          ) : showCardCaughtUp && accountFilter ? (
             <>
               <Confetti key={`caught-${accountFilter}`} active={true} count={36} />
               <motion.div
@@ -1421,6 +1824,13 @@ export default function SwipeDeck() {
                       onOpenNote={i === 0 ? openNoteModal : undefined}
                       categories={resolvedCategories}
                       pickerCancelTick={i === 0 ? pickerCancelTick : undefined}
+                      billingMonthLabel={
+                        group.transactions[0]?.billing_month
+                          ? formatBillingMonthLabel(group.transactions[0].billing_month.trim())
+                          : null
+                      }
+                      sessionStackIndex={i === 0 ? sessionStackCurrent + 1 : undefined}
+                      sessionStackTotal={i === 0 ? sessionStackTotal : undefined}
                     />
                   ))
                   .reverse()}
@@ -1594,6 +2004,8 @@ export default function SwipeDeck() {
                   exit={{ y: '100%' }}
                   transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                   drag="y"
+                  dragControls={recentDragControls}
+                  dragListener={false}
                   dragConstraints={{ top: 0, left: 0, right: 0, bottom: 0 }}
                   dragElastic={0.22}
                   dragMomentum={false}
@@ -1623,7 +2035,11 @@ export default function SwipeDeck() {
                         : undefined
                     }
                   >
-                  <div className="shrink-0 cursor-grab touch-none px-4 pb-2 pt-3 select-none active:cursor-grabbing">
+                  <div
+                    className="shrink-0 cursor-grab px-4 pb-2 pt-3 select-none active:cursor-grabbing"
+                    style={{ touchAction: 'none' }}
+                    onPointerDown={(e) => recentDragControls.start(e)}
+                  >
                     <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" aria-hidden />
                     <h3 id="recent-panel-title" className="mb-1 text-center text-base font-bold text-surface-50">
                       Recent & revise
@@ -1635,6 +2051,7 @@ export default function SwipeDeck() {
                   <div
                     ref={recentScrollRef}
                     className="flex min-h-0 flex-1 touch-pan-y flex-col overflow-y-auto overscroll-y-contain px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]"
+                    style={{ overscrollBehaviorY: 'contain' }}
                   >
                   <div className={`${ui.glassFlat} mb-4 space-y-3 p-3`}>
                     <label className="flex flex-col gap-1">
@@ -1809,6 +2226,26 @@ export default function SwipeDeck() {
                   </div>
                 </motion.div>
               </>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
+
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {actionError && (
+              <motion.div
+                className="fixed inset-x-0 z-[210] flex justify-center px-4"
+                style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5.5rem)' }}
+                initial={{ y: 24, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 24, opacity: 0 }}
+              >
+                <div className="max-w-sm rounded-2xl border border-flame/40 bg-surface-950/95 px-4 py-2.5 text-center text-xs font-semibold text-flame shadow-lg backdrop-blur-xl">
+                  {actionError}
+                </div>
+              </motion.div>
             )}
           </AnimatePresence>,
           document.body,

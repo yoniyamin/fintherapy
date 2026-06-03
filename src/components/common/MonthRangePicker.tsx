@@ -61,12 +61,13 @@ export default function MonthRangePicker({ value, onChange, monthsWithData, allo
   const [draft, setDraft] = useState<Set<string>>(() => new Set(value.months))
   const panelRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (open) {
+  const handleToggleOpen = () => {
+    if (!open) {
       setDraft(new Set(value.months))
       setMultiMode(value.mode !== 'single')
     }
-  }, [open, value])
+    setOpen(!open)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -139,7 +140,7 @@ export default function MonthRangePicker({ value, onChange, monthsWithData, allo
     <div className="relative" ref={panelRef}>
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={handleToggleOpen}
         className={`flex w-full items-center justify-between gap-2 ${ui.select}`}
       >
         <span className="truncate">{getChipLabel(value)}</span>

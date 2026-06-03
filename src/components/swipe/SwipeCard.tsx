@@ -31,6 +31,11 @@ interface SwipeCardProps {
   /** Increments when the picker is dismissed without a selection. The top card
    *  springs back to center so a swipe-right that opened the picker can be undone. */
   pickerCancelTick?: number
+  /** Human-readable billing month for this stack. */
+  billingMonthLabel?: string | null
+  /** Position within the scoped session deck (top card only). */
+  sessionStackIndex?: number
+  sessionStackTotal?: number
 }
 
 const SWIPE_DISTANCE = 90
@@ -53,6 +58,9 @@ export default function SwipeCard({
   onOpenNote,
   categories,
   pickerCancelTick,
+  billingMonthLabel = null,
+  sessionStackIndex,
+  sessionStackTotal,
 }: SwipeCardProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const cats = categories ?? CATEGORIES
@@ -286,6 +294,16 @@ export default function SwipeCard({
         )}
 
         <div className="text-center">
+          {billingMonthLabel && (
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gem/90">
+              {billingMonthLabel} · billing
+            </p>
+          )}
+          {isTopCard && sessionStackIndex != null && sessionStackTotal != null && sessionStackTotal > 0 && (
+            <p className="mb-1 text-[10px] font-medium text-surface-500">
+              Stack {sessionStackIndex} of {sessionStackTotal}
+            </p>
+          )}
           <p className="text-xs text-surface-500">{dateRange}</p>
           <div className="mt-2 flex items-center justify-center gap-2">
             <h2 className="text-xl font-bold text-surface-50">

@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { fetchPendingTransactionsShared } from '../lib/pendingTransactionsCache'
+import {
+  fetchPendingTransactionsShared,
+  invalidatePendingTransactionsInflight,
+} from '../lib/pendingTransactionsCache'
 import type { AccountType, Transaction } from '../types/database'
 
 /** `pending` = normal classify queue; `no-idea` = flagged transactions deck. */
@@ -97,6 +100,20 @@ export function useTransactions(
   useEffect(() => {
     fetchPending()
   }, [fetchPending])
+
+  /** Clears shared cache and refetches — use on classify mount and before deck-cleared verification. */
+  const refetchFresh = useCallback(async () => {
+    if (!householdId) return
+    invalidatePendingTransactionsInflight(householdId)
+    loadedKeyRef.current = null
+    await fetchPending()
+  }, [householdId, fetchPending])
+
+  useEffect(() => {
+    if (!householdId) return
+    invalidatePendingTransactionsInflight(householdId)
+    loadedKeyRef.current = null
+  }, [householdId, deck])
 
   const removeTransactions = useCallback((ids: string[]) => {
     const idSet = new Set(ids)
@@ -466,6 +483,7 @@ export function useTransactions(
     autoClassified,
     loading,
     fetchPending,
+    refetchFresh,
     removeTransactions,
     addPendingTransactions,
     classifyTransaction,

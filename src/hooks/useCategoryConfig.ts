@@ -18,18 +18,32 @@ export interface CategoryOverride {
  */
 export function useCategoryConfig(householdId: string | null | undefined) {
   const [overrides, setOverrides] = useState<CategoryOverride[]>([])
-  const [loaded, setLoaded] = useState(false)
+  const [loadedHouseholdId, setLoadedHouseholdId] = useState<string | null>(null)
+  const loaded = !householdId || loadedHouseholdId === householdId
 
   const fetchOverrides = useCallback(async () => {
-    if (!householdId) { setLoaded(true); return }
+    if (!householdId) return
     const { data, error } = await supabase.rpc('get_category_overrides', {
       p_household_id: householdId,
     })
     if (!error && data) setOverrides(data as CategoryOverride[])
-    setLoaded(true)
+    setLoadedHouseholdId(householdId)
   }, [householdId])
 
-  useEffect(() => { fetchOverrides() }, [fetchOverrides])
+  useEffect(() => {
+    if (!householdId) return
+    let cancelled = false
+    void supabase.rpc('get_category_overrides', {
+      p_household_id: householdId,
+    }).then(({ data, error }) => {
+      if (cancelled) return
+      if (!error && data) setOverrides(data as CategoryOverride[])
+      setLoadedHouseholdId(householdId)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [householdId])
 
   const categories: CategoryDef[] = useMemo(() => {
     if (overrides.length === 0) return DEFAULT_CATEGORIES as unknown as CategoryDef[]

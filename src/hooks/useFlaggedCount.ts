@@ -7,10 +7,7 @@ export function useFlaggedCount(householdId: string | null | undefined) {
   const [count, setCount] = useState(0)
 
   useEffect(() => {
-    if (!householdId) {
-      setCount(0)
-      return
-    }
+    if (!householdId) return
     let cancelled = false
 
     const load = () => {
@@ -28,5 +25,5 @@ export function useFlaggedCount(householdId: string | null | undefined) {
     }
   }, [householdId])
 
-  return count
+  return householdId ? count : 0
 }

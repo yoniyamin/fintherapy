@@ -1,5 +1,13 @@
-/**
- * Vite resolves extensionless imports as `.ts` before `.tsx`, so this file must exist
- * as the entry for `from '../hooks/useAuth'`. Implementation lives in useAuthImpl.tsx.
- */
-export { AuthProvider, useAuth, type AuthContextValue, type BootStage } from './useAuthImpl.tsx'
+import { useContext } from 'react'
+import { AuthContext, type AuthContextValue, type BootStage } from './authContext'
+
+export { AuthProvider } from './useAuthImpl.tsx'
+export type { AuthContextValue, BootStage }
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext)
+  if (!ctx) {
+    throw new Error('useAuth must be used within AuthProvider')
+  }
+  return ctx
+}

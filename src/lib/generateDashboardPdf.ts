@@ -79,7 +79,12 @@ function hexToRgb(hex: string): [number, number, number] {
 }
 
 function stripEmoji(text: string): string {
-  return text.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '').trim()
+  return text
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    .replace(/\uFE0F/gu, '')
+    .replace(/\u200D/gu, '')
+    .replace(/\u20E3/gu, '')
+    .trim()
 }
 
 // --------------- D3 SVG chart builders ---------------

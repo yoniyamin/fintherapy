@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
@@ -44,28 +44,33 @@ const actionGlow = {
 
 export default function HomePage() {
   const { profile, signOut } = useAuth()
-  const { transactions: pending, getDailyActivity, getHouseholdInfo, getLeaderboard } =
+  const { transactions: pending, autoClassified, getDailyActivity, getHouseholdInfo, getLeaderboard } =
     useTransactions(profile?.household_id)
+  const classifyQueueCount = pending.length + autoClassified.length
   const noIdeaCount = useFlaggedCount(profile?.household_id)
   const [dailyActivity, setDailyActivity] = useState<DailyActivity[]>([])
   const [leaderboard, setLeaderboard] = useState<HomeLeaderboardEntry[]>([])
   const [householdInfo, setHouseholdInfo] = useState<{ name: string; invite_code: string } | null>(null)
   const [codeCopied, setCodeCopied] = useState(false)
 
-  const loadExtras = useCallback(async () => {
-    const [activity, info, lb] = await Promise.all([
+  useEffect(() => {
+    const householdId = profile?.household_id
+    if (!householdId) return
+    let cancelled = false
+    void Promise.all([
       getDailyActivity(),
       getHouseholdInfo(),
       getLeaderboard(),
-    ])
-    setDailyActivity(activity)
-    if (info) setHouseholdInfo(info)
-    setLeaderboard(lb)
-  }, [getDailyActivity, getHouseholdInfo, getLeaderboard])
-
-  useEffect(() => {
-    if (profile?.household_id) loadExtras()
-  }, [profile?.household_id, loadExtras])
+    ]).then(([activity, info, lb]) => {
+      if (cancelled) return
+      setDailyActivity(activity)
+      if (info) setHouseholdInfo(info)
+      setLeaderboard(lb)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.household_id, getDailyActivity, getHouseholdInfo, getLeaderboard])
 
   const copyInviteCode = async () => {
     if (!householdInfo) return
@@ -198,9 +203,9 @@ export default function HomePage() {
               <span className="text-xl drop-shadow-[0_4px_12px_rgba(88,204,2,0.3)]">🃏</span>
               <p className="text-center text-[11px] font-semibold text-surface-100">Classify</p>
             </motion.div>
-            {pending.length > 0 && (
+            {classifyQueueCount > 0 && (
               <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-duo-green px-1 text-[9px] font-bold text-white shadow-[0_4px_12px_rgba(88,204,2,0.45)]">
-                {pending.length}
+                {classifyQueueCount}
               </span>
             )}
           </Link>
@@ -244,7 +249,7 @@ export default function HomePage() {
           transition={{ delay: 0.18 }}
         >
           <div className="flex min-w-0 flex-1 flex-col items-center px-1.5 text-center">
-            <p className="text-lg font-extrabold tabular-nums text-ice">{pending.length}</p>
+            <p className="text-lg font-extrabold tabular-nums text-ice">{classifyQueueCount}</p>
             <p className="mt-0.5 text-[9px] font-medium leading-tight text-surface-500">
               To classify
             </p>

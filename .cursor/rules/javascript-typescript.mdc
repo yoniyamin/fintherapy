@@ -1,0 +1,49 @@
+---
+description: JavaScript and TypeScript code quality standards
+globs: **/*.{js,jsx,ts,tsx}
+alwaysApply: false
+---
+
+# JavaScript/TypeScript Code Quality
+
+## Persona
+
+Senior full-stack developer with deep, practical knowledge.
+
+## Key Mindsets
+
+1. **Simplicity** — Straightforward code over clever code.
+2. **Readability** — Easy to read and understand.
+3. **Performance** — Keep in mind; do not over-optimize at the cost of readability.
+4. **Maintainability** — Easy to maintain and update.
+5. **Testability** — Easy to test.
+6. **Reusability** — Reusable components and functions.
+
+Less code is better. Lines of code = debt.
+
+## Code Guidelines
+
+1. **Early returns** — Avoid nested conditions.
+2. **Conditional classes** — Prefer conditional classes over ternary operators for class attributes.
+3. **Descriptive names** — Prefix event handlers with `handle` (e.g. `handleClick`, `handleKeyDown`).
+4. **Constants over functions** — Use constants where possible; define types when applicable.
+5. **Correct and DRY** — Best practice, don't repeat yourself.
+6. **Functional and immutable** — Prefer functional, immutable style unless it becomes much more verbose.
+7. **Minimal code changes** — Only modify code related to the task. Avoid unrelated changes, comment edits, or cleanup unless instructed.
+
+## Comments and Documentation
+
+- Add a comment at the start of each function describing what it does.
+- Use JSDoc for JavaScript (not TypeScript) and modern ES6 syntax.
+
+## Function Ordering
+
+Define composing functions above the functions they compose. Example: menu function above its button handlers.
+
+## Handling Bugs
+
+If existing code is buggy or instructions lead to suboptimal code, add `TODO:` comments outlining the problem.
+
+## Planning
+
+For non-trivial work: outline a step-by-step pseudocode plan, confirm it, then implement.

@@ -140,8 +140,26 @@ export default function UploadPage() {
   }, [profile?.household_id, getAccountAliases, getDistinctAccountLast4ForHousehold])
 
   useEffect(() => {
-    void refreshAccountPickers()
-  }, [refreshAccountPickers])
+    const householdId = profile?.household_id
+    if (!householdId) return
+    let cancelled = false
+    void Promise.all([
+      getAccountAliases(),
+      getDistinctAccountLast4ForHousehold(),
+    ]).then(([aliasRows, last4s]) => {
+      if (cancelled) return
+      setAccountAliases(new Map(aliasRows.map((r) => [r.last4.trim(), r.label.trim()])))
+      const types = new Map<string, AccountType>()
+      for (const a of aliasRows) {
+        if (a.account_type) types.set(a.last4.trim(), a.account_type)
+      }
+      setAccountTypes(types)
+      setKnownLast4sFromData(last4s)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.household_id, getAccountAliases, getDistinctAccountLast4ForHousehold])
 
   /** Saved names ∪ any last-4 present in transactions (new cards show without naming first). */
   const accountPicklist = useMemo(() => {
@@ -206,7 +224,7 @@ export default function UploadPage() {
           : `Updated ${updatedCount} transaction${updatedCount !== 1 ? 's' : ''}. Refresh reveal/classify if already open.`,
       ok: true,
     })
-  }, [profile?.household_id, syncBillingMonthFromTxDate])
+  }, [profile, syncBillingMonthFromTxDate])
 
   const currentStep = result ? 2 : file ? 1 : 0
 

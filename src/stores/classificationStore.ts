@@ -136,6 +136,10 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
   },
 
   refreshDeck: (txns) => {
+    const { transactions: prevTxns } = get()
+    const prevIds = prevTxns.map((t) => t.id).sort().join(',')
+    const nextIds = txns.map((t) => t.id).sort().join(',')
+    if (prevIds === nextIds) return
     const groups = groupByMerchant(txns)
     set({
       groups,

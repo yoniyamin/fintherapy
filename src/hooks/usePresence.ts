@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { supabase, supabaseConfigured } from '../lib/supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
@@ -15,7 +15,7 @@ export function usePresence(
   enabled: boolean = true,
 ) {
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([])
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null)
+  const channelRef = useRef<RealtimeChannel | null>(null)
 
   const syncPresence = useCallback((state: Record<string, { userId: string; displayName: string; online_at: string }[]>) => {
     const users: PresenceUser[] = []
@@ -54,19 +54,19 @@ export function usePresence(
       }
     })
 
-    setChannel(ch)
+    channelRef.current = ch
 
     return () => {
       ch.unsubscribe()
-      setChannel(null)
+      channelRef.current = null
     }
   }, [householdId, userId, displayName, enabled, syncPresence])
 
   const untrack = useCallback(async () => {
-    if (channel) {
-      await channel.untrack()
+    if (channelRef.current) {
+      await channelRef.current.untrack()
     }
-  }, [channel])
+  }, [])
 
   return { onlineUsers, untrack }
 }
