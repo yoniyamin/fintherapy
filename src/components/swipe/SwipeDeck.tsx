@@ -21,6 +21,7 @@ import { supabase } from '../../lib/supabase'
 import { useMerchantKnowledge } from '../../hooks/useMerchantKnowledge'
 import { usePresence } from '../../hooks/usePresence'
 import { useAuth } from '../../hooks/useAuth'
+import ClassifyScopeBar from './ClassifyScopeBar'
 import SwipeCard from './SwipeCard'
 import CategoryPicker from './CategoryPicker'
 import CategoryEditorModal from '../settings/CategoryEditorModal'
@@ -159,12 +160,14 @@ function MonthCaughtUpPanel({
   accountAliases,
   nextMonth,
   onContinue,
+  remainingMonthCount,
 }: {
   monthFilter: string
   accountFilter: string | null
   accountAliases: Map<string, string>
   nextMonth: string | null
   onContinue: () => void
+  remainingMonthCount: number
 }) {
   const cardLabel = accountFilter
     ? formatAccountLabel(accountFilter, accountAliases)
@@ -198,22 +201,60 @@ function MonthCaughtUpPanel({
             ) : (
               <>This billing month is fully classified.</>
             )}
-            {nextMonth ? (
-              <>
-                {' '}
-                Next up:{' '}
-                <span className="font-semibold text-gem">{formatBillingMonthLabel(nextMonth)}</span>.
-              </>
-            ) : null}
           </p>
         </div>
-        <button
+
+        {nextMonth && (
+          <motion.div
+            className="w-full rounded-2xl border border-gem/25 bg-gem/[0.08] px-4 py-3"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.15, type: 'spring', damping: 18 }}
+          >
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gem/80">
+              More months waiting
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <span className="rounded-lg bg-surface-800/60 px-2.5 py-1 text-xs font-semibold text-surface-400 line-through decoration-surface-500">
+                {formatBillingMonthLabel(monthFilter)}
+              </span>
+              <motion.span
+                className="text-lg font-bold text-gem"
+                animate={{ x: [0, 5, 0] }}
+                transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+                aria-hidden
+              >
+                →
+              </motion.span>
+              <motion.span
+                className="rounded-lg border border-gem/40 bg-gem/15 px-2.5 py-1 text-xs font-bold text-gem"
+                animate={{ scale: [1, 1.06, 1] }}
+                transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                {formatBillingMonthLabel(nextMonth)}
+              </motion.span>
+            </div>
+            {remainingMonthCount > 1 && (
+              <p className="mt-2 text-[11px] text-surface-500">
+                +{remainingMonthCount - 1} more month
+                {remainingMonthCount - 1 !== 1 ? 's' : ''} after that
+              </p>
+            )}
+          </motion.div>
+        )}
+
+        <motion.button
           type="button"
           onClick={onContinue}
           className="rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
+          animate={nextMonth ? { scale: [1, 1.03, 1] } : undefined}
+          transition={nextMonth ? { duration: 1.4, repeat: Infinity, ease: 'easeInOut' } : undefined}
         >
           {nextMonth ? `Continue to ${formatBillingMonthLabel(nextMonth)}` : 'Continue'}
-        </button>
+        </motion.button>
+        {nextMonth && (
+          <p className="text-[10px] text-surface-500">Auto-continues in a few seconds</p>
+        )}
       </motion.div>
     </>
   )
@@ -1400,6 +1441,13 @@ export default function SwipeDeck() {
     deckMode === 'pending' ? classifyCardPicklist.length > 1 : distinctLast4InPending.length > 1
   const breakdownTotal =
     accountBreakdown?.reduce((sum, row) => sum + row.classified_count, 0) ?? 0
+  const remainingMonthsPending = monthsInScope.filter(
+    (m) => (stacksByMonth.get(m) ?? 0) > 0,
+  ).length
+  const nextMonthWhenCaughtUp =
+    showMonthCaughtUp && effectiveMonthFilter
+      ? nextPendingMonthAfter(effectiveMonthFilter)
+      : null
 
   return (
     <div className="flex h-full flex-col">
@@ -1451,173 +1499,29 @@ export default function SwipeDeck() {
           </button>
         </div>
 
-        {/* Co-op presence */}
         {cardChipList.length >= 1 && (
-          <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-white/[0.06] bg-surface-950/35 px-3 py-2.5 backdrop-blur-sm">
-            <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-surface-500">
-              Card
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-              {cardChipShowAll && (
-                <button
-                  type="button"
-                  onClick={() => setAccountFilterPersist(null)}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                    accountFilter == null
-                      ? 'bg-duo-green/25 text-duo-green'
-                      : 'text-surface-500 hover:bg-surface-800/60 hover:text-surface-300'
-                  }`}
-                >
-                  All
-                </button>
-              )}
-              {cardChipList.map((last4) => {
-                const cardType = accountTypes.get(last4) ?? null
-                const hasPendingHere = deckMode === 'pending' && last4WithPendingWork.has(last4)
-                const isSelected = accountFilter === last4
-                return (
-                  <div key={last4} className="flex items-center gap-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setAccountFilterPersist(last4)}
-                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                        isSelected
-                          ? 'bg-duo-green/25 text-duo-green'
-                          : 'text-surface-500 hover:bg-surface-800/60 hover:text-surface-300'
-                      }`}
-                    >
-                      {hasPendingHere && (
-                        <span
-                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-duo-green shadow-[0_0_8px_rgba(88,204,2,0.7)]"
-                          title="Pending to classify"
-                          aria-hidden
-                        />
-                      )}
-                      {formatAccountLabel(last4, accountAliases)}
-                      {(pendingMonthsPerCard.get(last4) ?? 0) > 1 && (
-                        <span className="rounded bg-surface-800/80 px-1 py-0.5 text-[9px] tabular-nums text-surface-400">
-                          {pendingMonthsPerCard.get(last4)} mo
-                        </span>
-                      )}
-                    </button>
-                    {isSelected && (
-                      <button
-                        type="button"
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ice/70 transition-colors hover:bg-white/[0.08] hover:text-ice"
-                        title="Edit display name and card type"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setAliasDraft({
-                            last4,
-                            label: accountAliases.get(last4) ?? '',
-                            accountType: cardType,
-                          })
-                        }}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                          <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474Z" />
-                          <path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 14 9v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            {accountFilter != null && cardChipShowAll && (
-              <p className="text-center text-[10px] text-surface-500">
-                Viewing{' '}
-                <span className="font-semibold text-surface-300">
-                  {formatAccountLabel(accountFilter, accountAliases)}
-                </span>{' '}
-                only ·{' '}
-                <button
-                  type="button"
-                  onClick={() => setAccountFilterPersist(null)}
-                  className="font-semibold text-duo-green underline-offset-2 hover:underline"
-                >
-                  all cards
-                </button>
-              </p>
-            )}
-            {accountFilter != null && classifyCardPicklist.length > 1 && (
-              <p className="text-center text-[10px] text-surface-500">
-                {classifyCardPicklist.filter((c) => c !== accountFilter && last4WithPendingWork.has(c)).length}{' '}
-                other card
-                {classifyCardPicklist.filter((c) => c !== accountFilter && last4WithPendingWork.has(c)).length !== 1
-                  ? 's'
-                  : ''}{' '}
-                may still have items
-              </p>
-            )}
-          </div>
-        )}
-
-        {shouldShowMonthChips && (
-          <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-white/[0.06] bg-surface-950/35 px-3 py-2.5 backdrop-blur-sm">
-            <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-surface-500">
-              Billing month
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-              {monthsInScope.map((bm) => {
-                const pendingStacks = stacksByMonth.get(bm) ?? 0
-                const isCleared = pendingStacks === 0
-                const isActive = effectiveMonthFilter === bm
-                const flaggedCount = flaggedByMonth.get(bm) ?? 0
-                return (
-                  <button
-                    key={bm}
-                    type="button"
-                    onClick={() => setMonthFilterPersist(bm)}
-                    className={`inline-flex flex-col items-center gap-0.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                      isActive
-                        ? 'bg-gem/25 text-gem'
-                        : isCleared
-                          ? 'bg-surface-800/40 text-surface-500'
-                          : 'text-surface-500 hover:bg-surface-800/60 hover:text-surface-300'
-                    }`}
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      {isCleared ? (
-                        <span className="text-[10px] text-duo-green" aria-hidden>
-                          ✓
-                        </span>
-                      ) : (
-                        <span
-                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-duo-green shadow-[0_0_8px_rgba(88,204,2,0.7)]"
-                          aria-hidden
-                        />
-                      )}
-                      {formatBillingMonthLabel(bm)}
-                      {!isCleared && pendingStacks > 0 && (
-                        <span className="text-[9px] tabular-nums text-surface-400">{pendingStacks}</span>
-                      )}
-                    </span>
-                    {flaggedCount > 0 && (
-                      <span className="text-[9px] font-medium text-flame/90">
-                        {flaggedCount} in No idea
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {effectiveMonthFilter && shouldShowMonthChips && !showCardCaughtUp && !showMonthCaughtUp && (
-          <div className="mb-2 rounded-xl border border-gem/20 bg-gem/[0.06] px-3 py-2 text-center text-[11px] leading-snug text-surface-400">
-            Focus:{' '}
-            <span className="font-semibold text-gem">{formatBillingMonthLabel(effectiveMonthFilter)}</span>
-            {accountFilter ? (
-              <>
-                {' '}
-                · {formatAccountLabel(accountFilter, accountAliases)}
-              </>
-            ) : null}
-            {' — '}
-            other months are waiting
-          </div>
+          <ClassifyScopeBar
+            accountAliases={accountAliases}
+            accountFilter={accountFilter}
+            cardPicklist={cardChipList}
+            effectiveMonthFilter={effectiveMonthFilter}
+            flaggedByMonth={flaggedByMonth}
+            hasPendingOnCard={(last4) => deckMode === 'pending' && last4WithPendingWork.has(last4)}
+            monthsInScope={monthsInScope}
+            onAccountChange={setAccountFilterPersist}
+            onEditCard={(last4) =>
+              setAliasDraft({
+                last4,
+                label: accountAliases.get(last4) ?? '',
+                accountType: accountTypes.get(last4) ?? null,
+              })
+            }
+            emphasizeMonthQueue={showMonthCaughtUp}
+            onMonthChange={setMonthFilterPersist}
+            pendingMonthsPerCard={pendingMonthsPerCard}
+            showAllCardsOption={cardChipShowAll}
+            stacksByMonth={stacksByMonth}
+          />
         )}
 
         {onlineUsers.length > 1 && (
@@ -1688,11 +1592,31 @@ export default function SwipeDeck() {
           </div>
         )}
         {showMonthCaughtUp && effectiveMonthFilter && (
-          <div className="rounded-2xl border border-gem/20 bg-gem/[0.07] px-3 py-2.5 backdrop-blur-sm">
+          <motion.div
+            className="rounded-2xl border border-gem/25 bg-gem/[0.09] px-3 py-2.5 backdrop-blur-sm"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 320 }}
+          >
             <p className="text-center text-xs font-semibold text-gem">
               {formatBillingMonthLabel(effectiveMonthFilter)} cleared — nice work!
             </p>
-          </div>
+            {nextMonthWhenCaughtUp && (
+              <motion.p
+                className="mt-1 text-center text-[11px] text-surface-400"
+                animate={{ opacity: [0.65, 1, 0.65] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                Continuing to{' '}
+                <span className="font-semibold text-gem">
+                  {formatBillingMonthLabel(nextMonthWhenCaughtUp)}
+                </span>
+                {remainingMonthsPending > 1
+                  ? ` · ${remainingMonthsPending - 1} more after`
+                  : ''}
+              </motion.p>
+            )}
+          </motion.div>
         )}
         {showCardCaughtUp && (
           <div className="rounded-2xl border border-duo-green/20 bg-duo-green/[0.07] px-3 py-2.5 backdrop-blur-sm">
@@ -1713,15 +1637,16 @@ export default function SwipeDeck() {
         )}
       </div>
 
-      <div className="relative flex-1 px-4 py-6">
+      <div className="relative flex-1 px-4 py-3">
         <div className="relative mx-auto h-full max-w-sm">
           {showMonthCaughtUp && effectiveMonthFilter ? (
             <MonthCaughtUpPanel
               monthFilter={effectiveMonthFilter}
               accountFilter={accountFilter}
               accountAliases={accountAliases}
-              nextMonth={nextPendingMonthAfter(effectiveMonthFilter)}
+              nextMonth={nextMonthWhenCaughtUp}
               onContinue={() => advanceToNextMonth(effectiveMonthFilter)}
+              remainingMonthCount={remainingMonthsPending}
             />
           ) : showCardCaughtUp && accountFilter ? (
             <>
@@ -1748,7 +1673,7 @@ export default function SwipeDeck() {
                     </span>
                     .
                     {allDeckTxns.length > 0
-                      ? ' Other cards may still have items — check the dots above.'
+                      ? ' Other cards may still have items — tap focus above to switch.'
                       : ' When new transactions arrive, they will show up here.'}
                   </p>
                 </div>
