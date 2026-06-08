@@ -8,6 +8,7 @@ import type { MultiMonthData, CategoryTrendPoint } from '../../hooks/useMultiMon
 import type { CategorySummary } from '../../hooks/useReveal'
 import type { ExportRow } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { exportSpendMagnitude, topSpendingTransactions } from '../../lib/exportSpend'
 import {
   buildInsightInput,
   generateInsights,
@@ -400,7 +401,7 @@ function BiggestMoversSlide({ summaryByMonth, months, categoryLookup }: { summar
 }
 
 function TopTransactionsSlide({ transactions, categoryLookup }: { transactions: ExportRow[]; categoryLookup: Record<string, { icon: string; label: string }> }) {
-  const top = [...transactions].sort((a, b) => Number(b.amount) - Number(a.amount)).slice(0, 8)
+  const top = topSpendingTransactions(transactions, 8)
 
   return (
     <div className="space-y-3">
@@ -417,7 +418,7 @@ function TopTransactionsSlide({ transactions, categoryLookup }: { transactions: 
                 <p className="text-xs font-medium text-surface-200 truncate">{merchant}</p>
                 <p className="text-[10px] text-surface-500">{tx.tx_date}</p>
               </div>
-              <span className="text-sm font-bold tabular-nums text-surface-100">{fmtFull(Number(tx.amount))}</span>
+              <span className="text-sm font-bold tabular-nums text-surface-100">{fmtFull(exportSpendMagnitude(tx))}</span>
             </motion.div>
           )
         })}

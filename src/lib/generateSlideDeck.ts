@@ -2,6 +2,11 @@ import PptxGenJS from 'pptxgenjs'
 import type { CategorySummary, MonthlyTotal } from '../hooks/useReveal'
 import type { ExportRow } from '../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from './constants'
+import {
+  exportSpendMagnitude,
+  isSpendingOutflow,
+  topSpendingTransactions,
+} from './exportSpend'
 
 const theme = {
   colors: {
@@ -279,9 +284,7 @@ function addTopTransactionsSlide(
     bold: true,
   })
 
-  const sorted = [...transactions]
-    .sort((a, b) => Number(b.amount) - Number(a.amount))
-    .slice(0, 10)
+  const sorted = topSpendingTransactions(transactions, 10)
 
   const tableRows: PptxGenJS.TableRow[] = [
     [
@@ -295,7 +298,7 @@ function addTopTransactionsSlide(
       const catLabel = categoryLookup[tx.category]?.label ?? tx.category
       return [
         { text: merchantName, options: { color: theme.colors.text, fontSize: 9, fill: { color: theme.colors.dark } } },
-        { text: fmt(Number(tx.amount)), options: { color: theme.colors.primary, fontSize: 9, bold: true, fill: { color: theme.colors.dark } } },
+        { text: fmt(exportSpendMagnitude(tx)), options: { color: theme.colors.primary, fontSize: 9, bold: true, fill: { color: theme.colors.dark } } },
         { text: truncate(catLabel, 18), options: { color: theme.colors.muted, fontSize: 9, fill: { color: theme.colors.dark } } },
         { text: tx.tx_date, options: { color: theme.colors.muted, fontSize: 9, fill: { color: theme.colors.dark } } },
       ]
@@ -376,17 +379,18 @@ function addHighlightsSlide(
   })
 
   const totalSpent = summary.reduce((s, c) => s + Number(c.total_amount), 0)
-  const avgPerTx = transactions.length > 0 ? totalSpent / transactions.length : 0
+  const spendingTxCount = transactions.filter(isSpendingOutflow).length
+  const avgPerTx = spendingTxCount > 0 ? totalSpent / spendingTxCount : 0
 
   const topCategory = [...summary].sort((a, b) => Number(b.total_amount) - Number(a.total_amount))[0]
-  const topTx = [...transactions].sort((a, b) => Number(b.amount) - Number(a.amount))[0]
+  const topTx = topSpendingTransactions(transactions, 1)[0]
 
   const highlights: { label: string; value: string; sub: string }[] = []
 
   if (topTx) {
     highlights.push({
       label: 'Biggest Transaction',
-      value: fmt(Number(topTx.amount)),
+      value: fmt(exportSpendMagnitude(topTx)),
       sub: truncate(topTx.merchant_clean || topTx.merchant_raw, 30),
     })
   }
@@ -401,7 +405,7 @@ function addHighlightsSlide(
   highlights.push({
     label: 'Average per Transaction',
     value: fmt(avgPerTx),
-    sub: `${transactions.length} transactions total`,
+    sub: `${spendingTxCount} transactions total`,
   })
 
   const cardW = 8.5 / highlights.length
@@ -490,10 +494,10 @@ function addTopCategorySlide(
     })
   }
 
-  const topInCategory = [...transactions]
-    .filter((tx) => tx.category === topCat.category)
-    .sort((a, b) => Number(b.amount) - Number(a.amount))
-    .slice(0, 8)
+  const topInCategory = topSpendingTransactions(
+    transactions.filter((tx) => tx.category === topCat.category),
+    8,
+  )
 
   if (topInCategory.length > 0) {
     slide.addText('Top transactions in this category', {
@@ -503,7 +507,7 @@ function addTopCategorySlide(
 
     const tableRows: PptxGenJS.TableRow[] = topInCategory.map((tx): PptxGenJS.TableRow => [
       { text: truncate(tx.merchant_clean || tx.merchant_raw, 28), options: { color: theme.colors.text, fontSize: 9, fill: { color: theme.colors.dark } } },
-      { text: fmt(Number(tx.amount)), options: { color: theme.colors.primary, fontSize: 9, bold: true, fill: { color: theme.colors.dark } } },
+      { text: fmt(exportSpendMagnitude(tx)), options: { color: theme.colors.primary, fontSize: 9, bold: true, fill: { color: theme.colors.dark } } },
       { text: tx.tx_date, options: { color: theme.colors.muted, fontSize: 9, fill: { color: theme.colors.dark } } },
     ])
 

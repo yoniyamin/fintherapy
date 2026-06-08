@@ -1,4 +1,5 @@
 import { encouragementAnimationMarkup, type EncouragementAnimation as AnimationKey } from '../../lib/classifyEncouragement'
+import EncouragementAnimeAnimation from './EncouragementAnimeAnimation'
 
 interface Props {
   animation: AnimationKey
@@ -6,14 +7,18 @@ interface Props {
 }
 
 /**
- * Inline animated SVG for classify encouragement — reliable on mobile/PWA vs img src.
+ * Classify encouragement visual — star uses inline SMIL; others use anime.js.
  */
 export default function EncouragementAnimation({ animation, className = '' }: Props) {
-  return (
-    <div
-      className={`pointer-events-none [&>svg]:h-full [&>svg]:w-full ${className}`}
-      aria-hidden
-      dangerouslySetInnerHTML={{ __html: encouragementAnimationMarkup(animation) }}
-    />
-  )
+  if (animation === 'star') {
+    return (
+      <div
+        className={`pointer-events-none [&>svg]:h-full [&>svg]:w-full ${className}`}
+        aria-hidden
+        dangerouslySetInnerHTML={{ __html: encouragementAnimationMarkup() }}
+      />
+    )
+  }
+
+  return <EncouragementAnimeAnimation variant={animation} className={className} />
 }

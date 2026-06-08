@@ -18,6 +18,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",
     "@types/d3": "^7.4.3",
+    "animejs": "^4.4.1",
     "canvas-confetti": "^1.9.4",
     "d3": "^7.9.0",
     "framer-motion": "^12.38.0",

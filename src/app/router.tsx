@@ -12,6 +12,7 @@ import SwipeDeck from '../components/swipe/SwipeDeck'
 import RevealPage from '../components/reveal/RevealPage'
 import BetsPage from '../components/bets/BetsPage'
 import AnalysisPage from '../components/analysis/AnalysisPage'
+import AnimationTestPage from '../components/dev/AnimationTestPage'
 
 export const router = createBrowserRouter([
   {
@@ -43,5 +44,13 @@ export const router = createBrowserRouter([
   { path: '/signup', element: <SignUpPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/reset-password', element: <ResetPasswordPage /> },
+  {
+    path: '/dev/animations',
+    element: (
+      <AuthGuard requireHousehold={false}>
+        <AnimationTestPage />
+      </AuthGuard>
+    ),
+  },
   { path: '*', element: <Navigate to="/" replace /> },
 ])

@@ -7,6 +7,11 @@ import {
 import type { CategorySummary, MonthlyTotal } from '../../hooks/useReveal'
 import type { ExportRow } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import {
+  exportSpendMagnitude,
+  isSpendingOutflow,
+  topSpendingTransactions,
+} from '../../lib/exportSpend'
 
 interface Props {
   month: string
@@ -99,14 +104,14 @@ export default function SlideDeckPreview({
 
   const topCategoryTransactions = useMemo(() => {
     if (!topCategory) return []
-    return [...filteredTransactions]
-      .filter((tx) => tx.category === topCategory.category)
-      .sort((a, b) => Number(b.amount) - Number(a.amount))
-      .slice(0, 6)
+    return topSpendingTransactions(
+      filteredTransactions.filter((tx) => tx.category === topCategory.category),
+      6,
+    )
   }, [filteredTransactions, topCategory])
 
   const topTransactions = useMemo(
-    () => [...filteredTransactions].sort((a, b) => Number(b.amount) - Number(a.amount)).slice(0, 8),
+    () => topSpendingTransactions(filteredTransactions, 8),
     [filteredTransactions],
   )
 
@@ -540,7 +545,7 @@ function TopCategorySlide({
               <span className="w-5 text-center text-[10px] font-bold text-surface-600">{i + 1}</span>
               <span className="flex-1 text-xs text-surface-200 truncate">{truncate(tx.merchant_clean || tx.merchant_raw, 22)}</span>
               <span className="text-[10px] text-surface-500">{tx.tx_date}</span>
-              <span className="text-xs font-bold tabular-nums text-surface-100">{fmtFull(Number(tx.amount))}</span>
+              <span className="text-xs font-bold tabular-nums text-surface-100">{fmtFull(exportSpendMagnitude(tx))}</span>
             </motion.div>
           ))}
         </div>
@@ -574,7 +579,7 @@ function TopTransactionsSlide({
                 <p className="text-xs font-medium text-surface-200 truncate">{merchant}</p>
                 <p className="text-[10px] text-surface-500">{tx.tx_date}</p>
               </div>
-              <span className="text-sm font-bold tabular-nums text-surface-100">{fmtFull(Number(tx.amount))}</span>
+              <span className="text-sm font-bold tabular-nums text-surface-100">{fmtFull(exportSpendMagnitude(tx))}</span>
             </motion.div>
           )
         })}
@@ -669,9 +674,10 @@ function HighlightsSlide({
   transactions: ExportRow[]; summary: CategorySummary[]; prevSummary: CategorySummary[] | null
   categoryLookup: Record<string, { icon: string; label: string }>; income: number | null; totalSpent: number
 }) {
-  const avgPerTx = transactions.length > 0 ? totalSpent / transactions.length : 0
+  const spendingTxCount = transactions.filter(isSpendingOutflow).length
+  const avgPerTx = spendingTxCount > 0 ? totalSpent / spendingTxCount : 0
   const topCategory = [...summary].sort((a, b) => Number(b.total_amount) - Number(a.total_amount))[0]
-  const topTx = [...transactions].sort((a, b) => Number(b.amount) - Number(a.amount))[0]
+  const topTx = topSpendingTransactions(transactions, 1)[0]
 
   const biggestIncrease = useMemo(() => {
     if (!prevSummary) return null
@@ -696,7 +702,7 @@ function HighlightsSlide({
     cards.push({
       emoji: '🏆',
       title: 'Biggest Purchase',
-      value: fmtFull(Number(topTx.amount)),
+      value: fmtFull(exportSpendMagnitude(topTx)),
       sub: truncate(topTx.merchant_clean || topTx.merchant_raw, 26),
       accent: 'from-amber-500/10 to-transparent border-amber-500/20',
     })
@@ -725,7 +731,7 @@ function HighlightsSlide({
     emoji: '🧮',
     title: 'Average per Transaction',
     value: fmtFull(avgPerTx),
-    sub: `${transactions.length} transactions total`,
+    sub: `${spendingTxCount} transactions total`,
     accent: 'from-blue-500/10 to-transparent border-blue-500/20',
   })
   if (income != null) {
