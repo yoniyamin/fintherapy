@@ -10,36 +10,9 @@ import {
   type MemberDailyRecord,
 } from '../../hooks/useTransactions'
 import { ui } from '../../lib/uiClasses'
+import { xpProgress } from '../../lib/xpLevels'
 import HouseholdPodium from './HouseholdPodium'
 import Leaderboard from '../reveal/Leaderboard'
-
-const XP_PER_LEVEL_SEGMENT = 300
-
-const LEVEL_TITLES = [
-  'Novice Budgeter',
-  'Receipt Hoarder',
-  'Penny Pincher',
-  'Expense Tamer',
-  'Budget Ninja',
-  'Spreadsheet Sorcerer',
-  'Fiscal Wizard',
-  'Money Whisperer',
-  'Finance Overlord',
-  'Legendary Accountant',
-]
-
-/**
- * Derives level, progress bar fill, and title copy from cumulative XP.
- */
-function xpProgress(totalXp: number) {
-  const inSegment = totalXp % XP_PER_LEVEL_SEGMENT
-  const progress = inSegment / XP_PER_LEVEL_SEGMENT
-  const level = Math.floor(totalXp / XP_PER_LEVEL_SEGMENT) + 1
-  const toNext = inSegment === 0 && totalXp > 0 ? XP_PER_LEVEL_SEGMENT : XP_PER_LEVEL_SEGMENT - inSegment
-  const title = LEVEL_TITLES[Math.min(level - 1, LEVEL_TITLES.length - 1)]
-  const nextTitle = level < LEVEL_TITLES.length ? LEVEL_TITLES[level] : null
-  return { level, progress, toNext, title, nextTitle }
-}
 
 interface ActivityLine {
   userId: string
@@ -164,7 +137,7 @@ export default function HomePage() {
 
   const xp = profile
     ? xpProgress(profile.total_xp)
-    : { level: 1, progress: 0, toNext: XP_PER_LEVEL_SEGMENT, title: LEVEL_TITLES[0], nextTitle: LEVEL_TITLES[1] ?? null }
+    : { level: 1, progress: 0, toNext: 80, title: 'Receipt Rookie', nextTitle: 'Envelope Explorer' as string | null }
 
   const teamXp = useMemo(() => leaderboard.reduce((sum, entry) => sum + entry.total_xp, 0), [leaderboard])
   const memberCount = Math.max(leaderboard.length, profile ? 1 : 0)

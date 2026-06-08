@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useDragControls } from 'framer-motion'
 import { useClassificationStore, type MerchantGroup, type SessionAction, type SessionActionKind } from '../../stores/classificationStore'
+import { useClassifyEncouragement } from '../../hooks/useClassifyEncouragement'
 import { useTransactions, type MonthStats, type AccountClassifiedBreakdownRow } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
 import {
@@ -28,6 +29,7 @@ import CategoryEditorModal from '../settings/CategoryEditorModal'
 import ProgressBar from '../common/ProgressBar'
 import { AccountCardEditModal, type AccountCardEditDraft } from '../common/AccountCardEditModal'
 import Confetti from '../common/Confetti'
+import EncouragementBurst from './EncouragementBurst'
 import { Link, useLocation } from 'react-router-dom'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
 import { invalidateFlaggedCount } from '../../lib/flaggedCountInvalidate'
@@ -339,7 +341,7 @@ export default function SwipeDeck() {
     removeTransactions, addPendingTransactions, refetchFresh,
     classifyTransaction, flagTransaction, markTransfer,
     reclassifyTransaction, revertToPending,
-    detectRefunds, awardXp, getMonthStats, getAccountAliases, upsertAccountAlias,
+    detectRefunds, awardXp, getLeaderboard, getMonthStats, getAccountAliases, upsertAccountAlias,
     setTransactionsUserNote,
     getDistinctAccountLast4ForHousehold,
     getClassifiedCountsForAccount,
@@ -351,6 +353,11 @@ export default function SwipeDeck() {
   const resolvedCategories = catConfig.categories
   const [catEditorOpen, setCatEditorOpen] = useState(false)
   const store = useClassificationStore()
+  const { burst: encouragementBurst, dismissBurst, onClassifySuccess } = useClassifyEncouragement({
+    householdId: profile?.household_id,
+    userId: user?.id,
+    getLeaderboard,
+  })
   const lastSyncedFingerprintRef = useRef<string | null>(null)
   const lastContextKeyRef = useRef<string | null>(null)
   const prevHouseholdIdRef = useRef<string | undefined>(undefined)
@@ -395,6 +402,19 @@ export default function SwipeDeck() {
       setUndoToast((cur) => (cur?.id === action.id ? null : cur))
     }, 5000)
   }, [])
+
+  /** XP burst, encouragement overlay, and profile refresh after a successful classify. */
+  const celebrateClassifySuccess = useCallback(
+    (xpEarned: number) => {
+      onClassifySuccess({
+        sessionClassifiedTxCount: useClassificationStore.getState().classifiedTxCount,
+        xpBefore: profile?.total_xp ?? 0,
+        xpEarned,
+      })
+      void refreshProfile()
+    },
+    [onClassifySuccess, profile?.total_xp, refreshProfile],
+  )
 
   const [recentPanelOpen, setRecentPanelOpen] = useState(false)
   const recentScrollPullRef = useRef(0)
@@ -1070,6 +1090,7 @@ export default function SwipeDeck() {
       const action = recordSessionAction(group, 'auto-confirmed', predicted)
       showUndoToast(action)
       await awardXp(user.id, xpEarned)
+      celebrateClassifySuccess(xpEarned)
 
       xpCounter.current += 1
       const floatId = xpCounter.current
@@ -1157,6 +1178,7 @@ export default function SwipeDeck() {
     const action = recordSessionAction(group, 'classified', categoryId)
     showUndoToast(action)
     await awardXp(user.id, xpEarned)
+    celebrateClassifySuccess(xpEarned)
 
     xpCounter.current += 1
     const floatId = xpCounter.current
@@ -2178,6 +2200,10 @@ export default function SwipeDeck() {
           </AnimatePresence>,
           document.body,
         )}
+
+      {encouragementBurst && (
+        <EncouragementBurst burst={encouragementBurst} onDismiss={dismissBurst} />
+      )}
     </div>
   )
 }
