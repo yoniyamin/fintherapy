@@ -9,14 +9,17 @@ import type { CategorySummary } from '../../hooks/useReveal'
 import type { ExportRow } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
 import {
-  generateInsights, getHealthSummary,
-  type AdvisorInsight, type HealthSummary,
+  buildInsightInput,
+  generateInsights,
+  getHealthSummary,
+  type AdvisorInsight,
+  type HealthSummary,
 } from '../../lib/advisorInsights'
 
 interface Props {
   data: MultiMonthData
   months: string[]
-  categoryLookup: Record<string, { icon: string; label: string }>
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
   onClose: () => void
   onDownload: () => void
   downloading: boolean
@@ -71,7 +74,7 @@ export default function MultiMonthSlideDeckPreview({
   const totalSpent = filteredSummary.reduce((s, c) => s + Number(c.total_amount), 0)
   const avgMonthly = sorted.length > 0 ? totalSpent / sorted.length : 0
 
-  const insightInput = useMemo(() => ({
+  const insightInput = useMemo(() => buildInsightInput({
     months: sorted,
     aggregatedSummary: data.aggregatedSummary,
     summaryByMonth: data.summaryByMonth,
@@ -80,6 +83,8 @@ export default function MultiMonthSlideDeckPreview({
     dailyTotals: data.dailyTotals,
     income: data.householdIncome,
     categoryLookup,
+    transactions: data.allTransactions,
+    spendingByAccount: data.spendingByAccount,
   }), [data, sorted, categoryLookup])
 
   const health = useMemo(() => getHealthSummary(insightInput), [insightInput])

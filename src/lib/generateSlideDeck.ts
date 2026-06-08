@@ -596,8 +596,8 @@ export function downloadBlob(blob: Blob, filename: string) {
    MULTI-MONTH SLIDE DECK
    ═══════════════════════════════════════════════════════════ */
 
-import { buildDailyTotals, type CategoryTrendPoint } from '../hooks/useMultiMonthReveal'
-import { generateInsights, getHealthSummary } from './advisorInsights'
+import { buildDailyTotals, type AccountSpending, type CategoryTrendPoint } from '../hooks/useMultiMonthReveal'
+import { buildInsightInput, generateInsights, getHealthSummary } from './advisorInsights'
 
 export interface MultiMonthSlideDeckInput {
   months: string[]
@@ -607,7 +607,8 @@ export interface MultiMonthSlideDeckInput {
   monthlyTotals: MonthlyTotal[]
   income: number | null
   transactions: ExportRow[]
-  categoryLookup: Record<string, { icon: string; label: string }>
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
+  spendingByAccount?: AccountSpending[]
 }
 
 function shortMonthLabel(value: string): string {
@@ -632,7 +633,7 @@ export async function generateMultiMonthSlideDeck(input: MultiMonthSlideDeckInpu
 
   const dailyTotals = buildDailyTotals(input.transactions, false)
 
-  const insightInput = {
+  const insightInput = buildInsightInput({
     months: sorted,
     aggregatedSummary: input.aggregatedSummary,
     summaryByMonth: input.summaryByMonth,
@@ -641,7 +642,9 @@ export async function generateMultiMonthSlideDeck(input: MultiMonthSlideDeckInpu
     dailyTotals,
     income: input.income,
     categoryLookup: input.categoryLookup,
-  }
+    transactions: input.transactions,
+    spendingByAccount: input.spendingByAccount,
+  })
 
   const health = getHealthSummary(insightInput)
   const insights = generateInsights(insightInput)

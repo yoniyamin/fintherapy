@@ -81,6 +81,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
       label: '',
       icon: '📦',
       color: COLOR_PALETTE[0].value,
+      expenseType: 'discretionary',
       isNew: true,
     })
     setTxCount(0)
@@ -110,7 +111,13 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
 
     try {
       if (editing.isNew) {
-        await upsertCategory({ id: newId, label, icon: editing.icon, color: editing.color })
+        await upsertCategory({
+          id: newId,
+          label,
+          icon: editing.icon,
+          color: editing.color,
+          expenseType: editing.expenseType,
+        })
       } else if (editing.originalId && editing.originalId !== newId) {
         // Real rename (id changed)
         const res = await renameCategory(

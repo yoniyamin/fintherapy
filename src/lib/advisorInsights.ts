@@ -2,6 +2,7 @@ import type { CategorySummary, MonthlyTotal } from '../hooks/useReveal'
 import type { AccountSpending, DailyTotal, CategoryTrendPoint } from '../hooks/useMultiMonthReveal'
 import type { ExportRow } from '../hooks/useTransactions'
 import type { RecurringCharge } from './recurringDetector'
+import { detectRecurring } from './recurringDetector'
 import { OWN_TRANSFERS_CATEGORY_ID } from './constants'
 
 export type InsightSeverity = 'positive' | 'neutral' | 'warning' | 'concern'
@@ -42,6 +43,43 @@ export interface InsightInput {
   spendingByAccount: AccountSpending[]
   fixedTotal: number
   discretionaryTotal: number
+}
+
+/** Builds a complete insight payload from multi-month analysis data. */
+export function buildInsightInput(params: {
+  months: string[]
+  aggregatedSummary: CategorySummary[]
+  summaryByMonth: Map<string, CategorySummary[]>
+  monthlyTotals: MonthlyTotal[]
+  categoryTrend: CategoryTrendPoint[]
+  dailyTotals: DailyTotal[]
+  income: number | null
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
+  transactions: ExportRow[]
+  spendingByAccount?: AccountSpending[]
+}): InsightInput {
+  const recurringCharges = detectRecurring(params.transactions, params.months)
+  const fixedTotal = params.aggregatedSummary
+    .filter((c) => c.category !== OWN_TRANSFERS_CATEGORY_ID && params.categoryLookup[c.category]?.expenseType === 'fixed')
+    .reduce((s, c) => s + Number(c.total_amount), 0)
+  const discretionaryTotal = params.aggregatedSummary
+    .filter((c) => c.category !== OWN_TRANSFERS_CATEGORY_ID && params.categoryLookup[c.category]?.expenseType !== 'fixed')
+    .reduce((s, c) => s + Number(c.total_amount), 0)
+  return {
+    months: params.months,
+    aggregatedSummary: params.aggregatedSummary,
+    summaryByMonth: params.summaryByMonth,
+    monthlyTotals: params.monthlyTotals,
+    categoryTrend: params.categoryTrend,
+    dailyTotals: params.dailyTotals,
+    income: params.income,
+    categoryLookup: params.categoryLookup,
+    transactions: params.transactions,
+    recurringCharges,
+    spendingByAccount: params.spendingByAccount ?? [],
+    fixedTotal,
+    discretionaryTotal,
+  }
 }
 
 const fmt = (v: number) =>

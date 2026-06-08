@@ -86,6 +86,7 @@ export default function AnalysisPage() {
         income: data.householdIncome,
         transactions: data.allTransactions,
         categoryLookup,
+        spendingByAccount: data.spendingByAccount,
       })
       const sorted = [...selection.months].sort()
       downloadBlob(blob, `financial-health-check-${sorted[0]}-to-${sorted[sorted.length - 1]}.pptx`)

@@ -1,12 +1,12 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
-import { getHealthSummary, type HealthVerdict } from '../../lib/advisorInsights'
+import { buildInsightInput, getHealthSummary, type HealthVerdict } from '../../lib/advisorInsights'
 
 interface Props {
   data: MultiMonthData
   months: string[]
-  categoryLookup: Record<string, { icon: string; label: string }>
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
 }
 
 const VERDICT_STYLES: Record<HealthVerdict, { border: string; bg: string; glow: string; dot: string }> = {
@@ -32,7 +32,7 @@ const VERDICT_STYLES: Record<HealthVerdict, { border: string; bg: string; glow: 
 
 export default function HealthSummaryBanner({ data, months, categoryLookup }: Props) {
   const health = useMemo(
-    () => getHealthSummary({
+    () => getHealthSummary(buildInsightInput({
       months,
       aggregatedSummary: data.aggregatedSummary,
       summaryByMonth: data.summaryByMonth,
@@ -41,7 +41,9 @@ export default function HealthSummaryBanner({ data, months, categoryLookup }: Pr
       dailyTotals: data.dailyTotals,
       income: data.householdIncome,
       categoryLookup,
-    }),
+      transactions: data.allTransactions,
+      spendingByAccount: data.spendingByAccount,
+    })),
     [data, months, categoryLookup],
   )
 
