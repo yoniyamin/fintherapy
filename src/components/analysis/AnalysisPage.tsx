@@ -4,13 +4,22 @@ import { useAuth } from '../../hooks/useAuth'
 import { useMultiMonthReveal } from '../../hooks/useMultiMonthReveal'
 import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import MonthRangePicker, { type MonthSelection } from '../common/MonthRangePicker'
-import HealthSummaryBanner from './HealthSummaryBanner'
+import HeadlineBanner from './HeadlineBanner'
 import KpiCards from './KpiCards'
+import FixedDiscretionarySplit from './FixedDiscretionarySplit'
 import CategoryTrendChart from './CategoryTrendChart'
+import DeltaDrivers from './DeltaDrivers'
+import MemberSpendingPanel from './MemberSpendingPanel'
+import RecurringPanel from './RecurringPanel'
 import ComparisonTable from './ComparisonTable'
 import CalendarHeatmap from './CalendarHeatmap'
 import AdvisorNotes from './AdvisorNotes'
+import VelocityGauge from './VelocityGauge'
 import MultiMonthSlideDeckPreview from './MultiMonthSlideDeckPreview'
+import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { detectRecurring } from '../../lib/recurringDetector'
+import { generateHeadline, getDeltaDrivers, getHealthSummary, getSpendingVelocity, type InsightInput } from '../../lib/advisorInsights'
+import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
 import { ui } from '../../lib/uiClasses'
 import { supabase } from '../../lib/supabase'
 import type { MonthlyTotal } from '../../hooks/useReveal'
@@ -36,7 +45,7 @@ export default function AnalysisPage() {
   const [exportingPdf, setExportingPdf] = useState<'mobile' | 'desktop' | null>(null)
 
   const categoryLookup = useMemo(() =>
-    Object.fromEntries(catConfig.categories.map(c => [c.id, { icon: c.icon, label: c.label }])),
+    Object.fromEntries(catConfig.categories.map(c => [c.id, { icon: c.icon, label: c.label, expenseType: c.expenseType }])),
     [catConfig.categories],
   )
 
@@ -90,6 +99,33 @@ export default function AnalysisPage() {
     setExportingPdf(mode)
     try {
       const { exportSummaryPdf } = await import('../../lib/generateDashboardPdf')
+
+      const recurringCharges = detectRecurring(data.allTransactions, selection.months)
+
+      const fixedTotal = data.aggregatedSummary
+        .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID && categoryLookup[c.category]?.expenseType === 'fixed')
+        .reduce((s, c) => s + Number(c.total_amount), 0)
+      const discretionaryTotal = data.aggregatedSummary
+        .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID && categoryLookup[c.category]?.expenseType !== 'fixed')
+        .reduce((s, c) => s + Number(c.total_amount), 0)
+
+      const insightInput: InsightInput = {
+        months: selection.months,
+        summaryByMonth: data.summaryByMonth,
+        aggregatedSummary: data.aggregatedSummary,
+        categoryTrend: data.categoryTrend,
+        monthlyTotals: data.monthlyTotals,
+        dailyTotals: data.dailyTotals,
+        income: data.householdIncome,
+        categoryLookup,
+        transactions: data.allTransactions,
+        recurringCharges,
+        spendingByAccount: data.spendingByAccount,
+        fixedTotal,
+        discretionaryTotal,
+      }
+      const headline = generateHeadline(insightInput)
+
       await exportSummaryPdf(
         {
           months: selection.months,
@@ -101,6 +137,13 @@ export default function AnalysisPage() {
           income: data.householdIncome,
           transactions: data.allTransactions,
           categoryLookup,
+          recurringCharges,
+          spendingByAccount: data.spendingByAccount,
+          cardFunding: data.cardFunding,
+          salaryDetected: data.salaryDetected,
+          fixedTotal,
+          discretionaryTotal,
+          headline,
         },
         mode,
       )
@@ -128,7 +171,7 @@ export default function AnalysisPage() {
           value={selection}
           onChange={setSelection}
           monthsWithData={monthsWithData}
-          allowSingle={false}
+          allowSingle={true}
         />
       </div>
 
@@ -204,42 +247,11 @@ export default function AnalysisPage() {
           </div>
         </motion.div>
       ) : data && (
-        <div className="mt-4 space-y-5">
-          <HealthSummaryBanner
-            data={data}
-            months={selection.months}
-            categoryLookup={categoryLookup}
-          />
-
-          <KpiCards
-            data={data}
-            months={selection.months}
-            categoryLookup={categoryLookup}
-          />
-
-          <CategoryTrendChart
-            data={data}
-            months={selection.months}
-            categoryLookup={categoryLookup}
-          />
-
-          <ComparisonTable
-            data={data}
-            months={selection.months}
-            categoryLookup={categoryLookup}
-          />
-
-          <CalendarHeatmap
-            dailyTotals={data.dailyTotals}
-            months={selection.months}
-          />
-
-          <AdvisorNotes
-            data={data}
-            months={selection.months}
-            categoryLookup={categoryLookup}
-          />
-        </div>
+        <AnalysisContent
+          data={data}
+          months={selection.months}
+          categoryLookup={categoryLookup}
+        />
       )}
 
       {/* Slide deck preview overlay */}
@@ -255,6 +267,87 @@ export default function AnalysisPage() {
           />
         )}
       </AnimatePresence>
+    </div>
+  )
+}
+
+function AnalysisContent({ data, months, categoryLookup }: {
+  data: MultiMonthData
+  months: string[]
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
+}) {
+  const recurringCharges = useMemo(
+    () => detectRecurring(data.allTransactions, months),
+    [data.allTransactions, months],
+  )
+
+  const { fixedTotal, discretionaryTotal } = useMemo(() => {
+    const fixed = data.aggregatedSummary
+      .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID && categoryLookup[c.category]?.expenseType === 'fixed')
+      .reduce((s, c) => s + Number(c.total_amount), 0)
+    const discretionary = data.aggregatedSummary
+      .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID && categoryLookup[c.category]?.expenseType !== 'fixed')
+      .reduce((s, c) => s + Number(c.total_amount), 0)
+    return { fixedTotal: fixed, discretionaryTotal: discretionary }
+  }, [data.aggregatedSummary, categoryLookup])
+
+  const insightInput: InsightInput = useMemo(() => ({
+    months,
+    summaryByMonth: data.summaryByMonth,
+    aggregatedSummary: data.aggregatedSummary,
+    categoryTrend: data.categoryTrend,
+    monthlyTotals: data.monthlyTotals,
+    dailyTotals: data.dailyTotals,
+    income: data.householdIncome,
+    categoryLookup,
+    transactions: data.allTransactions,
+    recurringCharges,
+    spendingByAccount: data.spendingByAccount,
+    fixedTotal,
+    discretionaryTotal,
+  }), [data, months, categoryLookup, recurringCharges, fixedTotal, discretionaryTotal])
+
+  const headline = useMemo(() => generateHeadline(insightInput), [insightInput])
+  const healthSummary = useMemo(() => getHealthSummary(insightInput), [insightInput])
+  const deltaDrivers = useMemo(() => getDeltaDrivers(insightInput), [insightInput])
+
+  const currentMonth = months.find(m => {
+    const now = new Date()
+    return m === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
+  const velocity = useMemo(
+    () => currentMonth ? getSpendingVelocity(data.dailyTotals, data.householdIncome, currentMonth) : null,
+    [data.dailyTotals, data.householdIncome, currentMonth],
+  )
+
+  return (
+    <div className="mt-4 space-y-5">
+      <HeadlineBanner headline={headline} verdict={healthSummary.verdict} />
+
+      <KpiCards data={data} months={months} categoryLookup={categoryLookup} />
+
+      <FixedDiscretionarySplit
+        fixedTotal={fixedTotal}
+        discretionaryTotal={discretionaryTotal}
+        months={months.length}
+        income={data.householdIncome}
+      />
+
+      <CategoryTrendChart data={data} months={months} categoryLookup={categoryLookup} />
+
+      <DeltaDrivers drivers={deltaDrivers} />
+
+      <MemberSpendingPanel spendingByAccount={data.spendingByAccount} months={months.length} />
+
+      <RecurringPanel charges={recurringCharges} months={months.length} />
+
+      <ComparisonTable data={data} months={months} categoryLookup={categoryLookup} />
+
+      <CalendarHeatmap dailyTotals={data.dailyTotals} months={months} />
+
+      <AdvisorNotes data={data} months={months} categoryLookup={categoryLookup} />
+
+      <VelocityGauge velocity={velocity} />
     </div>
   )
 }

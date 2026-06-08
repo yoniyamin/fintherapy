@@ -47,11 +47,24 @@ export interface HomeLeaderboardEntry {
   classified_count: number
 }
 
+/** Peak single-day activity per household member (all-time). */
+export interface MemberDailyRecord {
+  user_id: string
+  display_name: string
+  peak_classified: number
+  peak_classified_date: string | null
+  peak_uploads: number
+  peak_uploads_date: string | null
+  peak_bets: number
+  peak_bets_date: string | null
+}
+
 export interface ExportRow {
   tx_date: string
   merchant_raw: string
   merchant_clean: string | null
   amount: number
+  normalized_amount: number
   category: string
   status: string
   billing_month: string
@@ -354,6 +367,26 @@ export function useTransactions(
     return data as HomeLeaderboardEntry[]
   }, [householdId])
 
+  const getMemberDailyRecords = useCallback(async (): Promise<MemberDailyRecord[]> => {
+    if (!householdId) return []
+
+    const { data, error } = await supabase.rpc('get_household_member_daily_records', {
+      p_household_id: householdId,
+    })
+
+    if (error || !data) return []
+    return (data as MemberDailyRecord[]).map((row) => ({
+      user_id: row.user_id,
+      display_name: row.display_name,
+      peak_classified: Number(row.peak_classified),
+      peak_classified_date: row.peak_classified_date,
+      peak_uploads: Number(row.peak_uploads),
+      peak_uploads_date: row.peak_uploads_date,
+      peak_bets: Number(row.peak_bets),
+      peak_bets_date: row.peak_bets_date,
+    }))
+  }, [householdId])
+
   const getHouseholdInfo = useCallback(async () => {
     if (!householdId) return null
 
@@ -503,6 +536,7 @@ export function useTransactions(
     getExportData,
     getHouseholdInfo,
     getLeaderboard,
+    getMemberDailyRecords,
     getAccountAliases,
     getDistinctAccountLast4ForMonth,
     getDistinctAccountLast4ForHousehold,

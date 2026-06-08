@@ -76,7 +76,14 @@ body {
 }
 
 :root {
-  --shell-tab-clearance: calc(4rem + env(safe-area-inset-bottom, 0px));
+  --pwa-tab-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --shell-tab-clearance: calc(3.5rem + var(--pwa-tab-safe-bottom));
+}
+
+@media (display-mode: standalone) {
+  :root {
+    --pwa-tab-safe-bottom: max(env(safe-area-inset-bottom, 0px), 34px);
+  }
 }
 
 @keyframes blob-drift {

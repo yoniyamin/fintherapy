@@ -17,6 +17,32 @@ export interface CategoryTrendPoint {
   count: number
 }
 
+export interface AccountSpending {
+  billing_month: string
+  account_last4: string | null
+  label: string
+  account_type: string | null
+  total_amount: number
+  tx_count: number
+}
+
+export interface CardFundingRow {
+  billing_month: string
+  source_account: string | null
+  source_label: string
+  transfer_kind: string
+  total_amount: number
+  tx_count: number
+}
+
+export interface SalaryRow {
+  billing_month: string
+  account_last4: string | null
+  label: string
+  total_amount: number
+  tx_count: number
+}
+
 export interface MultiMonthData {
   summaryByMonth: Map<string, CategorySummary[]>
   aggregatedSummary: CategorySummary[]
@@ -25,6 +51,9 @@ export interface MultiMonthData {
   dailyTotals: DailyTotal[]
   allTransactions: ExportRow[]
   householdIncome: number | null
+  spendingByAccount: AccountSpending[]
+  cardFunding: CardFundingRow[]
+  salaryDetected: SalaryRow[]
 }
 
 export function useMultiMonthReveal(householdId: string | null | undefined) {
@@ -47,7 +76,7 @@ export function useMultiMonthReveal(householdId: string | null | undefined) {
     try {
       const acctFilter = accountLast4s && accountLast4s.length > 0 ? accountLast4s : null
 
-      const [summaryResults, totalsRes, incomeRes, exportResults] = await Promise.all([
+      const [summaryResults, totalsRes, incomeRes, exportResults, accountRes, fundingRes, salaryRes] = await Promise.all([
         Promise.all(
           months.map(m =>
             supabase.rpc('get_monthly_summary', {
@@ -72,6 +101,18 @@ export function useMultiMonthReveal(householdId: string | null | undefined) {
             }).then(res => ({ month: m, data: res.data as ExportRow[] | null, error: res.error }))
           )
         ),
+        supabase.rpc('get_spending_by_account', {
+          p_household_id: householdId,
+          p_billing_months: months,
+        }),
+        supabase.rpc('get_card_funding_summary', {
+          p_household_id: householdId,
+          p_billing_months: months,
+        }),
+        supabase.rpc('get_salary_in_summary', {
+          p_household_id: householdId,
+          p_billing_months: months,
+        }),
       ])
 
       if (ticket !== abortRef.current) return
@@ -101,6 +142,9 @@ export function useMultiMonthReveal(householdId: string | null | undefined) {
       const dailyTotals = buildDailyTotals(allTransactions, includeOwnTransfers)
 
       const householdIncome = (incomeRes.data as number | null) ?? null
+      const spendingByAccount = (accountRes.data as AccountSpending[] | null) ?? []
+      const cardFunding = (fundingRes.data as CardFundingRow[] | null) ?? []
+      const salaryDetected = (salaryRes.data as SalaryRow[] | null) ?? []
 
       setData({
         summaryByMonth,
@@ -110,6 +154,9 @@ export function useMultiMonthReveal(householdId: string | null | undefined) {
         dailyTotals,
         allTransactions,
         householdIncome,
+        spendingByAccount,
+        cardFunding,
+        salaryDetected,
       })
     } catch (e) {
       if (ticket === abortRef.current) {
@@ -188,12 +235,13 @@ export function buildDailyTotals(
   for (const tx of transactions) {
     if (!includeOwnTransfers && (tx.category === OWN_TRANSFERS_CATEGORY_ID || tx.status === 'transfer' || tx.status === 'offset')) continue
     const d = tx.tx_date
+    const amt = Number(tx.normalized_amount ?? tx.amount)
     const existing = map.get(d)
     if (existing) {
-      existing.amount += Number(tx.amount)
+      existing.amount += amt
       existing.count += 1
     } else {
-      map.set(d, { amount: Number(tx.amount), count: 1 })
+      map.set(d, { amount: amt, count: 1 })
     }
   }
 

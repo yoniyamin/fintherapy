@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
-import { useTransactions, type DailyActivity, type HomeLeaderboardEntry } from '../../hooks/useTransactions'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
+import {
+  useTransactions,
+  type DailyActivity,
+  type HomeLeaderboardEntry,
+  type MemberDailyRecord,
+} from '../../hooks/useTransactions'
+import { ui } from '../../lib/uiClasses'
+import HouseholdPodium from './HouseholdPodium'
 import Leaderboard from '../reveal/Leaderboard'
 
 const XP_PER_LEVEL_SEGMENT = 300
@@ -21,6 +28,9 @@ const LEVEL_TITLES = [
   'Legendary Accountant',
 ]
 
+/**
+ * Derives level, progress bar fill, and title copy from cumulative XP.
+ */
 function xpProgress(totalXp: number) {
   const inSegment = totalXp % XP_PER_LEVEL_SEGMENT
   const progress = inSegment / XP_PER_LEVEL_SEGMENT
@@ -31,25 +41,96 @@ function xpProgress(totalXp: number) {
   return { level, progress, toNext, title, nextTitle }
 }
 
-const actionGlow = {
-  upload:
-    'border-cyan-500/15 bg-surface-950/45 shadow-[0_18px_44px_-14px_rgba(28,176,246,0.45)] hover:shadow-[0_22px_50px_-12px_rgba(28,176,246,0.55)]',
-  classify:
-    'border-emerald-500/15 bg-surface-950/45 shadow-[0_18px_44px_-14px_rgba(88,204,2,0.35)] hover:shadow-[0_22px_50px_-12px_rgba(88,204,2,0.45)]',
-  reveal:
-    'border-violet-500/15 bg-surface-950/45 shadow-[0_18px_44px_-14px_rgba(165,96,232,0.4)] hover:shadow-[0_22px_50px_-12px_rgba(165,96,232,0.5)]',
-  bets:
-    'border-amber-500/15 bg-surface-950/45 shadow-[0_18px_44px_-14px_rgba(255,150,0,0.35)] hover:shadow-[0_22px_50px_-12px_rgba(255,150,0,0.48)]',
-} as const
+interface ActivityLine {
+  userId: string
+  displayName: string
+  summary: string
+}
+
+/**
+ * Builds human-readable activity lines for members with non-zero daily stats.
+ */
+function buildActivityLines(activity: DailyActivity[]): ActivityLine[] {
+  const lines: ActivityLine[] = []
+  for (const row of activity) {
+    const parts: string[] = []
+    const classified = Number(row.classified_today)
+    const uploads = Number(row.uploads_today)
+    const bets = Number(row.bets_placed_today)
+    if (classified > 0) parts.push(`classified ${classified}`)
+    if (uploads > 0) parts.push(`uploaded ${uploads}`)
+    if (bets > 0) parts.push(`placed ${bets} bet${bets === 1 ? '' : 's'}`)
+    if (parts.length === 0) continue
+    lines.push({
+      userId: row.user_id,
+      displayName: row.display_name,
+      summary: parts.join(' · '),
+    })
+  }
+  return lines
+}
+
+function MemberAvatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
+  const dim = size === 'sm' ? 'h-6 w-6 text-[10px]' : 'h-8 w-8 text-xs'
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-full bg-gem/15 font-bold text-gem ring-2 ring-surface-900 ${dim}`}
+    >
+      {name.charAt(0).toUpperCase()}
+    </div>
+  )
+}
+
+interface StatusRowProps {
+  badge?: string
+  badgeTone?: 'default' | 'warning'
+  detail: string
+  label: string
+  to: string
+}
+
+/** Tappable row linking to a workflow that needs household attention. */
+function StatusRow({ badge, badgeTone = 'default', detail, label, to }: StatusRowProps) {
+  return (
+    <Link
+      to={to}
+      className={`flex items-center gap-3 rounded-xl border border-white/[0.06] bg-surface-950/45 px-3 py-2.5 transition-colors hover:bg-surface-900/55 ${ui.glassInset}`}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-surface-100">{label}</p>
+        <p className="text-[11px] text-surface-500">{detail}</p>
+      </div>
+      {badge && (
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums text-white ${
+            badgeTone === 'warning' ? 'bg-flame' : 'bg-duo-green'
+          }`}
+        >
+          {badge}
+        </span>
+      )}
+      <span className="shrink-0 text-surface-500" aria-hidden>
+        ›
+      </span>
+    </Link>
+  )
+}
 
 export default function HomePage() {
   const { profile, signOut } = useAuth()
-  const { transactions: pending, autoClassified, getDailyActivity, getHouseholdInfo, getLeaderboard } =
-    useTransactions(profile?.household_id)
+  const {
+    transactions: pending,
+    autoClassified,
+    getDailyActivity,
+    getHouseholdInfo,
+    getLeaderboard,
+    getMemberDailyRecords,
+  } = useTransactions(profile?.household_id)
   const classifyQueueCount = pending.length + autoClassified.length
   const noIdeaCount = useFlaggedCount(profile?.household_id)
   const [dailyActivity, setDailyActivity] = useState<DailyActivity[]>([])
   const [leaderboard, setLeaderboard] = useState<HomeLeaderboardEntry[]>([])
+  const [memberRecords, setMemberRecords] = useState<MemberDailyRecord[]>([])
   const [householdInfo, setHouseholdInfo] = useState<{ name: string; invite_code: string } | null>(null)
   const [codeCopied, setCodeCopied] = useState(false)
 
@@ -61,16 +142,18 @@ export default function HomePage() {
       getDailyActivity(),
       getHouseholdInfo(),
       getLeaderboard(),
-    ]).then(([activity, info, lb]) => {
+      getMemberDailyRecords(),
+    ]).then(([activity, info, lb, records]) => {
       if (cancelled) return
       setDailyActivity(activity)
       if (info) setHouseholdInfo(info)
       setLeaderboard(lb)
+      setMemberRecords(records)
     })
     return () => {
       cancelled = true
     }
-  }, [profile?.household_id, getDailyActivity, getHouseholdInfo, getLeaderboard])
+  }, [profile?.household_id, getDailyActivity, getHouseholdInfo, getLeaderboard, getMemberDailyRecords])
 
   const copyInviteCode = async () => {
     if (!householdInfo) return
@@ -79,203 +162,173 @@ export default function HomePage() {
     setTimeout(() => setCodeCopied(false), 2000)
   }
 
-  const myToday = dailyActivity.find(d => d.user_id === profile?.id)
-  const classifiedToday = myToday ? Number(myToday.classified_today) : 0
   const xp = profile
     ? xpProgress(profile.total_xp)
     : { level: 1, progress: 0, toNext: XP_PER_LEVEL_SEGMENT, title: LEVEL_TITLES[0], nextTitle: LEVEL_TITLES[1] ?? null }
 
+  const teamXp = useMemo(() => leaderboard.reduce((sum, entry) => sum + entry.total_xp, 0), [leaderboard])
+  const memberCount = Math.max(leaderboard.length, profile ? 1 : 0)
+  const activityLines = useMemo(() => buildActivityLines(dailyActivity), [dailyActivity])
+
   return (
     <div className="relative z-10 mx-auto flex max-w-lg flex-col px-4 pb-4 pt-5">
-      <motion.div
-        initial={{ y: -16, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: 'spring', damping: 22 }}
-      >
-        <h1 className="bg-gradient-to-r from-surface-100 via-ice to-gem-light bg-clip-text text-xl font-extrabold tracking-tight text-transparent">
-          Financial Therapy
-        </h1>
-        <p className="mt-0.5 text-xs text-surface-400">Turn expense chaos into a game</p>
-      </motion.div>
-
-      {profile && (
+      {householdInfo && profile && (
         <motion.section
-          className="mt-4 overflow-hidden rounded-[22px] border border-white/[0.09] bg-gradient-to-br from-white/[0.09] via-white/[0.03] to-transparent shadow-[0_28px_60px_-28px_rgba(0,0,0,0.55)] backdrop-blur-xl"
-          initial={{ scale: 0.98, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.06 }}
+          className={`overflow-hidden ${ui.glass}`}
+          initial={{ y: -12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ type: 'spring', damping: 22 }}
         >
-          <div className="relative p-4">
-            <div
-              className="pointer-events-none absolute -right-8 -top-12 h-36 w-36 rounded-full bg-teal-500/10 blur-3xl"
-              aria-hidden
-            />
-            <div className="flex gap-3">
-              <div className="relative shrink-0">
+          <div className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500">Household</p>
+                <h1 className="mt-1 truncate text-lg font-extrabold tracking-tight text-surface-50">
+                  {householdInfo.name}
+                </h1>
+                <p className="mt-0.5 text-xs text-surface-400">
+                  {memberCount} member{memberCount === 1 ? '' : 's'}
+                  {teamXp > 0 && (
+                    <>
+                      <span className="text-surface-600"> · </span>
+                      <span className="tabular-nums text-gem">{teamXp.toLocaleString()} team XP</span>
+                    </>
+                  )}
+                </p>
+              </div>
+              {leaderboard.length >= 2 && (
+                <HouseholdPodium
+                  currentUserId={profile.id}
+                  first={leaderboard[0]!}
+                  second={leaderboard[1]!}
+                />
+              )}
+            </div>
+
+            <div className="mt-3 rounded-xl border border-white/[0.06] bg-surface-950/40 px-3 py-2.5">
+              <div className="flex gap-2.5">
                 <div
-                  className="rounded-full p-[3px]"
+                  className="shrink-0 rounded-full p-[2px]"
                   style={{
                     background: `conic-gradient(from -90deg, #1CB0F6 0deg, #58CC02 ${xp.progress * 360}deg, rgba(255,255,255,0.1) ${xp.progress * 360}deg)`,
                   }}
                 >
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-900/95 text-sm font-bold text-gem shadow-inner">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-900/95 text-xs font-bold text-gem">
                     {profile.display_name.charAt(0).toUpperCase()}
                   </div>
                 </div>
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="truncate text-sm font-bold text-surface-50">{profile.display_name}</p>
-                  <p className="text-base font-extrabold tabular-nums text-gem">{profile.total_xp}</p>
-                </div>
-                {householdInfo && (
-                  <p className="truncate text-[11px] text-surface-400">{householdInfo.name}</p>
-                )}
-                <p className="mt-1.5 text-[11px] font-semibold">
-                  <span className="text-surface-400">Level {xp.level}</span>
-                  <span className="text-surface-600"> · </span>
-                  <span className="text-teal-400">{xp.title}</span>
-                </p>
-                <div className="mt-1.5 h-[6px] overflow-hidden rounded-full bg-surface-800/90 ring-1 ring-white/[0.06]">
-                  <motion.div
-                    className="h-full rounded-full bg-gradient-to-r from-teal-500/90 via-emerald-400/95 to-duo-green"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.max(4, xp.progress * 100)}%` }}
-                    transition={{ delay: 0.25, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                  />
-                </div>
-                {xp.nextTitle ? (
-                  <p className="mt-1.5 text-[11px] text-surface-500">
-                    <span className="text-surface-400">{xp.toNext} XP</span> to{' '}
-                    <span className="font-semibold text-emerald-300">{xp.nextTitle}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="truncate text-sm font-bold text-surface-50">{profile.display_name}</p>
+                    <p className="text-sm font-extrabold tabular-nums text-gem">{profile.total_xp}</p>
+                  </div>
+                  <p className="text-[11px] font-semibold">
+                    <span className="text-surface-400">Level {xp.level}</span>
+                    <span className="text-surface-600"> · </span>
+                    <span className="text-teal-400">{xp.title}</span>
                   </p>
-                ) : (
-                  <p className="mt-1.5 text-[11px] font-semibold text-emerald-300">Max title reached 👑</p>
-                )}
+                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-800/90 ring-1 ring-white/[0.06]">
+                    <motion.div
+                      className="h-full rounded-full bg-gradient-to-r from-teal-500/90 via-emerald-400/95 to-duo-green"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.max(4, xp.progress * 100)}%` }}
+                      transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          {householdInfo && (
-            <div className="border-t border-white/[0.06] bg-black/15 px-4 py-2.5 backdrop-blur-sm">
-              <button
-                type="button"
-                onClick={copyInviteCode}
-                className="flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-surface-950/50 px-3 py-2 text-left transition hover:bg-surface-900/60"
+            <button
+              type="button"
+              onClick={copyInviteCode}
+              className="mt-3 flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-surface-950/50 px-3 py-2 text-left transition hover:bg-surface-900/60"
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500">Invite code</p>
+              <p className="flex-1 text-right font-mono text-xs font-bold tracking-[0.2em] text-surface-200">
+                {householdInfo.invite_code}
+              </p>
+              <span className="shrink-0 text-[11px] font-semibold text-duo-green">
+                {codeCopied ? 'Copied!' : 'Copy'}
+              </span>
+            </button>
+
+            <Link to="/upload" className="mt-3 block">
+              <motion.div
+                className="flex items-center justify-center gap-2 rounded-2xl border border-cyan-500/15 bg-surface-950/45 px-4 py-3 transition-all active:scale-[0.98] shadow-[0_18px_44px_-14px_rgba(28,176,246,0.45)] hover:shadow-[0_22px_50px_-12px_rgba(28,176,246,0.55)]"
+                whileTap={{ scale: 0.98 }}
               >
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500">
-                  Invite code
-                </p>
-                <p className="flex-1 text-right font-mono text-xs font-bold tracking-[0.2em] text-surface-200">
-                  {householdInfo.invite_code}
-                </p>
-                <span className="shrink-0 text-[11px] font-semibold text-duo-green">
-                  {codeCopied ? 'Copied!' : 'Copy'}
-                </span>
-              </button>
-            </div>
-          )}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-ice">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <p className="text-sm font-semibold text-surface-100">Upload statement</p>
+              </motion.div>
+            </Link>
+          </div>
         </motion.section>
       )}
 
-      <motion.div
-        className="mt-4 rounded-[22px] border border-white/[0.07] bg-white/[0.03] p-1.5 backdrop-blur-xl"
-        initial={{ y: 16, opacity: 0 }}
+      <motion.section
+        className="mt-4 space-y-2"
+        initial={{ y: 12, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.12 }}
+        transition={{ delay: 0.1 }}
       >
-        <div className="grid grid-cols-4 gap-1.5">
-          <Link to="/upload" className="block">
-            <motion.div
-              className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border px-1 py-3 transition-all active:scale-[0.98] ${actionGlow.upload}`}
-              whileTap={{ scale: 0.98 }}
-            >
-              <span className="text-xl drop-shadow-[0_4px_12px_rgba(28,176,246,0.35)]">📄</span>
-              <p className="text-center text-[11px] font-semibold text-surface-100">Upload</p>
-            </motion.div>
-          </Link>
-
-          <Link to="/classify" className="relative block">
-            <motion.div
-              className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border px-1 py-3 transition-all active:scale-[0.98] ${actionGlow.classify}`}
-              whileTap={{ scale: 0.98 }}
-            >
-              <span className="text-xl drop-shadow-[0_4px_12px_rgba(88,204,2,0.3)]">🃏</span>
-              <p className="text-center text-[11px] font-semibold text-surface-100">Classify</p>
-            </motion.div>
-            {classifyQueueCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-duo-green px-1 text-[9px] font-bold text-white shadow-[0_4px_12px_rgba(88,204,2,0.45)]">
-                {classifyQueueCount}
-              </span>
-            )}
-          </Link>
-
-          <Link to="/reveal" className="block">
-            <motion.div
-              className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border px-1 py-3 transition-all active:scale-[0.98] ${actionGlow.reveal}`}
-              whileTap={{ scale: 0.98 }}
-            >
-              <span className="text-xl drop-shadow-[0_4px_12px_rgba(165,96,232,0.35)]">📊</span>
-              <p className="text-center text-[11px] font-semibold text-surface-100">Reveal</p>
-            </motion.div>
-          </Link>
-
-          <Link to="/bets" className="block">
-            <motion.div
-              className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border px-1 py-3 transition-all active:scale-[0.98] ${actionGlow.bets}`}
-              whileTap={{ scale: 0.98 }}
-            >
-              <span className="text-xl drop-shadow-[0_4px_12px_rgba(255,150,0,0.32)]">🎰</span>
-              <p className="text-center text-[11px] font-semibold text-surface-100">Bets</p>
-            </motion.div>
-          </Link>
-        </div>
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">Needs attention</h2>
+        <StatusRow
+          badge={classifyQueueCount > 0 ? String(classifyQueueCount) : undefined}
+          detail={
+            classifyQueueCount > 0
+              ? `${classifyQueueCount} transaction${classifyQueueCount === 1 ? '' : 's'} waiting`
+              : 'Queue is clear'
+          }
+          label="Classify queue"
+          to="/classify"
+        />
         {noIdeaCount > 0 && (
-          <Link
+          <StatusRow
+            badge={String(noIdeaCount)}
+            badgeTone="warning"
+            detail="Flagged for partner review"
+            label="No idea queue"
             to="/classify/no-idea"
-            className="mt-2 flex items-center justify-center gap-2 rounded-xl border border-flame/25 bg-flame/10 px-3 py-2 text-center text-xs font-semibold text-flame transition-colors hover:bg-flame/15"
-          >
-            <span>No idea queue</span>
-            <span className="rounded-full bg-flame/30 px-2 py-0.5 tabular-nums">{noIdeaCount}</span>
-          </Link>
+          />
         )}
-      </motion.div>
+        <StatusRow detail="Check monthly progress and reveal totals" label="Reveal" to="/reveal" />
+      </motion.section>
 
-      {profile && (
-        <motion.div
-          className="mt-3 flex divide-x divide-white/[0.07] overflow-hidden rounded-[18px] border border-white/[0.08] bg-gradient-to-b from-white/[0.06] to-white/[0.02] py-3 backdrop-blur-xl"
+      {activityLines.length > 0 && (
+        <motion.section
+          className="mt-4 space-y-2"
           initial={{ y: 12, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.18 }}
+          transition={{ delay: 0.14 }}
         >
-          <div className="flex min-w-0 flex-1 flex-col items-center px-1.5 text-center">
-            <p className="text-lg font-extrabold tabular-nums text-ice">{classifyQueueCount}</p>
-            <p className="mt-0.5 text-[9px] font-medium leading-tight text-surface-500">
-              To classify
-            </p>
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">Activity today</h2>
+          <div className={`space-y-2 p-3 ${ui.glassFlat}`}>
+            {activityLines.map((line) => (
+              <div key={line.userId} className="flex items-center gap-2.5">
+                <MemberAvatar name={line.displayName} size="sm" />
+                <p className="min-w-0 text-xs text-surface-300">
+                  <span className="font-semibold text-surface-100">{line.displayName}</span>{' '}
+                  {line.summary}
+                </p>
+              </div>
+            ))}
           </div>
-          <div className="flex min-w-0 flex-1 flex-col items-center px-1.5 text-center">
-            <p className="text-lg font-extrabold tabular-nums text-duo-green">{classifiedToday}</p>
-            <p className="mt-0.5 text-[9px] font-medium leading-tight text-surface-500">
-              Today
-            </p>
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col items-center px-1.5 text-center">
-            <p className="text-lg font-extrabold tabular-nums text-gem">{profile.total_xp}</p>
-            <p className="mt-0.5 text-[9px] font-medium leading-tight text-surface-500">
-              Total XP
-            </p>
-          </div>
-        </motion.div>
+        </motion.section>
       )}
 
       {leaderboard.length > 1 && (
         <motion.div
+          className="mt-4"
           initial={{ y: 12, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.22 }}
+          transition={{ delay: 0.18 }}
         >
-          <Leaderboard entries={leaderboard} dailyActivity={dailyActivity} />
+          <Leaderboard entries={leaderboard} dailyActivity={dailyActivity} memberRecords={memberRecords} />
         </motion.div>
       )}
 

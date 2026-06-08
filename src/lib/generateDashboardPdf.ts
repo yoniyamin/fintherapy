@@ -2,13 +2,17 @@ import { jsPDF } from 'jspdf'
 import type { CategorySummary, MonthlyTotal } from '../hooks/useReveal'
 import type { ExportRow } from '../hooks/useTransactions'
 import {
-  getHealthSummary,
   generateInsights,
+  getDeltaDrivers,
+  getHealthSummary,
   getBiggestMover,
   getSpendingPredictability,
   type HealthVerdict,
+  type InsightInput,
 } from './advisorInsights'
-import type { DailyTotal, CategoryTrendPoint } from '../hooks/useMultiMonthReveal'
+import type { AccountSpending, CardFundingRow, DailyTotal, CategoryTrendPoint, SalaryRow } from '../hooks/useMultiMonthReveal'
+import type { RecurringCharge } from './recurringDetector'
+import { OWN_TRANSFERS_CATEGORY_ID } from './constants'
 
 export interface PdfReportInput {
   months: string[]
@@ -19,7 +23,14 @@ export interface PdfReportInput {
   dailyTotals: DailyTotal[]
   income: number | null
   transactions: ExportRow[]
-  categoryLookup: Record<string, { icon: string; label: string }>
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
+  recurringCharges: RecurringCharge[]
+  spendingByAccount: AccountSpending[]
+  cardFunding: CardFundingRow[]
+  salaryDetected: SalaryRow[]
+  fixedTotal: number
+  discretionaryTotal: number
+  headline: string
 }
 
 const PALETTE = ['#58CC02', '#38bdf8', '#f59e0b', '#ef4444', '#a78bfa', '#f472b6', '#22d3ee', '#fb923c']
@@ -177,7 +188,7 @@ async function renderLineChart(
 
   // Y axis
   g.append('g')
-    .call(d3.axisLeft(y).ticks(4).tickFormat(v => `$${fmtCompact(v as number)}`))
+    .call(d3.axisLeft(y).ticks(4).tickFormat(v => `€${fmtCompact(v as number)}`))
     .call(g => g.select('.domain').remove())
     .call(g => g.selectAll('.tick line').remove())
     .selectAll('text')
@@ -226,7 +237,7 @@ async function renderLineChart(
     .attr('text-anchor', 'middle')
     .attr('fill', TEXT).attr('font-size', '9px')
     .attr('font-family', 'Helvetica, Arial, sans-serif')
-    .text(d => `$${fmtCompact(d.amount)}`)
+    .text(d => `€${fmtCompact(d.amount)}`)
 
   // Income reference line
   if (income != null && income > 0 && income <= maxVal) {
@@ -303,7 +314,7 @@ async function renderDonutChart(
     .attr('text-anchor', 'middle').attr('dy', '-4')
     .attr('fill', TEXT).attr('font-size', '16px').attr('font-weight', 'bold')
     .attr('font-family', 'Helvetica, Arial, sans-serif')
-    .text(`$${fmtCompact(total)}`)
+    .text(`€${fmtCompact(total)}`)
   g.append('text')
     .attr('text-anchor', 'middle').attr('dy', '12')
     .attr('fill', TEXT_MUTED).attr('font-size', '9px')
@@ -463,7 +474,7 @@ async function drawPage1(
   const contentW = pw - mx * 2
   let y = 14
 
-  const insightInput = {
+  const insightInput: InsightInput = {
     months: input.months,
     aggregatedSummary: input.aggregatedSummary,
     summaryByMonth: input.summaryByMonth,
@@ -472,6 +483,11 @@ async function drawPage1(
     dailyTotals: input.dailyTotals,
     income: input.income,
     categoryLookup: input.categoryLookup,
+    transactions: input.transactions,
+    recurringCharges: input.recurringCharges,
+    spendingByAccount: input.spendingByAccount,
+    fixedTotal: input.fixedTotal,
+    discretionaryTotal: input.discretionaryTotal,
   }
 
   const health = getHealthSummary(insightInput)
@@ -491,12 +507,12 @@ async function drawPage1(
 
   // ── Title ──
   setCol(pdf, TEXT)
-  pdf.setFontSize(16)
+  pdf.setFontSize(14)
   pdf.setFont('helvetica', 'bold')
   pdf.text('YOUR FINANCIAL HEALTH CHECK', mx, y)
-  y += 5.5
+  y += 5
   setCol(pdf, TEXT_DIM)
-  pdf.setFontSize(8)
+  pdf.setFontSize(7.5)
   pdf.setFont('helvetica', 'normal')
   pdf.text(
     `${fromLabel} - ${toLabel}   |   Generated ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
@@ -504,17 +520,18 @@ async function drawPage1(
   )
   y += 7
 
-  // ── Health verdict banner ──
+  // ── Narrative headline ──
+  const headlineText = input.headline || stripEmoji(health.message)
   const verdictColor = VERDICT_COLORS[health.verdict]
-  drawCard(pdf, mx, y, contentW, 12)
-  drawDot(pdf, mx + 5, y + 6, 2.5, verdictColor)
+  const headlineH = Math.max(14, pdf.splitTextToSize(headlineText, contentW - 16).length * 4 + 8)
+  drawCard(pdf, mx, y, contentW, headlineH)
+  drawDot(pdf, mx + 5, y + headlineH / 2, 2.5, verdictColor)
   setCol(pdf, TEXT)
-  pdf.setFontSize(8.5)
-  pdf.setFont('helvetica', 'normal')
-  const verdictText = stripEmoji(health.message)
-  const vLines = pdf.splitTextToSize(verdictText, contentW - 16)
-  pdf.text(vLines, mx + 11, y + 5.5)
-  y += 15
+  pdf.setFontSize(9)
+  pdf.setFont('helvetica', 'bold')
+  const hLines = pdf.splitTextToSize(headlineText, contentW - 16)
+  pdf.text(hLines, mx + 11, y + 6)
+  y += headlineH + 3
 
   // ── KPI row ──
   const kpiGap = 2.5
@@ -523,32 +540,38 @@ async function drawPage1(
   const kpiTotalW = contentW - (gaugePng ? gaugeW + kpiGap : 0)
   const kpiW = (kpiTotalW - kpiGap * (kpiCount - 1)) / kpiCount
 
+  const fixedAvg = input.months.length > 0 ? input.fixedTotal / input.months.length : 0
+  const discretionaryAvg = input.months.length > 0 ? input.discretionaryTotal / input.months.length : 0
+  const incomeRef = input.income && input.income > 0
+    ? ` (${Math.round((avgMonthly / input.income) * 100)}% of income)`
+    : ''
+
   const kpis: { title: string; value: string; sub: string; accent: string }[] = [
-    {
-      title: 'TOTAL SPENT',
-      value: fmt(totalSpent),
-      sub: `across ${input.months.length} months`,
-      accent: CYAN,
-    },
     {
       title: 'AVG MONTHLY',
       value: fmt(avgMonthly),
-      sub: savingsRate != null ? `${Math.round(savingsRate)}% savings rate` : '',
+      sub: savingsRate != null ? `${Math.round(savingsRate)}% savings rate${incomeRef}` : `across ${input.months.length} months`,
       accent: PRIMARY,
     },
     {
-      title: 'BIGGEST MOVER',
-      value: biggestMover ? biggestMover.label : 'N/A',
-      sub: biggestMover ? `${biggestMover.direction === 'up' ? '+' : ''}${Math.round(biggestMover.pct)}%` : '',
-      accent: biggestMover?.direction === 'up' ? '#ef4444' : '#22c55e',
+      title: 'FIXED COSTS',
+      value: fmt(fixedAvg),
+      sub: input.income ? `${Math.round((fixedAvg / input.income) * 100)}% of income` : 'committed monthly',
+      accent: '#a78bfa',
+    },
+    {
+      title: 'DISCRETIONARY',
+      value: fmt(discretionaryAvg),
+      sub: input.income ? `${fmt(input.income - fixedAvg)} available` : 'flexible spending',
+      accent: CYAN,
     },
   ]
   if (!gaugePng) {
     kpis.push({
-      title: 'PREDICTABILITY',
-      value: predictability.label,
-      sub: `CV ${predictability.cv.toFixed(2)}`,
-      accent: '#a78bfa',
+      title: 'BIGGEST MOVER',
+      value: biggestMover ? biggestMover.label : predictability.label,
+      sub: biggestMover ? `${biggestMover.direction === 'up' ? '+' : ''}${Math.round(biggestMover.pct)}%` : `CV ${predictability.cv.toFixed(2)}`,
+      accent: biggestMover?.direction === 'up' ? '#ef4444' : '#22c55e',
     })
   }
 
@@ -723,8 +746,11 @@ function drawPage2(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean) {
   drawSectionTitle(pdf, 'Month-over-Month Breakdown', mx, y + 3, CYAN)
   y += 8
 
-  const topCats = input.aggregatedSummary.slice(0, 8)
+  const tableCategories = input.aggregatedSummary.filter(
+    c => c.category !== OWN_TRANSFERS_CATEGORY_ID,
+  )
   const displayMonths = sorted.slice(-6)
+  const pageH = pdf.internal.pageSize.getHeight()
   const trendColW = 18
   const catColW = isLandscape ? 48 : 38
   const availW = contentW - catColW - trendColW
@@ -747,8 +773,32 @@ function drawPage2(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean) {
   pdf.text('TREND', mx + catColW + displayMonths.length * colW + trendColW / 2, y + 4.5, { align: 'center' })
   y += 9
 
-  for (let ci = 0; ci < topCats.length; ci++) {
-    const cat = topCats[ci]
+  for (let ci = 0; ci < tableCategories.length; ci++) {
+    if (y > pageH - 90) {
+      drawFooter(pdf)
+      pdf.addPage()
+      drawBg(pdf)
+      y = 14
+      drawSectionTitle(pdf, 'Month-over-Month Breakdown (cont.)', mx, y + 3, CYAN)
+      y += 8
+      drawCard(pdf, mx, y, contentW, 7)
+      setCol(pdf, TEXT_DIM)
+      pdf.setFontSize(6)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('CATEGORY', mx + 3, y + 4.5)
+      for (let i = 0; i < displayMonths.length; i++) {
+        pdf.text(
+          formatMonthShort(displayMonths[i]),
+          mx + catColW + i * colW + colW / 2,
+          y + 4.5,
+          { align: 'center' },
+        )
+      }
+      pdf.text('TREND', mx + catColW + displayMonths.length * colW + trendColW / 2, y + 4.5, { align: 'center' })
+      y += 9
+    }
+
+    const cat = tableCategories[ci]
     const label = input.categoryLookup[cat.category]?.label ?? cat.category
     const truncLabel = label.length > (isLandscape ? 22 : 16)
       ? label.substring(0, isLandscape ? 21 : 15) + '..'
@@ -785,7 +835,7 @@ function drawPage2(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean) {
     if (amounts.length >= 2 && amounts[0] > 0) {
       const first = amounts[0]
       const last = amounts[amounts.length - 1]
-      const pct = Math.round(((last - first) / first) * 100)
+      const pct = Math.round(Math.max(-500, Math.min(500, ((last - first) / first) * 100)))
       const trendColor = pct > 10 ? '#ef4444' : pct < -10 ? '#22c55e' : TEXT_MUTED
       const badgeBg = pct > 10 ? '#3b1111' : pct < -10 ? '#0b2b15' : BG_CARD
 
@@ -815,7 +865,8 @@ function drawPage2(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean) {
   y += 8
 
   const topTx = [...input.transactions]
-    .sort((a, b) => Number(b.amount) - Number(a.amount))
+    .filter(tx => tx.category !== OWN_TRANSFERS_CATEGORY_ID && tx.status !== 'transfer' && tx.status !== 'offset')
+    .sort((a, b) => Math.abs(Number(b.normalized_amount ?? b.amount)) - Math.abs(Number(a.normalized_amount ?? a.amount)))
     .slice(0, 10)
 
   const txDateW = 20
@@ -856,9 +907,251 @@ function drawPage2(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean) {
     setCol(pdf, TEXT)
     pdf.setFontSize(7)
     pdf.setFont('helvetica', 'bold')
-    pdf.text(fmt(Number(tx.amount)), pw - mx - 3, y + 3.5, { align: 'right' })
+    pdf.text(fmt(Math.abs(Number(tx.normalized_amount ?? tx.amount))), pw - mx - 3, y + 3.5, { align: 'right' })
 
     y += 8
+  }
+
+  drawFooter(pdf)
+}
+
+// --------------- Page 3: Household Money Flow ---------------
+
+function drawPage3(pdf: jsPDF, input: PdfReportInput, insightInput: InsightInput, isLandscape: boolean) {
+  pdf.addPage()
+  drawBg(pdf)
+  const pw = pdf.internal.pageSize.getWidth()
+  const mx = isLandscape ? 16 : 12
+  const contentW = pw - mx * 2
+  let y = 14
+
+  // ── Title ──
+  setCol(pdf, TEXT)
+  pdf.setFontSize(12)
+  pdf.setFont('helvetica', 'bold')
+  pdf.text('HOUSEHOLD MONEY FLOW', mx, y)
+  y += 8
+
+  // ── Per-card/member spending ──
+  if (input.spendingByAccount.length > 0) {
+    drawSectionTitle(pdf, 'Spending by Card / Member', mx, y, CYAN)
+    y += 6
+
+    const accountTotals = new Map<string, { label: string; amount: number; txCount: number }>()
+    for (const row of input.spendingByAccount) {
+      const key = row.account_last4 ?? 'unknown'
+      const existing = accountTotals.get(key)
+      if (existing) {
+        existing.amount += Number(row.total_amount)
+        existing.txCount += Number(row.tx_count)
+      } else {
+        accountTotals.set(key, { label: row.label, amount: Number(row.total_amount), txCount: Number(row.tx_count) })
+      }
+    }
+
+    const accountRows = Array.from(accountTotals.values()).sort((a, b) => b.amount - a.amount)
+    const maxAcctAmount = accountRows[0]?.amount ?? 1
+
+    for (let i = 0; i < Math.min(accountRows.length, 5); i++) {
+      const row = accountRows[i]
+      const barPct = (row.amount / maxAcctAmount) * 100
+      const monthlyAvg = row.amount / Math.max(input.months.length, 1)
+
+      if (i % 2 === 0) drawCard(pdf, mx, y - 1, contentW, 9, BG_CARD_ALT)
+
+      setCol(pdf, TEXT)
+      pdf.setFontSize(7.5)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text(row.label, mx + 4, y + 3.5)
+
+      setCol(pdf, TEXT_MUTED)
+      pdf.setFontSize(6.5)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(`${fmt(monthlyAvg)}/mo · ${row.txCount} txs`, mx + 55, y + 3.5)
+
+      drawProgressBar(pdf, mx + contentW * 0.5, y + 2, contentW * 0.4, 3, barPct, PALETTE[i % PALETTE.length])
+
+      setCol(pdf, TEXT)
+      pdf.setFontSize(7)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text(fmt(row.amount), pw - mx - 4, y + 3.5, { align: 'right' })
+
+      y += 9
+    }
+    y += 4
+  }
+
+  // ── Card funding ──
+  if (input.cardFunding.length > 0) {
+    drawSectionTitle(pdf, 'Card Funding (Transfers to Shared Cards)', mx, y, '#f59e0b')
+    y += 6
+
+    const fundingByMonth = new Map<string, number>()
+    const fundingBySource = new Map<string, { label: string; amount: number }>()
+    for (const row of input.cardFunding) {
+      fundingByMonth.set(row.billing_month, (fundingByMonth.get(row.billing_month) ?? 0) + Number(row.total_amount))
+      const key = row.source_account ?? 'unknown'
+      const existing = fundingBySource.get(key)
+      if (existing) {
+        existing.amount += Number(row.total_amount)
+      } else {
+        fundingBySource.set(key, { label: row.source_label, amount: Number(row.total_amount) })
+      }
+    }
+
+    const totalFunding = Array.from(fundingByMonth.values()).reduce((s, v) => s + v, 0)
+    const fundingSources = Array.from(fundingBySource.values()).sort((a, b) => b.amount - a.amount)
+
+    drawCard(pdf, mx, y, contentW, 14)
+    setCol(pdf, TEXT)
+    pdf.setFontSize(8)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text(`Total funded: ${fmt(totalFunding)} across ${input.months.length} months`, mx + 4, y + 5)
+
+    setCol(pdf, TEXT_MUTED)
+    pdf.setFontSize(7)
+    pdf.setFont('helvetica', 'normal')
+    const sourceText = fundingSources.slice(0, 3).map(s => `${s.label}: ${fmt(s.amount)}`).join(' · ')
+    pdf.text(sourceText, mx + 4, y + 11)
+    y += 18
+
+    // Funding vs spending comparison (if we can approximate)
+    const spendingOnShared = input.spendingByAccount
+      .filter(r => input.cardFunding.some(f => f.source_account !== r.account_last4))
+    if (spendingOnShared.length > 0 && totalFunding > 0) {
+      setCol(pdf, TEXT_DIM)
+      pdf.setFontSize(7)
+      pdf.setFont('helvetica', 'italic')
+      pdf.text('Card funding is not spending — it is money moved to shared cards before purchases.', mx + 4, y)
+      y += 6
+    }
+  }
+
+  // ── Salary / Income check ──
+  if (input.salaryDetected.length > 0 || input.income) {
+    drawSectionTitle(pdf, 'Income Check', mx, y, '#22c55e')
+    y += 6
+
+    drawCard(pdf, mx, y, contentW, 16)
+    let iy = y + 5
+
+    if (input.income && input.income > 0) {
+      setCol(pdf, TEXT)
+      pdf.setFontSize(7.5)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(`Configured household income: ${fmt(input.income)}/month`, mx + 4, iy)
+      iy += 5
+    }
+
+    if (input.salaryDetected.length > 0) {
+      const detectedTotal = input.salaryDetected.reduce((s, r) => s + Number(r.total_amount), 0)
+      const detectedMonthly = detectedTotal / Math.max(input.months.length, 1)
+      setCol(pdf, TEXT_MUTED)
+      pdf.setFontSize(7)
+      pdf.text(`Detected payroll (NOMINA): ${fmt(detectedMonthly)}/month average`, mx + 4, iy)
+      iy += 5
+
+      if (input.income && input.income > 0) {
+        const delta = detectedMonthly - input.income
+        if (Math.abs(delta) > 100) {
+          setCol(pdf, delta > 0 ? '#22c55e' : '#f59e0b')
+          pdf.text(`Delta: ${delta > 0 ? '+' : ''}${fmt(delta)} vs configured income`, mx + 4, iy)
+        }
+      }
+    }
+    y += 20
+  }
+
+  // ── Recurring charges ──
+  if (input.recurringCharges.length > 0) {
+    drawSectionTitle(pdf, 'Recurring Charges Detected', mx, y, '#a78bfa')
+    y += 6
+
+    const recurringTotal = input.recurringCharges.reduce((s, r) => s + r.monthlyEstimate, 0)
+    drawCard(pdf, mx, y, contentW, 8)
+    setCol(pdf, TEXT)
+    pdf.setFontSize(8)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text(`${input.recurringCharges.length} recurring charges = ${fmt(recurringTotal)}/month (${fmt(recurringTotal * 12)}/year)`, mx + 4, y + 5)
+    y += 11
+
+    const topRecurring = input.recurringCharges.slice(0, 8)
+    for (let i = 0; i < topRecurring.length; i++) {
+      const r = topRecurring[i]
+      if (i % 2 === 0) drawCard(pdf, mx, y - 1, contentW, 7, BG_CARD_ALT)
+
+      setCol(pdf, TEXT)
+      pdf.setFontSize(7)
+      pdf.setFont('helvetica', 'normal')
+      const name = r.merchantClean.length > 30 ? r.merchantClean.substring(0, 28) + '..' : r.merchantClean
+      pdf.text(name, mx + 4, y + 3)
+
+      setCol(pdf, TEXT_MUTED)
+      pdf.setFontSize(6.5)
+      pdf.text(`${r.frequency}/${input.months.length} months`, mx + contentW * 0.55, y + 3)
+
+      setCol(pdf, TEXT)
+      pdf.setFontSize(7)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text(fmt(r.avgAmount), pw - mx - 4, y + 3, { align: 'right' })
+
+      y += 7
+    }
+    y += 4
+  }
+
+  // ── Delta drivers ──
+  const drivers = getDeltaDrivers(insightInput)
+  if (drivers.length > 0) {
+    drawSectionTitle(pdf, 'What Changed & Why', mx, y, '#ef4444')
+    y += 6
+
+    for (const driver of drivers.slice(0, 3)) {
+      const dir = driver.delta >= 0 ? '+' : ''
+      drawCard(pdf, mx, y, contentW, 14)
+      setCol(pdf, driver.delta >= 0 ? '#ef4444' : '#22c55e')
+      pdf.setFontSize(8)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text(`${driver.label}: ${dir}${Math.round(driver.pct)}% (${dir}${fmt(driver.delta)})`, mx + 4, y + 5)
+
+      if (driver.topTransactions.length > 0) {
+        setCol(pdf, TEXT_MUTED)
+        pdf.setFontSize(6.5)
+        pdf.setFont('helvetica', 'normal')
+        const txList = driver.topTransactions
+          .map(t => `${t.merchant.substring(0, 20)} ${fmt(t.amount)}`)
+          .join(' · ')
+        pdf.text(txList, mx + 4, y + 10.5)
+      }
+
+      y += 16
+    }
+  }
+
+  // ── Micro-spend callout ──
+  const microTxs = input.transactions.filter(tx =>
+    tx.category !== OWN_TRANSFERS_CATEGORY_ID &&
+    tx.status !== 'transfer' && tx.status !== 'offset' &&
+    Math.abs(Number(tx.normalized_amount ?? tx.amount)) < 15 &&
+    Math.abs(Number(tx.normalized_amount ?? tx.amount)) > 0
+  )
+  if (microTxs.length > 20) {
+    const microTotal = microTxs.reduce((s, tx) => s + Math.abs(Number(tx.normalized_amount ?? tx.amount)), 0)
+    const microMonthly = microTotal / Math.max(input.months.length, 1)
+
+    if (y < pdf.internal.pageSize.getHeight() - 30) {
+      drawSectionTitle(pdf, 'Small Purchase Alert', mx, y, '#f472b6')
+      y += 6
+      drawCard(pdf, mx, y, contentW, 10)
+      setCol(pdf, TEXT)
+      pdf.setFontSize(7.5)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(
+        `${microTxs.length} purchases under €15 totaling ${fmt(microTotal)} (${fmt(microMonthly)}/month).`,
+        mx + 4, y + 5.5,
+      )
+      y += 14
+    }
   }
 
   drawFooter(pdf)
@@ -905,6 +1198,30 @@ export async function exportSummaryPdf(
 
   await drawPage1(pdf, input, lineChartPng, donutResult.png, donutResult.slices, gaugePng, isLandscape)
   drawPage2(pdf, input, isLandscape)
+
+  const insightInput: InsightInput = {
+    months: input.months,
+    aggregatedSummary: input.aggregatedSummary,
+    summaryByMonth: input.summaryByMonth,
+    monthlyTotals: input.monthlyTotals,
+    categoryTrend: input.categoryTrend,
+    dailyTotals: input.dailyTotals,
+    income: input.income,
+    categoryLookup: input.categoryLookup,
+    transactions: input.transactions,
+    recurringCharges: input.recurringCharges,
+    spendingByAccount: input.spendingByAccount,
+    fixedTotal: input.fixedTotal,
+    discretionaryTotal: input.discretionaryTotal,
+  }
+
+  const hasPage3Content = input.spendingByAccount.length > 1
+    || input.cardFunding.length > 0
+    || input.recurringCharges.length > 0
+    || input.salaryDetected.length > 0
+  if (hasPage3Content) {
+    drawPage3(pdf, input, insightInput, isLandscape)
+  }
 
   const sorted = [...input.months].sort()
   const filename = `financial-health-check-${sorted[0]}-to-${sorted[sorted.length - 1]}-${layout}.pdf`

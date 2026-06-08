@@ -1,6 +1,7 @@
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
+import { useUiPrefs } from '../../hooks/useUiPrefs'
 import { ui } from '../../lib/uiClasses'
 
 interface Props {
@@ -9,18 +10,26 @@ interface Props {
   categoryLookup: Record<string, { icon: string; label: string }>
 }
 
+type ViewMode = 'bars' | 'cards'
+
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v)
 
 function formatMonth(m: string): string {
-  const [, mo] = m.split('-')
   const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const [, mo] = m.split('-')
   return labels[Number(mo) - 1] ?? mo
 }
 
 function pctChange(from: number, to: number): number {
-  if (from === 0) return 0
-  return ((to - from) / Math.abs(from)) * 100
+  if (Math.abs(from) < 1) return 0
+  const raw = ((to - from) / Math.abs(from)) * 100
+  return Math.max(-500, Math.min(500, raw))
+}
+
+interface ShiftInfo {
+  spikeMonth: number
+  gapMonth: number
 }
 
 interface RowData {
@@ -28,69 +37,225 @@ interface RowData {
   icon: string
   label: string
   amounts: number[]
-  totalPctChange: number
+  totalPct: number
   flagged: boolean
+  shift: ShiftInfo | null
+}
+
+function detectShift(amounts: number[]): ShiftInfo | null {
+  if (amounts.length < 3) return null
+  const nonZero = amounts.filter(a => a > 0)
+  if (nonZero.length < 2) return null
+  const avg = nonZero.reduce((s, v) => s + v, 0) / nonZero.length
+
+  for (let i = 0; i < amounts.length; i++) {
+    if (amounts[i] > 0) continue
+    const prev = i > 0 ? amounts[i - 1] : null
+    const next = i < amounts.length - 1 ? amounts[i + 1] : null
+    if (next != null && next >= avg * 1.7) {
+      return { spikeMonth: i + 1, gapMonth: i }
+    }
+    if (prev != null && prev >= avg * 1.7) {
+      return { spikeMonth: i - 1, gapMonth: i }
+    }
+  }
+  return null
+}
+
+function buildRows(data: MultiMonthData, sorted: string[], categoryLookup: Record<string, { icon: string; label: string }>): RowData[] {
+  const catSet = new Set<string>()
+  data.aggregatedSummary.forEach(c => catSet.add(c.category))
+
+  const result: RowData[] = []
+  for (const cat of catSet) {
+    const amounts = sorted.map(m => {
+      const monthData = data.summaryByMonth.get(m) ?? []
+      const entry = monthData.find(c => c.category === cat)
+      return entry ? Number(entry.total_amount) : 0
+    })
+
+    const first = amounts[0]
+    const last = amounts[amounts.length - 1]
+    const totalPct = first > 0 ? pctChange(first, last) : 0
+    const flagged = totalPct > 25 && first > 30
+    const shift = detectShift(amounts)
+
+    const info = categoryLookup[cat]
+    result.push({
+      category: cat,
+      icon: info?.icon ?? '📦',
+      label: info?.label ?? cat,
+      amounts,
+      totalPct,
+      flagged,
+      shift,
+    })
+  }
+
+  return result.sort((a, b) => {
+    if (a.flagged !== b.flagged) return a.flagged ? -1 : 1
+    const totalA = a.amounts.reduce((s, v) => s + v, 0)
+    const totalB = b.amounts.reduce((s, v) => s + v, 0)
+    return totalB - totalA
+  })
+}
+
+function TrendBadge({ pct }: { pct: number }) {
+  if (Math.abs(pct) < 5) return <span className="text-surface-500 text-[10px]">—</span>
+  const isUp = pct > 0
+  const color = isUp ? 'text-red-400' : 'text-emerald-400'
+  return (
+    <span className={`font-bold text-[10px] ${color}`}>
+      {isUp ? '↑' : '↓'}{Math.abs(Math.round(pct))}%
+    </span>
+  )
+}
+
+function BarsView({ rows, sorted }: { rows: RowData[]; sorted: string[] }) {
+  const maxAmount = Math.max(...rows.flatMap(r => r.amounts), 1)
+
+  return (
+    <div className="space-y-0">
+      {/* Month header */}
+      <div className="flex items-center mb-1" style={{ paddingLeft: 88 }}>
+        {sorted.map(m => (
+          <div key={m} className="flex-1 text-center text-[9px] font-semibold text-surface-500">
+            {formatMonth(m)}
+          </div>
+        ))}
+        <div className="w-11 text-right text-[9px] font-semibold text-surface-500">Δ</div>
+      </div>
+
+      {rows.map(row => (
+        <div
+          key={row.category}
+          className={`flex items-center py-1.5 border-b border-white/[0.04] ${row.flagged ? 'bg-amber-500/[0.03]' : ''}`}
+        >
+          {/* Category */}
+          <div className="w-[88px] shrink-0 flex items-center gap-1">
+            {row.flagged && <span className="text-[8px] text-amber-400">⚠</span>}
+            <span className="text-[12px]">{row.icon}</span>
+            <span className="text-[10px] font-medium text-surface-200 truncate max-w-[52px]" title={row.label}>
+              {row.label}
+            </span>
+          </div>
+
+          {/* Bars */}
+          <div className="flex-1 flex gap-0.5 items-end h-8">
+            {row.amounts.map((amt, i) => {
+              const barH = Math.max(2, (amt / maxAmount) * 24)
+              const isSpike = row.shift?.spikeMonth === i
+              const isGap = row.shift?.gapMonth === i
+              let barColor = 'bg-teal-400/70'
+              if (isSpike) barColor = 'bg-amber-400/85'
+              else if (isGap || amt === 0) barColor = 'bg-white/[0.08]'
+
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                  <span className={`text-[8px] tabular-nums ${amt > 0 ? 'text-surface-400' : 'text-surface-700'}`}>
+                    {amt > 0 ? fmt(amt) : '—'}
+                  </span>
+                  <div
+                    className={`w-[65%] rounded-sm ${barColor}`}
+                    style={{ height: barH }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Delta */}
+          <div className="w-11 text-right shrink-0">
+            <TrendBadge pct={row.totalPct} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CardsView({ rows, sorted }: { rows: RowData[]; sorted: string[] }) {
+  return (
+    <div className="space-y-2">
+      {rows.map(row => {
+        const hasShift = row.shift != null
+        return (
+          <div
+            key={row.category}
+            className={`rounded-xl border p-2.5 ${hasShift ? 'border-amber-400/20 bg-amber-500/[0.03]' : 'border-white/[0.07] bg-white/[0.03]'}`}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                {row.flagged && <span className="text-[9px] text-amber-400">⚠</span>}
+                <span className="text-sm">{row.icon}</span>
+                <span className="text-xs font-semibold text-surface-200">{row.label}</span>
+              </div>
+              <TrendBadge pct={row.totalPct} />
+            </div>
+
+            {/* Month amounts */}
+            <div className="flex mt-2">
+              {sorted.map((m, i) => {
+                const amt = row.amounts[i]
+                const isSpike = row.shift?.spikeMonth === i
+                const isGap = row.shift?.gapMonth === i
+                let amtColor = 'text-surface-300'
+                if (amt === 0 || isGap) amtColor = 'text-surface-600'
+                else if (isSpike) amtColor = 'text-amber-400'
+
+                return (
+                  <div key={m} className="flex-1 text-center">
+                    <div className="text-[9px] text-surface-500 font-medium mb-0.5">{formatMonth(m)}</div>
+                    <div className={`text-[13px] font-semibold tabular-nums ${amtColor}`}>
+                      {amt > 0 ? `€${fmt(amt)}` : '—'}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Shift annotation */}
+            {hasShift && (
+              <div className="mt-2 rounded-lg bg-amber-500/[0.06] px-2 py-1.5 text-[10px] text-amber-300/90 italic">
+                ⇄ Billing shift: {formatMonth(sorted[row.shift!.gapMonth])} charge likely landed in {formatMonth(sorted[row.shift!.spikeMonth])}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
+  return (
+    <div className="flex gap-1 rounded-xl border border-white/[0.06] bg-surface-950/45 p-1">
+      <button
+        type="button"
+        onClick={() => onChange('cards')}
+        className={`rounded-lg px-3 py-1 text-[11px] font-medium transition-colors ${mode === 'cards' ? 'bg-white/[0.1] text-surface-50 shadow-sm' : 'text-surface-500 hover:text-surface-300'}`}
+      >
+        Cards
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('bars')}
+        className={`rounded-lg px-3 py-1 text-[11px] font-medium transition-colors ${mode === 'bars' ? 'bg-white/[0.1] text-surface-50 shadow-sm' : 'text-surface-500 hover:text-surface-300'}`}
+      >
+        Bars
+      </button>
+    </div>
+  )
 }
 
 export default function ComparisonTable({ data, months, categoryLookup }: Props) {
   const sorted = useMemo(() => [...months].sort(), [months])
+  const rows = useMemo(() => buildRows(data, sorted, categoryLookup), [data, sorted, categoryLookup])
+  const { prefs, updatePrefs } = useUiPrefs()
+  const mode: ViewMode = prefs.comparisonView ?? 'cards'
 
-  const rows = useMemo<RowData[]>(() => {
-    const catSet = new Set<string>()
-    data.aggregatedSummary.forEach(c => catSet.add(c.category))
-
-    const result: RowData[] = []
-    for (const cat of catSet) {
-      const amounts = sorted.map(m => {
-        const monthData = data.summaryByMonth.get(m) ?? []
-        const entry = monthData.find(c => c.category === cat)
-        return entry ? Number(entry.total_amount) : 0
-      })
-
-      const first = amounts[0]
-      const last = amounts[amounts.length - 1]
-      const totalPct = pctChange(first, last)
-      const flagged = totalPct > 25 && first > 30
-
-      const info = categoryLookup[cat]
-      result.push({
-        category: cat,
-        icon: info?.icon ?? '📦',
-        label: info?.label ?? cat,
-        amounts,
-        totalPctChange: totalPct,
-        flagged,
-      })
-    }
-
-    return result.sort((a, b) => {
-      if (a.flagged !== b.flagged) return a.flagged ? -1 : 1
-      const totalA = a.amounts.reduce((s, v) => s + v, 0)
-      const totalB = b.amounts.reduce((s, v) => s + v, 0)
-      return totalB - totalA
-    })
-  }, [data, sorted, categoryLookup])
-
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [canScroll, setCanScroll] = useState(false)
-  const [scrolledToEnd, setScrolledToEnd] = useState(false)
-
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-
-    const check = () => {
-      const hasOverflow = el.scrollWidth > el.clientWidth + 2
-      setCanScroll(hasOverflow)
-      setScrolledToEnd(hasOverflow && el.scrollLeft + el.clientWidth >= el.scrollWidth - 4)
-    }
-
-    check()
-    el.addEventListener('scroll', check, { passive: true })
-    const ro = new ResizeObserver(check)
-    ro.observe(el)
-    return () => { el.removeEventListener('scroll', check); ro.disconnect() }
-  }, [rows, sorted])
+  const shiftedRows = rows.filter(r => r.shift != null)
 
   return (
     <motion.div
@@ -98,97 +263,41 @@ export default function ComparisonTable({ data, months, categoryLookup }: Props)
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
     >
-      <p className="text-xs font-semibold uppercase tracking-wider text-surface-500">
-        Month-over-Month Comparison
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wider text-surface-500">
+          Month-over-Month
+        </p>
+        <ViewToggle mode={mode} onChange={v => updatePrefs({ comparisonView: v })} />
+      </div>
 
-      <div className="relative mt-3 overflow-hidden">
-        <div ref={scrollRef} className="overflow-x-auto scrollbar-hide">
-          <table className="w-full text-xs" style={{ minWidth: Math.max(360, sorted.length * 72 + 160) }}>
-            <thead>
-              <tr className="border-b border-white/[0.06]">
-                <th className="sticky left-0 z-10 bg-surface-950/95 py-2 pl-0 pr-2 text-left font-semibold text-surface-400 whitespace-nowrap shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]">
-                  Category
-                </th>
-                {sorted.map(m => (
-                  <th key={m} className="px-2 py-2 text-right font-semibold text-surface-400 whitespace-nowrap">
-                    {formatMonth(m)}
-                  </th>
-                ))}
-                <th className="sticky right-0 z-10 bg-surface-950/95 px-3 py-2 pr-0 text-right font-semibold text-surface-400 whitespace-nowrap shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.5)]">
-                  Trend
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => (
-                <tr
-                  key={row.category}
-                  className={`border-b border-white/[0.03] ${row.flagged ? 'bg-amber-500/[0.03]' : ''}`}
-                >
-                  <td className={`sticky left-0 z-10 py-2 pl-0 pr-2 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] ${row.flagged ? 'bg-amber-500/[0.06]' : 'bg-surface-950/95'}`}>
-                    <div className="flex items-center gap-1.5">
-                      {row.flagged && <span className="text-[10px] text-amber-400" title="Grew significantly">&#9888;</span>}
-                      <span className="text-[13px]">{row.icon}</span>
-                      <span className="font-medium text-surface-200 whitespace-nowrap">{row.label}</span>
-                    </div>
-                  </td>
-                  {row.amounts.map((amount, i) => {
-                    const prev = i > 0 ? row.amounts[i - 1] : null
-                    const delta = prev != null && prev > 0 ? pctChange(prev, amount) : null
-                    let cellColor = 'text-surface-300'
-                    if (delta != null) {
-                      if (delta < -5) cellColor = 'text-emerald-400'
-                      else if (delta > 15) cellColor = 'text-red-400'
-                      else if (delta > 5) cellColor = 'text-amber-400'
-                    }
-
-                    return (
-                      <td key={i} className={`px-2 py-2 text-right tabular-nums whitespace-nowrap ${cellColor}`}>
-                        {amount > 0 ? fmt(amount) : '\u2014'}
-                      </td>
-                    )
-                  })}
-                  <td className={`sticky right-0 z-10 px-3 py-2 pr-0 text-right tabular-nums whitespace-nowrap shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.5)] ${row.flagged ? 'bg-amber-500/[0.06]' : 'bg-surface-950/95'}`}>
-                    <TrendBadge pct={row.totalPctChange} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Swipe hint pill */}
-        {canScroll && !scrolledToEnd && (
-          <div className="mt-2 flex justify-center">
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2.5 py-0.5 text-[10px] text-surface-400">
-              Swipe months <span className="text-surface-500">&rarr;</span>
-            </span>
-          </div>
+      <div className="mt-3">
+        {mode === 'bars' ? (
+          <BarsView rows={rows} sorted={sorted} />
+        ) : (
+          <CardsView rows={rows} sorted={sorted} />
         )}
       </div>
+
+      {/* Shift summary (bars view only — cards have inline annotation) */}
+      {mode === 'bars' && shiftedRows.length > 0 && (
+        <div className="mt-3 rounded-xl border border-amber-400/10 bg-amber-500/[0.04] px-3 py-2">
+          {shiftedRows.map(row => (
+            <p key={row.category} className="text-[11px] leading-relaxed text-amber-300/80">
+              <span className="mr-1">⇄</span>
+              {row.label}: {formatMonth(sorted[row.shift!.gapMonth])} charge likely shifted to {formatMonth(sorted[row.shift!.spikeMonth])}
+            </p>
+          ))}
+        </div>
+      )}
 
       {rows.some(r => r.flagged) && (
         <div className="mt-3 rounded-xl border border-amber-400/10 bg-amber-500/[0.04] px-3 py-2">
           <p className="text-[11px] leading-relaxed text-amber-300/80">
-            <span className="mr-1">&#9888;</span>
-            Flagged categories grew more than 25% over this period and may deserve a closer look.
+            <span className="mr-1">⚠</span>
+            Flagged categories grew more than 25% over this period.
           </p>
         </div>
       )}
     </motion.div>
-  )
-}
-
-function TrendBadge({ pct }: { pct: number }) {
-  if (Math.abs(pct) < 1) {
-    return <span className="text-surface-500">—</span>
-  }
-  const isUp = pct > 0
-  const color = isUp ? 'text-red-400' : 'text-emerald-400'
-  return (
-    <span className={`font-semibold ${color}`}>
-      {isUp ? '↑' : '↓'} {Math.abs(Math.round(pct))}%
-    </span>
   )
 }

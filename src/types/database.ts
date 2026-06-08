@@ -30,12 +30,17 @@ export interface Household {
   created_at: string
 }
 
+export interface UiPrefs {
+  comparisonView?: 'bars' | 'cards'
+}
+
 export interface Profile {
   id: string
   household_id: string | null
   display_name: string
   avatar_url: string | null
   total_xp: number
+  ui_prefs: UiPrefs
   created_at: string
 }
 

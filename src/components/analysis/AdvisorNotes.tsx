@@ -1,13 +1,15 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
-import { generateInsights, type AdvisorInsight } from '../../lib/advisorInsights'
+import { generateInsights, type AdvisorInsight, type InsightInput } from '../../lib/advisorInsights'
+import { detectRecurring } from '../../lib/recurringDetector'
+import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
 import { ui } from '../../lib/uiClasses'
 
 interface Props {
   data: MultiMonthData
   months: string[]
-  categoryLookup: Record<string, { icon: string; label: string }>
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
 }
 
 const SEVERITY_STYLES: Record<string, string> = {
@@ -18,8 +20,16 @@ const SEVERITY_STYLES: Record<string, string> = {
 }
 
 export default function AdvisorNotes({ data, months, categoryLookup }: Props) {
-  const insights = useMemo<AdvisorInsight[]>(
-    () => generateInsights({
+  const insights = useMemo<AdvisorInsight[]>(() => {
+    const recurringCharges = detectRecurring(data.allTransactions, months)
+    const fixedTotal = data.aggregatedSummary
+      .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID && categoryLookup[c.category]?.expenseType === 'fixed')
+      .reduce((s, c) => s + Number(c.total_amount), 0)
+    const discretionaryTotal = data.aggregatedSummary
+      .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID && categoryLookup[c.category]?.expenseType !== 'fixed')
+      .reduce((s, c) => s + Number(c.total_amount), 0)
+
+    const input: InsightInput = {
       months,
       aggregatedSummary: data.aggregatedSummary,
       summaryByMonth: data.summaryByMonth,
@@ -28,9 +38,14 @@ export default function AdvisorNotes({ data, months, categoryLookup }: Props) {
       dailyTotals: data.dailyTotals,
       income: data.householdIncome,
       categoryLookup,
-    }),
-    [data, months, categoryLookup],
-  )
+      transactions: data.allTransactions,
+      recurringCharges,
+      spendingByAccount: data.spendingByAccount,
+      fixedTotal,
+      discretionaryTotal,
+    }
+    return generateInsights(input)
+  }, [data, months, categoryLookup])
 
   if (insights.length === 0) return null
 

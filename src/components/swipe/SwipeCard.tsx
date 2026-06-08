@@ -213,6 +213,8 @@ export default function SwipeCard({
         scale,
         zIndex: 10 - stackIndex,
         willChange: isTopCard ? 'transform' : undefined,
+        WebkitBackfaceVisibility: 'hidden',
+        backfaceVisibility: 'hidden',
       }}
       drag={isTopCard}
       dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}

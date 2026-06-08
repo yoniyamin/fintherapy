@@ -500,8 +500,10 @@ export default function SwipeDeck() {
     [monthsInScope, stacksByMonth, deckFromFetched],
   )
 
+  const hasClassifiedInSession = store.sessionHistory.length > 0
+
   const showCardCaughtUp =
-    !loading && accountFilter != null && deckFromFetched.length === 0
+    !loading && accountFilter != null && deckFromFetched.length === 0 && hasClassifiedInSession
 
   const showMonthCaughtUp =
     !loading &&
@@ -509,6 +511,7 @@ export default function SwipeDeck() {
     effectiveMonthFilter != null &&
     deckScoped.length === 0 &&
     deckFromFetched.length > 0 &&
+    hasClassifiedInSession &&
     monthsInScope.some(
       (m) => m !== effectiveMonthFilter && (stacksByMonth.get(m) ?? 0) > 0,
     )

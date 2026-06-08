@@ -13,41 +13,45 @@ const navItems = [
 
 function TabBar() {
   return (
-    <nav
-      className="relative z-10 flex shrink-0 border-t border-white/[0.06] bg-surface-900/90 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-md"
-      aria-label="Main navigation"
-    >
-      {navItems.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.to === '/classify' ? false : undefined}
-          className={({ isActive }) =>
-            `flex flex-1 flex-col items-center gap-0.5 pb-3 pt-3 text-[11px] font-semibold transition-colors ${
-              isActive ? 'text-duo-green' : 'text-surface-500 hover:text-surface-300'
-            }`
-          }
-        >
-          {({ isActive }) => (
-            <div className="relative flex flex-col items-center gap-1">
-              {isActive && (
-                <div
-                  className="pointer-events-none absolute -bottom-1 left-1/2 h-10 w-10 -translate-x-1/2 rounded-full bg-duo-green/35 blur-xl"
-                  aria-hidden
-                />
-              )}
-              <span className={isActive ? 'relative text-duo-green drop-shadow-[0_0_12px_rgba(88,204,2,0.55)]' : 'relative'}>
-                {isActive ? <item.activeIcon /> : <item.icon />}
-              </span>
-              <span className="relative">{item.label}</span>
-              {isActive && (
-                <div className="relative h-[3px] w-5 rounded-full bg-duo-green shadow-[0_0_12px_rgba(88,204,2,0.6)]" />
-              )}
-            </div>
-          )}
-        </NavLink>
-      ))}
-    </nav>
+    <footer className="relative z-10 shrink-0">
+      <nav
+        className="flex border-t border-white/[0.06] bg-surface-900/90 backdrop-blur-md"
+        aria-label="Main navigation"
+      >
+        {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === '/classify' ? false : undefined}
+            className={({ isActive }) =>
+              `flex flex-1 flex-col items-center px-0.5 pb-1.5 pt-2.5 text-[10px] font-semibold leading-tight transition-colors ${
+                isActive ? 'text-duo-green' : 'text-surface-500 hover:text-surface-300'
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <div className="relative flex flex-col items-center gap-0.5">
+                {isActive && (
+                  <div
+                    className="pointer-events-none absolute -bottom-0.5 left-1/2 h-8 w-8 -translate-x-1/2 rounded-full bg-duo-green/35 blur-xl"
+                    aria-hidden
+                  />
+                )}
+                <span className={isActive ? 'relative text-duo-green drop-shadow-[0_0_12px_rgba(88,204,2,0.55)]' : 'relative'}>
+                  {isActive ? <item.activeIcon /> : <item.icon />}
+                </span>
+                <span className="relative pb-px">{item.label}</span>
+              </div>
+            )}
+          </NavLink>
+        ))}
+      </nav>
+      <div
+        className="shrink-0 bg-surface-900/90"
+        style={{ height: 'var(--pwa-tab-safe-bottom)' }}
+        aria-hidden
+      />
+    </footer>
   )
 }
 

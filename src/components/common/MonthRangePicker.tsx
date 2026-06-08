@@ -71,13 +71,13 @@ export default function MonthRangePicker({ value, onChange, monthsWithData, allo
 
   useEffect(() => {
     if (!open) return
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
         setOpen(false)
       }
     }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
   }, [open])
 
   const dataSet = useMemo(() => new Set(monthsWithData ?? []), [monthsWithData])
@@ -220,7 +220,8 @@ export default function MonthRangePicker({ value, onChange, monthsWithData, allo
                   const hasData = !monthsWithData || dataSet.has(month)
                   const selected = draft.has(month)
                   const isFuture = month > getCurrentMonth()
-                  const disabled = isFuture || (!hasData && !!monthsWithData)
+                  const cantSelect = isFuture || (!hasData && !!monthsWithData)
+                  const disabled = cantSelect && !selected
 
                   return (
                     <button
@@ -242,16 +243,27 @@ export default function MonthRangePicker({ value, onChange, monthsWithData, allo
                 })}
               </div>
 
-              {/* Apply button (multi-mode) */}
+              {/* Apply + Clear buttons (multi-mode) */}
               {multiMode && (
-                <button
-                  type="button"
-                  onClick={handleApply}
-                  disabled={draft.size === 0}
-                  className="w-full rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] transition-all active:translate-y-[1px] active:border-b disabled:opacity-40"
-                >
-                  Apply ({draft.size} month{draft.size !== 1 ? 's' : ''})
-                </button>
+                <div className="flex gap-2">
+                  {draft.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDraft(new Set())}
+                      className="rounded-xl border border-surface-600/40 bg-surface-800 px-3 py-2.5 text-xs font-semibold text-surface-400 transition-colors hover:bg-surface-700 hover:text-surface-200"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleApply}
+                    disabled={draft.size === 0}
+                    className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] transition-all active:translate-y-[1px] active:border-b disabled:opacity-40"
+                  >
+                    Apply ({draft.size} month{draft.size !== 1 ? 's' : ''})
+                  </button>
+                </div>
               )}
             </div>
           </motion.div>

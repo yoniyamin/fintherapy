@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { DEFAULT_CATEGORIES, type CategoryDef } from '../lib/constants'
+import { DEFAULT_CATEGORIES, type CategoryDef, type ExpenseType } from '../lib/constants'
 
 export interface CategoryOverride {
   id: string
@@ -9,6 +9,7 @@ export interface CategoryOverride {
   color: string
   previous_ids: string[]
   sort_order: number
+  expense_type?: string
 }
 
 /**
@@ -54,22 +55,25 @@ export function useCategoryConfig(householdId: string | null | undefined) {
       const o = overrideMap.get(d.id)
       if (o) {
         overrideMap.delete(d.id)
-        return { id: o.id, label: o.label, icon: o.icon, color: o.color }
+        const expenseType = (o.expense_type === 'fixed' || o.expense_type === 'discretionary'
+          ? o.expense_type
+          : d.expenseType) as ExpenseType
+        return { id: o.id, label: o.label, icon: o.icon, color: o.color, expenseType }
       }
       return { ...d }
     })
 
-    // Overrides that don't match a default id: might be renamed defaults
-    // or brand-new custom categories — append them.
     for (const o of overrideMap.values()) {
-      // If this override has previous_ids that match a default, replace it
       const prevIdx = merged.findIndex((m) =>
         o.previous_ids.includes(m.id),
       )
+      const expenseType = (o.expense_type === 'fixed' || o.expense_type === 'discretionary'
+        ? o.expense_type
+        : 'discretionary') as ExpenseType
       if (prevIdx >= 0) {
-        merged[prevIdx] = { id: o.id, label: o.label, icon: o.icon, color: o.color }
+        merged[prevIdx] = { id: o.id, label: o.label, icon: o.icon, color: o.color, expenseType }
       } else {
-        merged.push({ id: o.id, label: o.label, icon: o.icon, color: o.color })
+        merged.push({ id: o.id, label: o.label, icon: o.icon, color: o.color, expenseType })
       }
     }
 
