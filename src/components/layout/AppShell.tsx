@@ -13,18 +13,18 @@ const navItems = [
 
 function TabBar() {
   return (
-    <footer className="relative z-10 shrink-0">
-      <nav
-        className="flex border-t border-white/[0.06] bg-surface-900/90 backdrop-blur-md"
-        aria-label="Main navigation"
-      >
+    <footer
+      className="relative z-10 shrink-0 border-t border-white/[0.06] bg-surface-900/90 backdrop-blur-md"
+      style={{ paddingBottom: 'var(--pwa-tab-safe-bottom)' }}
+    >
+      <nav className="flex" aria-label="Main navigation">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.to === '/classify' ? false : undefined}
             className={({ isActive }) =>
-              `flex flex-1 flex-col items-center px-0.5 pb-1.5 pt-2.5 text-[10px] font-semibold leading-tight transition-colors ${
+              `flex flex-1 flex-col items-center px-0.5 pb-1 pt-2.5 text-[10px] font-semibold leading-tight transition-colors ${
                 isActive ? 'text-duo-green' : 'text-surface-500 hover:text-surface-300'
               }`
             }
@@ -40,17 +40,12 @@ function TabBar() {
                 <span className={isActive ? 'relative text-duo-green drop-shadow-[0_0_12px_rgba(88,204,2,0.55)]' : 'relative'}>
                   {isActive ? <item.activeIcon /> : <item.icon />}
                 </span>
-                <span className="relative pb-px">{item.label}</span>
+                <span className="relative">{item.label}</span>
               </div>
             )}
           </NavLink>
         ))}
       </nav>
-      <div
-        className="shrink-0 bg-surface-900/90"
-        style={{ height: 'var(--pwa-tab-safe-bottom)' }}
-        aria-hidden
-      />
     </footer>
   )
 }
