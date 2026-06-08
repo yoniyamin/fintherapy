@@ -82,7 +82,7 @@ export function useTransactions(
   /** Avoid full-screen spinner on background refetches (e.g. tab idle / token refresh). */
   const loadedKeyRef = useRef<string | null>(null)
 
-  const fetchPending = useCallback(async () => {
+  const fetchPending = useCallback(async (options?: { silent?: boolean }) => {
     if (!householdId) {
       setLoading(false)
       loadedKeyRef.current = null
@@ -90,7 +90,7 @@ export function useTransactions(
     }
     const key = `${householdId}:${deck}`
     const blocking = loadedKeyRef.current !== key
-    if (blocking) setLoading(true)
+    if (blocking && !options?.silent) setLoading(true)
     try {
       if (deck === 'no-idea') {
         const { data, error } = await supabase.rpc('get_flagged_transactions', {
@@ -106,7 +106,7 @@ export function useTransactions(
       }
       loadedKeyRef.current = key
     } finally {
-      setLoading(false)
+      if (blocking && !options?.silent) setLoading(false)
     }
   }, [householdId, deck])
 
@@ -115,11 +115,11 @@ export function useTransactions(
   }, [fetchPending])
 
   /** Clears shared cache and refetches — use on classify mount and before deck-cleared verification. */
-  const refetchFresh = useCallback(async () => {
+  const refetchFresh = useCallback(async (options?: { silent?: boolean }) => {
     if (!householdId) return
     invalidatePendingTransactionsInflight(householdId)
     loadedKeyRef.current = null
-    await fetchPending()
+    await fetchPending(options)
   }, [householdId, fetchPending])
 
   useEffect(() => {

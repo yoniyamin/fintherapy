@@ -2,12 +2,9 @@ import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import Confetti from '../common/Confetti'
-import {
-  confettiCount,
-  encouragementAnimationUrl,
-  type EncouragementKind,
-} from '../../lib/classifyEncouragement'
+import { confettiCount, type EncouragementKind } from '../../lib/classifyEncouragement'
 import type { ClassifyEncouragementBurst } from '../../hooks/useClassifyEncouragement'
+import EncouragementAnimation from './EncouragementAnimation'
 
 interface Props {
   burst: ClassifyEncouragementBurst
@@ -49,11 +46,9 @@ export default function EncouragementBurst({ burst, onDismiss }: Props) {
           exit={{ scale: 0.94, opacity: 0 }}
           transition={{ type: 'spring', damping: 16, stiffness: 320 }}
         >
-          <img
-            src={encouragementAnimationUrl(burst.animation)}
-            alt=""
-            className="h-36 w-36 object-contain drop-shadow-lg sm:h-40 sm:w-40"
-            draggable={false}
+          <EncouragementAnimation
+            animation={burst.animation}
+            className="h-36 w-36 drop-shadow-lg sm:h-40 sm:w-40"
           />
           <p className="text-base font-bold leading-snug text-surface-50 sm:text-lg">{burst.message}</p>
         </motion.div>

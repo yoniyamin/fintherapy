@@ -30,6 +30,7 @@ import ProgressBar from '../common/ProgressBar'
 import { AccountCardEditModal, type AccountCardEditDraft } from '../common/AccountCardEditModal'
 import Confetti from '../common/Confetti'
 import EncouragementBurst from './EncouragementBurst'
+import EncouragementAnimation from './EncouragementAnimation'
 import { Link, useLocation } from 'react-router-dom'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
 import { invalidateFlaggedCount } from '../../lib/flaggedCountInvalidate'
@@ -1295,7 +1296,7 @@ export default function SwipeDeck() {
     if (!isDone) return
     let cancelled = false
     queueMicrotask(() => setDeckVerifyState('verifying'))
-    void refetchFresh().then(() => {
+    void refetchFresh({ silent: true }).then(() => {
       if (cancelled) return
       setDeckVerifyState('confirmed')
     })
@@ -1311,7 +1312,7 @@ export default function SwipeDeck() {
     }
   }, [isDone, refreshProfile])
 
-  if (loading) {
+  if (loading && !isDone) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
@@ -1319,7 +1320,104 @@ export default function SwipeDeck() {
     )
   }
 
-  if (total === 0 && !showCardCaughtUp && !showMonthCaughtUp) {
+  if (isDone && deckVerifyState !== 'confirmed') {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
+        <p className="text-sm text-surface-400">Checking for remaining transactions…</p>
+      </div>
+    )
+  }
+
+  if (isDone && deckVerifyState === 'confirmed' && allDeckTxns.length === 0) {
+    const totalXp = store.classifiedTxCount * XP_VALUES.CLASSIFY_MANUAL
+    return (
+      <>
+        <Confetti active={true} count={60} />
+        <motion.div
+          className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center"
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', damping: 15 }}
+        >
+          <motion.div
+            initial={{ scale: 0.88, y: 12 }}
+            animate={{ scale: 1, y: 0 }}
+            transition={{ type: 'spring', damping: 16, stiffness: 320, delay: 0.1 }}
+          >
+            <EncouragementAnimation animation="trophy" className="mx-auto h-36 w-36 sm:h-40 sm:w-40" />
+          </motion.div>
+          <h2 className="text-2xl font-bold text-surface-50">Deck Cleared!</h2>
+          <p className="max-w-xs text-sm text-surface-400">
+            Every transaction in the queue is classified — time to see where the money went.
+          </p>
+
+          <div className={`w-full max-w-xs space-y-2.5 p-5 ${ui.glassFlat}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-surface-400">Classified</span>
+              <span className="text-base font-bold tabular-nums text-duo-green">
+                {store.classifiedTxCount} tx ({store.completedCount} card{store.completedCount !== 1 ? 's' : ''})
+              </span>
+            </div>
+            {store.classifiedTxCount > store.completedCount && store.completedCount > 0 && (
+              <p className="-mt-1 text-[11px] text-surface-500">
+                Smart Stacks saved you {store.classifiedTxCount - store.completedCount} swipe
+                {store.classifiedTxCount - store.completedCount !== 1 ? 's' : ''} 🎯
+              </p>
+            )}
+            {deckMode === 'pending' && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-surface-400">No idea</span>
+                <span className="text-base font-bold tabular-nums text-flame">{store.flaggedCount}</span>
+              </div>
+            )}
+            {store.transferCount > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-surface-400">Transfers</span>
+                <span className="text-base font-bold tabular-nums text-ice">{store.transferCount}</span>
+              </div>
+            )}
+            {refundsOffset > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-surface-400">Refunds offset</span>
+                <span className="text-base font-bold tabular-nums text-gem">{refundsOffset} pair{refundsOffset > 1 ? 's' : ''}</span>
+              </div>
+            )}
+            <div className="border-t border-surface-700/50 pt-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-surface-400">XP Earned</span>
+                <motion.span
+                  className="text-xl font-extrabold tabular-nums text-gem"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', delay: 0.4 }}
+                >
+                  +{totalXp}
+                </motion.span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-2 flex w-full max-w-xs flex-col gap-2.5">
+            <Link
+              to="/reveal"
+              className="rounded-xl border-b-[3px] border-gem-dark bg-gem px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(28,176,246,0.45)] active:translate-y-[1px] active:border-b"
+            >
+              Reveal your spending
+            </Link>
+            <Link
+              to="/"
+              className="rounded-xl border border-surface-600/60 bg-surface-800/50 px-6 py-2.5 text-sm font-semibold text-surface-300 transition-colors hover:bg-surface-800"
+            >
+              Continue
+            </Link>
+          </div>
+        </motion.div>
+      </>
+    )
+  }
+
+  if (total === 0 && !showCardCaughtUp && !showMonthCaughtUp && !isDone) {
     if (deckMode === 'no-idea') {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
@@ -1370,92 +1468,6 @@ export default function SwipeDeck() {
           </Link>
         </div>
       </div>
-    )
-  }
-
-  if (isDone && deckVerifyState === 'verifying') {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
-        <p className="text-sm text-surface-400">Checking for remaining transactions…</p>
-      </div>
-    )
-  }
-
-  if (isDone && deckVerifyState === 'confirmed' && allDeckTxns.length === 0) {
-    const totalXp = store.classifiedTxCount * XP_VALUES.CLASSIFY_MANUAL
-    return (
-      <>
-        <Confetti active={true} count={60} />
-        <motion.div
-          className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center"
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', damping: 15 }}
-        >
-          <motion.div
-            className="text-6xl"
-            animate={{ rotate: [0, -10, 10, -10, 0], scale: [1, 1.2, 1] }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-          >
-            🎉
-          </motion.div>
-          <h2 className="text-2xl font-bold text-surface-50">Deck Cleared!</h2>
-
-          <div className={`w-full max-w-xs space-y-2.5 p-5 ${ui.glassFlat}`}>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-surface-400">Classified</span>
-              <span className="text-base font-bold tabular-nums text-duo-green">
-                {store.classifiedTxCount} tx ({store.completedCount} card{store.completedCount !== 1 ? 's' : ''})
-              </span>
-            </div>
-            {store.classifiedTxCount > store.completedCount && store.completedCount > 0 && (
-              <p className="-mt-1 text-[11px] text-surface-500">
-                Smart Stacks saved you {store.classifiedTxCount - store.completedCount} swipe
-                {store.classifiedTxCount - store.completedCount !== 1 ? 's' : ''} 🎯
-              </p>
-            )}
-            {deckMode === 'pending' && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-surface-400">No idea</span>
-                <span className="text-base font-bold tabular-nums text-flame">{store.flaggedCount}</span>
-              </div>
-            )}
-            {store.transferCount > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-surface-400">Transfers</span>
-                <span className="text-base font-bold tabular-nums text-ice">{store.transferCount}</span>
-              </div>
-            )}
-            {refundsOffset > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-surface-400">Refunds offset</span>
-                <span className="text-base font-bold tabular-nums text-gem">{refundsOffset} pair{refundsOffset > 1 ? 's' : ''}</span>
-              </div>
-            )}
-            <div className="border-t border-surface-700/50 pt-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-surface-400">XP Earned</span>
-                <motion.span
-                  className="text-xl font-extrabold tabular-nums text-gem"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: 'spring', delay: 0.4 }}
-                >
-                  +{totalXp}
-                </motion.span>
-              </div>
-            </div>
-          </div>
-
-          <Link
-            to="/"
-            className="mt-2 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
-          >
-            Continue
-          </Link>
-        </motion.div>
-      </>
     )
   }
 
