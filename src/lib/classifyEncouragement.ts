@@ -1,7 +1,7 @@
-import highFiveUrl from '../assets/a63bbf6a-1166-11ee-a7f6-8b04d6898b9b.svg'
-import medalUrl from '../assets/344670d6-1151-11ee-976c-a3fa3bf399db.svg'
-import starUrl from '../assets/2ac71f3a-1163-11ee-8932-a35df5ec6a4f.svg'
-import trophyUrl from '../assets/745fc364-117b-11ee-b7ec-9f18a8a356e0.svg'
+import highFiveMarkup from '../assets/a63bbf6a-1166-11ee-a7f6-8b04d6898b9b.svg?raw'
+import medalMarkup from '../assets/344670d6-1151-11ee-976c-a3fa3bf399db.svg?raw'
+import starMarkup from '../assets/2ac71f3a-1163-11ee-8932-a35df5ec6a4f.svg?raw'
+import trophyMarkup from '../assets/745fc364-117b-11ee-b7ec-9f18a8a356e0.svg?raw'
 import { levelTitle } from './xpLevels'
 
 export type EncouragementAnimation = 'high-five' | 'medal' | 'star' | 'trophy'
@@ -25,11 +25,11 @@ export const ENCOURAGEMENT_TIMING = {
   IDLE_GAP_MS: 45_000,
 } as const
 
-const ANIMATION_URLS: Record<EncouragementAnimation, string> = {
-  'high-five': highFiveUrl,
-  medal: medalUrl,
-  star: starUrl,
-  trophy: trophyUrl,
+const ANIMATION_MARKUP: Record<EncouragementAnimation, string> = {
+  'high-five': highFiveMarkup,
+  medal: medalMarkup,
+  star: starMarkup,
+  trophy: trophyMarkup,
 }
 
 const ANIMATION_DURATION_MS: Record<EncouragementAnimation, number> = {
@@ -39,9 +39,9 @@ const ANIMATION_DURATION_MS: Record<EncouragementAnimation, number> = {
   trophy: 2200,
 }
 
-/** Resolves bundled SVG URL for an encouragement animation key. */
-export function encouragementAnimationUrl(animation: EncouragementAnimation): string {
-  return ANIMATION_URLS[animation]
+/** Inline SVG markup for an encouragement animation key. */
+export function encouragementAnimationMarkup(animation: EncouragementAnimation): string {
+  return ANIMATION_MARKUP[animation]
 }
 
 /** Default on-screen time for a burst (may be overridden per payload). */
