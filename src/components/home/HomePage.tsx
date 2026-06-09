@@ -307,7 +307,7 @@ export default function HomePage() {
       )}
 
       {profile && (
-        <div className="mt-6">
+        <div className="mt-6 w-full text-center">
           <button
             type="button"
             onClick={signOut}
@@ -315,7 +315,7 @@ export default function HomePage() {
           >
             Sign out
           </button>
-          <p className="mt-1.5 text-[10px] text-surface-600">v{APP_VERSION}</p>
+          <p className="mt-1.5 text-[11px] text-surface-500">Version {APP_VERSION}</p>
         </div>
       )}
     </div>
