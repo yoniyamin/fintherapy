@@ -15,6 +15,8 @@ interface Props {
   accountAliases?: Map<string, string>
   /** Resolved categories from useCategoryConfig; falls back to hard-coded defaults. */
   categories?: readonly CategoryDef[]
+  /** Optional context line (e.g. billing month). */
+  subtitle?: string
 }
 
 const fmt = (v: number) =>
@@ -29,6 +31,7 @@ export default function CategoryDetail({
   onMarkTransfer,
   accountAliases,
   categories: categoriesProp,
+  subtitle,
 }: Props) {
   const [movingTxId, setMovingTxId] = useState<string | null>(null)
   const [reclassifying, setReclassifying] = useState(false)
@@ -76,6 +79,9 @@ export default function CategoryDetail({
             <span className="text-2xl">{cat?.icon ?? '📦'}</span>
             <div className="flex-1">
               <h3 className="text-base font-bold text-surface-50">{cat?.label ?? category}</h3>
+              {subtitle && (
+                <p className="text-xs text-surface-400">{subtitle}</p>
+              )}
               <p className="text-xs text-surface-500">
                 {transactions.length} transaction{transactions.length !== 1 ? 's' : ''}
               </p>

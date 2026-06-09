@@ -15,6 +15,7 @@ import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import type { AccountType, Transaction } from '../../types/database'
 import { ui } from '../../lib/uiClasses'
 import { formatAccountLabel } from '../../lib/accountDisplay'
+import { downloadTransactionsCsv } from '../../lib/exportTransactionsCsv'
 import { generateSlideDeck, downloadBlob } from '../../lib/generateSlideDeck'
 import SlideDeckPreview from './SlideDeckPreview'
 import { supabase } from '../../lib/supabase'
@@ -44,46 +45,6 @@ function getMonthOptions(): { value: string; label: string }[] {
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(v)
-
-function downloadCSV(
-  rows: ExportRow[],
-  month: string,
-  catLabelLookup: Record<string, string>,
-) {
-  const headers = [
-    'Date',
-    'Merchant',
-    'Merchant (Clean)',
-    'Amount',
-    'Category',
-    'Status',
-    'Month',
-    'Account Last 4',
-    'Note',
-  ]
-  const catLookup = catLabelLookup
-  const csvLines = [
-    headers.join(','),
-    ...rows.map(r => [
-      r.tx_date,
-      `"${(r.merchant_raw ?? '').replace(/"/g, '""')}"`,
-      `"${(r.merchant_clean ?? '').replace(/"/g, '""')}"`,
-      r.amount,
-      catLookup[r.category] ?? r.category,
-      r.status,
-      r.billing_month,
-      r.account_last4 ?? '',
-      `"${(r.user_note ?? '').replace(/"/g, '""')}"`,
-    ].join(','))
-  ]
-  const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `financial-therapy-${month}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
-}
 
 export default function RevealPage() {
   const location = useLocation()
@@ -361,7 +322,7 @@ export default function RevealPage() {
       const labelLookup = Object.fromEntries(
         catConfig.categories.map((c) => [c.id, c.label]),
       )
-      downloadCSV(rows, month, labelLookup)
+      downloadTransactionsCsv(rows, month, labelLookup)
     }
     setExporting(false)
   }

@@ -2,7 +2,9 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useMultiMonthReveal } from '../../hooks/useMultiMonthReveal'
+import { useTransactions } from '../../hooks/useTransactions'
 import { useCategoryConfig } from '../../hooks/useCategoryConfig'
+import { downloadTransactionsCsv, multiMonthCsvLabel } from '../../lib/exportTransactionsCsv'
 import MonthRangePicker, { type MonthSelection } from '../common/MonthRangePicker'
 import HeadlineBanner from './HeadlineBanner'
 import KpiCards from './KpiCards'
@@ -16,7 +18,7 @@ import CalendarHeatmap from './CalendarHeatmap'
 import AdvisorNotes from './AdvisorNotes'
 import VelocityGauge from './VelocityGauge'
 import MultiMonthSlideDeckPreview from './MultiMonthSlideDeckPreview'
-import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { OWN_TRANSFERS_CATEGORY_ID, type CategoryDef } from '../../lib/constants'
 import { detectRecurring } from '../../lib/recurringDetector'
 import { generateHeadline, getDeltaDrivers, getHealthSummary, getSpendingVelocity, type InsightInput } from '../../lib/advisorInsights'
 import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
@@ -43,6 +45,9 @@ export default function AnalysisPage() {
   const [showSlidePreview, setShowSlidePreview] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [exportingPdf, setExportingPdf] = useState<'mobile' | 'desktop' | null>(null)
+  const [exportingCsv, setExportingCsv] = useState(false)
+  const [aliasMap, setAliasMap] = useState<Map<string, string>>(new Map())
+  const { getAccountAliases } = useTransactions(profile?.household_id)
 
   const categoryLookup = useMemo(() =>
     Object.fromEntries(catConfig.categories.map(c => [c.id, { icon: c.icon, label: c.label, expenseType: c.expenseType }])),
@@ -71,6 +76,41 @@ export default function AnalysisPage() {
       fetch(selection.months)
     }
   }, [selection, fetch])
+
+  useEffect(() => {
+    if (!profile?.household_id) return
+    let cancelled = false
+    getAccountAliases().then((aliases) => {
+      if (cancelled) return
+      setAliasMap(new Map(aliases.map((a) => [a.last4.trim(), a.label.trim()])))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.household_id, getAccountAliases])
+
+  const handleRefreshData = useCallback(() => {
+    if (selection.months.length > 0) {
+      fetch(selection.months)
+    }
+  }, [selection.months, fetch])
+
+  const handleExportCsv = useCallback(() => {
+    if (!data || data.allTransactions.length === 0) return
+    setExportingCsv(true)
+    try {
+      const labelLookup = Object.fromEntries(
+        catConfig.categories.map((c) => [c.id, c.label]),
+      )
+      downloadTransactionsCsv(
+        data.allTransactions,
+        multiMonthCsvLabel(selection.months),
+        labelLookup,
+      )
+    } finally {
+      setExportingCsv(false)
+    }
+  }, [data, selection.months, catConfig.categories])
 
   const handleExportSlides = useCallback(async () => {
     if (!data) return
@@ -224,6 +264,23 @@ export default function AnalysisPage() {
             )}
             Desktop PDF
           </button>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={exportingCsv}
+            className="flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-surface-950/55 px-3 py-2 text-xs font-medium text-surface-300 transition-colors hover:bg-surface-900/70 disabled:opacity-50"
+          >
+            {exportingCsv ? (
+              <div className="h-3 w-3 animate-spin rounded-full border-2 border-surface-400 border-t-transparent" />
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            )}
+            CSV
+          </button>
         </div>
       )}
 
@@ -252,6 +309,9 @@ export default function AnalysisPage() {
           data={data}
           months={selection.months}
           categoryLookup={categoryLookup}
+          accountAliases={aliasMap}
+          categories={catConfig.categories}
+          onDataChange={handleRefreshData}
         />
       )}
 
@@ -272,10 +332,13 @@ export default function AnalysisPage() {
   )
 }
 
-function AnalysisContent({ data, months, categoryLookup }: {
+function AnalysisContent({ data, months, categoryLookup, accountAliases, categories, onDataChange }: {
   data: MultiMonthData
   months: string[]
   categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
+  accountAliases: Map<string, string>
+  categories: readonly CategoryDef[]
+  onDataChange: () => void
 }) {
   const recurringCharges = useMemo(
     () => detectRecurring(data.allTransactions, months),
@@ -342,7 +405,14 @@ function AnalysisContent({ data, months, categoryLookup }: {
 
       <RecurringPanel charges={recurringCharges} months={months.length} />
 
-      <ComparisonTable data={data} months={months} categoryLookup={categoryLookup} />
+      <ComparisonTable
+        data={data}
+        months={months}
+        categoryLookup={categoryLookup}
+        accountAliases={accountAliases}
+        categories={categories}
+        onDataChange={onDataChange}
+      />
 
       <CalendarHeatmap dailyTotals={data.dailyTotals} months={months} />
 
