@@ -306,7 +306,12 @@ export default function ComparisonTable({
   const { prefs, updatePrefs } = useUiPrefs()
   const mode: ViewMode = prefs.comparisonView ?? 'cards'
   const { profile, user } = useAuth()
-  const { getTransactionsByCategory, reclassifyTransaction, markTransfer } = useTransactions(profile?.household_id)
+  const {
+    getTransactionsByCategory,
+    reclassifyTransaction,
+    markTransfer,
+    setTransactionsUserNote,
+  } = useTransactions(profile?.household_id)
 
   const [drill, setDrill] = useState<{ category: string; month: string } | null>(null)
   const [drillTxns, setDrillTxns] = useState<Transaction[]>([])
@@ -337,6 +342,11 @@ export default function ComparisonTable({
     setDrillTxns(prev => prev.filter(t => t.id !== txId))
     onDataChange()
   }, [user, markTransfer, onDataChange])
+
+  const handleSaveNote = useCallback(async (txId: string, note: string | null) => {
+    await setTransactionsUserNote([txId], note)
+    setDrillTxns(prev => prev.map(t => (t.id === txId ? { ...t, user_note: note } : t)))
+  }, [setTransactionsUserNote])
 
   return (
     <>
@@ -390,6 +400,7 @@ export default function ComparisonTable({
             onClose={() => setDrill(null)}
             onReclassify={handleReclassify}
             onMarkTransfer={handleMarkTransfer}
+            onSaveNote={handleSaveNote}
             accountAliases={accountAliases}
             categories={categories}
             subtitle={formatMonthFull(drill.month)}

@@ -57,6 +57,7 @@ export default function RevealPage() {
     getTransactionsByCategory,
     reclassifyTransaction,
     markTransfer,
+    setTransactionsUserNote,
     getExportData,
     getAccountAliases,
     getDistinctAccountLast4ForHousehold,
@@ -262,6 +263,11 @@ export default function RevealPage() {
     setDrillTxns(prev => prev.filter(t => t.id !== txId))
     fetchSummary(month, accountRpcFilter, includeOwnTransfers)
   }, [user, markTransfer, fetchSummary, month, accountRpcFilter, includeOwnTransfers])
+
+  const handleSaveNote = useCallback(async (txId: string, note: string | null) => {
+    await setTransactionsUserNote([txId], note)
+    setDrillTxns(prev => prev.map(t => (t.id === txId ? { ...t, user_note: note } : t)))
+  }, [setTransactionsUserNote])
 
   const isCardIncluded = (last4: string) =>
     accountFilter === null || accountFilter.includes(last4)
@@ -890,6 +896,7 @@ export default function RevealPage() {
             onClose={() => setDrillCategory(null)}
             onReclassify={handleReclassify}
             onMarkTransfer={handleMarkTransfer}
+            onSaveNote={handleSaveNote}
             accountAliases={aliasMap}
             categories={catConfig.categories}
           />
