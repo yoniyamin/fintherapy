@@ -9,6 +9,7 @@ import {
   type HomeLeaderboardEntry,
   type MemberDailyRecord,
 } from '../../hooks/useTransactions'
+import { APP_VERSION } from '../../lib/appVersion'
 import { ui } from '../../lib/uiClasses'
 import { xpProgress } from '../../lib/xpLevels'
 import HouseholdPodium from './HouseholdPodium'
@@ -306,13 +307,16 @@ export default function HomePage() {
       )}
 
       {profile && (
-        <button
-          type="button"
-          onClick={signOut}
-          className="mt-6 text-xs font-medium text-surface-500 transition-colors hover:text-surface-300"
-        >
-          Sign out
-        </button>
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={signOut}
+            className="text-xs font-medium text-surface-500 transition-colors hover:text-surface-300"
+          >
+            Sign out
+          </button>
+          <p className="mt-1.5 text-[10px] text-surface-600">v{APP_VERSION}</p>
+        </div>
       )}
     </div>
   )
