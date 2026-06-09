@@ -668,10 +668,28 @@ export default function RevealPage() {
           </div>
 
           <motion.div
-            className={`${ui.glassFlat} w-full space-y-3 px-4 py-4`}
+            className="w-full"
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3 }}
+          >
+            <button
+              type="button"
+              onClick={() => setCompletionDismissed(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-duo-green px-5 py-3.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] transition-all hover:brightness-110 active:translate-y-[1px]"
+            >
+              Reveal the numbers
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </motion.div>
+
+          <motion.div
+            className={`${ui.glassFlat} w-full space-y-3 px-4 py-4`}
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5 }}
           >
             <p className="text-xs font-semibold text-surface-400">Before we reveal the numbers...</p>
 
@@ -701,51 +719,6 @@ export default function RevealPage() {
                 <p className="text-[11px] text-surface-500">Predict spending before seeing the results</p>
               </div>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-ice/60">
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-            </button>
-
-            <motion.button
-              type="button"
-              onClick={handleOpenPreview}
-              disabled={loadingPreview}
-              className="flex w-full items-center gap-3 rounded-xl border border-purple-400/20 bg-purple-500/5 px-4 py-3 text-left transition-colors hover:bg-purple-500/10 disabled:opacity-60"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.15, type: 'spring', stiffness: 200 }}
-            >
-              {loadingPreview ? (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-purple-400 border-t-transparent" />
-              ) : (
-                <span className="text-xl">📊</span>
-              )}
-              <div className="flex-1">
-                <p className="text-sm font-medium text-purple-300">
-                  {loadingPreview ? 'Loading...' : 'Monthly report'}
-                </p>
-                <p className="text-[11px] text-surface-500">Preview your spending summary & download as slides</p>
-              </div>
-              {!loadingPreview && (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400/60">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              )}
-            </motion.button>
-          </motion.div>
-
-          <motion.div
-            className="w-full"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.5 }}
-          >
-            <button
-              type="button"
-              onClick={() => setCompletionDismissed(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-duo-green px-5 py-3.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] transition-all hover:brightness-110 active:translate-y-[1px]"
-            >
-              Reveal the numbers
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
             </button>
