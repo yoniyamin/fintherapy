@@ -51,7 +51,8 @@
 html, body {
   margin: 0;
   padding: 0;
-  height: 100%;
+  width: 100%;
+  height: 100vh;
   overflow: hidden;
   background-color: var(--color-surface-900);
 }
@@ -75,12 +76,6 @@ body {
 :root {
   --pwa-tab-safe-bottom: env(safe-area-inset-bottom, 0px);
   --shell-tab-clearance: calc(3.5rem + var(--pwa-tab-safe-bottom));
-}
-
-@media (display-mode: standalone) {
-  :root {
-    --pwa-tab-safe-bottom: max(env(safe-area-inset-bottom, 0px), 34px);
-  }
 }
 
 @keyframes blob-drift {
