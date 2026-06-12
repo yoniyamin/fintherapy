@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useScrollReport } from '../../../hooks/useScrollReport'
@@ -34,9 +35,9 @@ export default function ScrollReportShell({
     scrollToTop,
   } = useScrollReport(sections)
 
-  return (
+  const shell = (
     <motion.div
-      className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
+      className="fixed inset-0 z-[250] flex flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)]"
       style={{ background: 'linear-gradient(145deg, #0a0f1a 0%, #0f172a 40%, #0c1220 100%)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -44,7 +45,7 @@ export default function ScrollReportShell({
     >
       <header
         ref={headerRef}
-        className={`relative shrink-0 border-b transition-shadow duration-300 ${
+        className={`relative z-10 shrink-0 border-b bg-[#0a0f1a]/95 backdrop-blur-md transition-shadow duration-300 ${
           navShadow
             ? 'border-white/[0.08] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)]'
             : 'border-white/[0.04] shadow-none'
@@ -129,11 +130,15 @@ export default function ScrollReportShell({
         </div>
       </header>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-smooth">
-        <div className="mx-auto max-w-md px-5 pb-12 pt-6">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-smooth overscroll-y-contain">
+        <div className="mx-auto max-w-md px-5 pb-[max(3rem,env(safe-area-inset-bottom,0px))] pt-6">
           {typeof children === 'function' ? children({ scrollToTop }) : children}
         </div>
       </div>
     </motion.div>
   )
+
+  if (typeof document === 'undefined') return null
+
+  return createPortal(shell, document.body)
 }
