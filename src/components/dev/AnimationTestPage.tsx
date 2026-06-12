@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { AnimatePresence } from 'framer-motion'
 import {
   encouragementDurationMs,
   levelUpMessage,
@@ -14,6 +15,7 @@ import ScreenSurface from '../layout/ScreenSurface'
 import EncouragementAnimation from '../swipe/EncouragementAnimation'
 import EncouragementBurst from '../swipe/EncouragementBurst'
 import DeckClearedScreen, { type DeckClearedViewport } from '../swipe/DeckClearedScreen'
+import ScrollReportMockup from './ScrollReportMockup'
 
 const INLINE_ANIMATIONS: EncouragementAnimationKey[] = ['high-five', 'medal', 'star', 'trophy']
 
@@ -76,6 +78,7 @@ export default function AnimationTestPage() {
   const [showDeckConfetti, setShowDeckConfetti] = useState(true)
   const [deckClearedViewport, setDeckClearedViewport] = useState<DeckClearedViewport>('standalone')
   const [overlayBurst, setOverlayBurst] = useState<ClassifyEncouragementBurst | null>(null)
+  const [showScrollReportMockup, setShowScrollReportMockup] = useState(false)
 
   const replay = useCallback((id: string) => {
     setReplayKeys((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }))
@@ -204,6 +207,26 @@ export default function AnimationTestPage() {
               </article>
             </section>
 
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold text-surface-300">Scroll report mockup</h2>
+              <p className="text-xs text-surface-500">
+                Prototype for Reveal / Analysis slide decks — vertical report, sticky nav shadow, smooth section
+                anchors, scroll spy dots, and progress bar. No carousel arrows.
+              </p>
+              <article className={`${ui.glassFlat} space-y-3 p-4`}>
+                <p className="text-[11px] text-surface-500">
+                  Mock data only. Matches the slide-deck shell styling with scroll-down navigation.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowScrollReportMockup(true)}
+                  className="rounded-lg border border-purple-400/30 bg-gradient-to-r from-purple-500/20 to-blue-500/20 px-4 py-2 text-xs font-semibold text-purple-200"
+                >
+                  Open full-screen mockup
+                </button>
+              </article>
+            </section>
+
             <section className="space-y-3 pb-[env(safe-area-inset-bottom,0px)]">
               <h2 className="text-sm font-semibold text-surface-300">Overlay by encouragement kind</h2>
               <p className="text-xs text-surface-500">Sample bursts for milestone, time, rank-up, and level-up.</p>
@@ -236,6 +259,12 @@ export default function AnimationTestPage() {
       {overlayBurst && (
         <EncouragementBurst burst={overlayBurst} onDismiss={() => setOverlayBurst(null)} />
       )}
+
+      <AnimatePresence>
+        {showScrollReportMockup && (
+          <ScrollReportMockup onClose={() => setShowScrollReportMockup(false)} />
+        )}
+      </AnimatePresence>
     </ScreenSurface>
   )
 }
