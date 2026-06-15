@@ -1,0 +1,70 @@
+# ==========================================
+# 📦 JavaScript & Vite Node Ecosystem
+# ==========================================
+node_modules/
+dist/
+build/
+.next/
+out/
+.svelte-kit/
+.vite press/
+.cache/
+
+# Block massive package lockfiles (massive context drainers)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+
+# ==========================================
+# 🐍 Python Ecosystem 
+# ==========================================
+# Virtual environments (Do not let the AI scan third-party library files)
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python compiler caching
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.tox/
+.ruff_cache/
+poetry.lock
+
+# ==========================================
+# 🚀 Environment & Sensitive Secrets
+# ==========================================
+# Prevents secrets leaking into the context window
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.pem
+*.key
+
+# ==========================================
+# 🖼️ Media & Binary Data (Your Request)
+# ==========================================
+# Keeps image/video assets from clogging the embedding matrix
+*.mp4
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.webp
+*.ico
+*.pdf
+*.zip
+*.tar.gz
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
