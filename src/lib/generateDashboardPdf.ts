@@ -14,6 +14,13 @@ import type { AccountSpending, CardFundingRow, DailyTotal, CategoryTrendPoint, S
 import type { RecurringCharge } from './recurringDetector'
 import { OWN_TRANSFERS_CATEGORY_ID } from './constants'
 
+export interface BudgetEntry {
+  category_id: string
+  monthly_target: number
+  is_discretionary: boolean
+  subject_to_inflation: boolean
+}
+
 export interface PdfReportInput {
   months: string[]
   summaryByMonth: Map<string, CategorySummary[]>
@@ -31,6 +38,10 @@ export interface PdfReportInput {
   fixedTotal: number
   discretionaryTotal: number
   headline: string
+  reportConfig?: Record<string, boolean>
+  budgets?: BudgetEntry[]
+  inflationRate?: number
+  savingsGoals?: { name: string; target: number; horizon_months: number }[]
 }
 
 const PALETTE = ['#58CC02', '#38bdf8', '#f59e0b', '#ef4444', '#a78bfa', '#f472b6', '#22d3ee', '#fb923c']
@@ -1157,6 +1168,220 @@ function drawPage3(pdf: jsPDF, input: PdfReportInput, insightInput: InsightInput
   drawFooter(pdf)
 }
 
+function drawTopMerchantsPage(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean) {
+  pdf.addPage(undefined, isLandscape ? 'landscape' : 'portrait')
+  drawBg(pdf)
+
+  const mx = isLandscape ? 15 : 12
+  const pw = isLandscape ? 277 : 186
+  let y = 14
+
+  pdf.setFontSize(14)
+  pdf.setTextColor(...hexToRgb(TEXT))
+  pdf.setFont('helvetica', 'bold')
+  pdf.text('Top Spending Merchants', mx, y)
+  y += 10
+
+  const byCat = new Map<string, Map<string, number>>()
+  for (const tx of input.transactions) {
+    const cat = tx.category || 'uncategorized'
+    if (cat === OWN_TRANSFERS_CATEGORY_ID) continue
+    const merchant = (tx.merchant_clean || tx.merchant_raw).trim()
+    if (!merchant || !input.categoryLookup[cat]) continue
+    if (!byCat.has(cat)) byCat.set(cat, new Map())
+    const m = byCat.get(cat)!
+    m.set(merchant, (m.get(merchant) ?? 0) + Math.abs(Number(tx.normalized_amount ?? tx.amount)))
+  }
+
+  const sorted = Array.from(byCat.entries())
+    .map(([cat, merchants]) => ({
+      cat,
+      label: stripEmoji(input.categoryLookup[cat]?.label || cat),
+      merchants: Array.from(merchants.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3),
+      total: Array.from(merchants.values()).reduce((s, v) => s + v, 0),
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8)
+
+  const months = input.months.length
+
+  for (const cat of sorted) {
+    if (y > (isLandscape ? 185 : 270)) break
+
+    pdf.setFillColor(...hexToRgb(BG_CARD))
+    pdf.roundedRect(mx, y, pw, 22, 2, 2, 'F')
+
+    pdf.setFontSize(9)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setTextColor(...hexToRgb(TEXT))
+    pdf.text(cat.label, mx + 4, y + 5.5)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setTextColor(...hexToRgb(TEXT_MUTED))
+    pdf.text(fmt(cat.total / Math.max(months, 1)) + '/mo', mx + pw - 4, y + 5.5, { align: 'right' })
+
+    let my = y + 10
+    for (const [merchant, amount] of cat.merchants) {
+      pdf.setFontSize(8)
+      pdf.setTextColor(...hexToRgb(TEXT_DIM))
+      pdf.text(merchant.substring(0, 30), mx + 8, my + 3)
+      pdf.text(fmt(amount / Math.max(months, 1)) + '/mo', mx + pw - 8, my + 3, { align: 'right' })
+      my += 4
+    }
+
+    y += 24
+  }
+
+  drawFooter(pdf)
+}
+
+function drawBudgetPage(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean) {
+  const budgets = input.budgets ?? []
+  if (budgets.length === 0) return
+
+  pdf.addPage(undefined, isLandscape ? 'landscape' : 'portrait')
+  drawBg(pdf)
+
+  const mx = isLandscape ? 15 : 12
+  const pw = isLandscape ? 277 : 186
+  let y = 14
+
+  pdf.setFontSize(14)
+  pdf.setTextColor(...hexToRgb(TEXT))
+  pdf.setFont('helvetica', 'bold')
+  pdf.text('Budget vs Actual', mx, y)
+  y += 8
+
+  pdf.setFontSize(8)
+  pdf.setTextColor(...hexToRgb(TEXT_MUTED))
+  pdf.setFont('helvetica', 'normal')
+  pdf.text('Actual = median monthly spend (prevents anomaly distortion)', mx, y)
+  y += 6
+
+  const months = input.months
+  const budgetMap = new Map(budgets.map(b => [b.category_id, b]))
+
+  const rows: { label: string; actual: number; target: number; delta: number }[] = []
+  for (const [catId, budget] of budgetMap) {
+    const info = input.categoryLookup[catId]
+    if (!info) continue
+
+    const monthlyAmounts = months.map(m => {
+      const summary = input.summaryByMonth.get(m)
+      const cat = summary?.find(c => c.category === catId)
+      return cat ? Math.abs(Number(cat.total_amount)) : 0
+    })
+    const sorted = [...monthlyAmounts].sort((a, b) => a - b)
+    const mid = Math.floor(sorted.length / 2)
+    const median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+
+    rows.push({
+      label: stripEmoji(info.label),
+      actual: median,
+      target: budget.monthly_target,
+      delta: median - budget.monthly_target,
+    })
+  }
+
+  rows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+
+  pdf.setFillColor(...hexToRgb(BG_CARD))
+  pdf.roundedRect(mx, y, pw, 6, 1, 1, 'F')
+  pdf.setFontSize(7)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setTextColor(...hexToRgb(TEXT_MUTED))
+  pdf.text('Category', mx + 4, y + 4)
+  pdf.text('Actual', mx + pw * 0.5, y + 4, { align: 'right' })
+  pdf.text('Target', mx + pw * 0.7, y + 4, { align: 'right' })
+  pdf.text('Delta', mx + pw - 4, y + 4, { align: 'right' })
+  y += 8
+
+  for (const row of rows) {
+    if (y > (isLandscape ? 185 : 270)) break
+
+    const bg = rows.indexOf(row) % 2 === 0 ? BG_CARD : BG_CARD_ALT
+    pdf.setFillColor(...hexToRgb(bg))
+    pdf.roundedRect(mx, y, pw, 5.5, 0.5, 0.5, 'F')
+
+    pdf.setFontSize(7)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setTextColor(...hexToRgb(TEXT))
+    pdf.text(row.label.substring(0, 22), mx + 4, y + 4)
+    pdf.text(fmt(row.actual), mx + pw * 0.5, y + 4, { align: 'right' })
+    pdf.text(fmt(row.target), mx + pw * 0.7, y + 4, { align: 'right' })
+
+    const deltaColor = row.delta > 0 ? '#ef4444' : '#10b981'
+    pdf.setTextColor(...hexToRgb(deltaColor))
+    pdf.text((row.delta > 0 ? '+' : '') + fmt(row.delta), mx + pw - 4, y + 4, { align: 'right' })
+
+    y += 6
+  }
+
+  const totalTarget = rows.reduce((s, r) => s + r.target, 0)
+  const totalActual = rows.reduce((s, r) => s + r.actual, 0)
+  y += 4
+
+  pdf.setFillColor(...hexToRgb(BG_CARD))
+  pdf.roundedRect(mx, y, pw, 7, 1, 1, 'F')
+  pdf.setFontSize(8)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setTextColor(...hexToRgb(TEXT))
+  pdf.text('TOTAL', mx + 4, y + 5)
+  pdf.text(fmt(totalActual), mx + pw * 0.5, y + 5, { align: 'right' })
+  pdf.text(fmt(totalTarget), mx + pw * 0.7, y + 5, { align: 'right' })
+  const totalDelta = totalActual - totalTarget
+  pdf.setTextColor(...hexToRgb(totalDelta > 0 ? '#ef4444' : '#10b981'))
+  pdf.text((totalDelta > 0 ? '+' : '') + fmt(totalDelta), mx + pw - 4, y + 5, { align: 'right' })
+  y += 12
+
+  if (input.income != null && input.income > 0) {
+    const surplus = input.income - totalTarget
+    pdf.setFontSize(9)
+    pdf.setTextColor(...hexToRgb(TEXT_MUTED))
+    pdf.setFont('helvetica', 'normal')
+    pdf.text(`Income: ${fmt(input.income)}/mo`, mx, y + 4)
+    pdf.setTextColor(...hexToRgb(surplus >= 0 ? '#10b981' : '#ef4444'))
+    pdf.setFont('helvetica', 'bold')
+    pdf.text(`Projected surplus: ${fmt(surplus)}/mo`, mx + pw / 2, y + 4)
+    y += 10
+
+    const goals = input.savingsGoals ?? []
+    const inflRate = input.inflationRate ?? 3
+    if (goals.length > 0) {
+      pdf.setFontSize(10)
+      pdf.setTextColor(...hexToRgb(TEXT))
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Savings Goals', mx, y + 4)
+      y += 8
+
+      const fixedCosts = budgets.filter(b => !b.subject_to_inflation).reduce((s, b) => s + b.monthly_target, 0)
+      const variableCosts = budgets.filter(b => b.subject_to_inflation).reduce((s, b) => s + b.monthly_target, 0)
+      const realSurplus = input.income - fixedCosts - variableCosts * (1 + inflRate / 1200)
+
+      for (const goal of goals) {
+        const monthlyNeeded = goal.horizon_months > 0 ? goal.target / goal.horizon_months : goal.target
+        const monthsToGoal = realSurplus > 0 ? Math.ceil(goal.target / realSurplus) : Infinity
+
+        pdf.setFillColor(...hexToRgb(BG_CARD))
+        pdf.roundedRect(mx, y, pw, 8, 1, 1, 'F')
+        pdf.setFontSize(8)
+        pdf.setFont('helvetica', 'normal')
+        pdf.setTextColor(...hexToRgb(TEXT))
+        pdf.text(goal.name, mx + 4, y + 5)
+        pdf.setTextColor(...hexToRgb(TEXT_MUTED))
+        pdf.text(`${fmt(goal.target)} goal · ${fmt(monthlyNeeded)}/mo needed · ${monthsToGoal === Infinity ? '—' : monthsToGoal + 'mo'} to goal`, mx + pw - 4, y + 5, { align: 'right' })
+        y += 10
+      }
+
+      y += 4
+      pdf.setFontSize(7)
+      pdf.setTextColor(...hexToRgb(TEXT_DIM))
+      pdf.text(`Inflation-adjusted surplus: ${fmt(realSurplus)}/mo (at ${inflRate}% annual inflation)`, mx, y + 3)
+    }
+  }
+
+  drawFooter(pdf)
+}
+
 // --------------- Exports ---------------
 
 export async function exportSummaryPdf(
@@ -1221,6 +1446,17 @@ export async function exportSummaryPdf(
     || input.salaryDetected.length > 0
   if (hasPage3Content) {
     drawPage3(pdf, input, insightInput, isLandscape)
+  }
+
+  const rc = input.reportConfig ?? {}
+  const showTopVendors = rc.topVendors !== false && input.months.length >= 3
+  if (showTopVendors) {
+    drawTopMerchantsPage(pdf, input, isLandscape)
+  }
+
+  const showBudget = rc.budgetVsActual !== false && (input.budgets ?? []).length > 0
+  if (showBudget) {
+    drawBudgetPage(pdf, input, isLandscape)
   }
 
   const sorted = [...input.months].sort()

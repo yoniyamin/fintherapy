@@ -30,8 +30,35 @@ export interface Household {
   created_at: string
 }
 
+export interface SavingsGoal {
+  name: string
+  target: number
+  horizon_months: number
+}
+
+export interface AnalysisReportConfig {
+  headline?: boolean
+  kpiCards?: boolean
+  fixedDiscretionary?: boolean
+  categoryTrend?: boolean
+  deltaDrivers?: boolean
+  memberSpending?: boolean
+  topVendors?: boolean
+  cardCategorySplit?: boolean
+  budgetVsActual?: boolean
+  recurring?: boolean
+  comparisonTable?: boolean
+  calendarHeatmap?: boolean
+  advisorNotes?: boolean
+  velocityGauge?: boolean
+  savingsProjection?: boolean
+}
+
 export interface UiPrefs {
   comparisonView?: 'bars' | 'cards'
+  assumedInflationRate?: number
+  savingsGoals?: SavingsGoal[]
+  analysisReportConfig?: AnalysisReportConfig
 }
 
 export interface Profile {

@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
+import { useCategoryBudgets, type UpsertBudgetParams } from '../../hooks/useCategoryBudgets'
+import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import { useMultiMonthReveal } from '../../hooks/useMultiMonthReveal'
 import { useTransactions } from '../../hooks/useTransactions'
-import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import { downloadTransactionsCsv, multiMonthCsvLabel } from '../../lib/exportTransactionsCsv'
+import { useUiPrefs } from '../../hooks/useUiPrefs'
 import MonthRangePicker, { type MonthSelection } from '../common/MonthRangePicker'
 import HeadlineBanner from './HeadlineBanner'
 import KpiCards from './KpiCards'
@@ -12,10 +14,16 @@ import FixedDiscretionarySplit from './FixedDiscretionarySplit'
 import CategoryTrendChart from './CategoryTrendChart'
 import DeltaDrivers from './DeltaDrivers'
 import MemberSpendingPanel from './MemberSpendingPanel'
+import CardCategorySplitPanel from './CardCategorySplitPanel'
+import TopVendorsPanel from './TopVendorsPanel'
 import RecurringPanel from './RecurringPanel'
+import ReportConfigModal from './ReportConfigModal'
 import ComparisonTable from './ComparisonTable'
 import CalendarHeatmap from './CalendarHeatmap'
 import AdvisorNotes from './AdvisorNotes'
+import BudgetEditorModal from './BudgetEditorModal'
+import BudgetVsActualPanel from './BudgetVsActualPanel'
+import SavingsProjectionPanel from './SavingsProjectionPanel'
 import VelocityGauge from './VelocityGauge'
 import MultiMonthSlideDeckPreview from './MultiMonthSlideDeckPreview'
 import { OWN_TRANSFERS_CATEGORY_ID, type CategoryDef } from '../../lib/constants'
@@ -29,7 +37,7 @@ import type { MonthlyTotal } from '../../hooks/useReveal'
 function getDefaultSelection(): MonthSelection {
   const now = new Date()
   const months: string[] = []
-  for (let i = 0; i < 3; i++) {
+  for (let i = 1; i <= 3; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i)
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
@@ -47,7 +55,10 @@ export default function AnalysisPage() {
   const [exportingPdf, setExportingPdf] = useState<'mobile' | 'desktop' | null>(null)
   const [exportingCsv, setExportingCsv] = useState(false)
   const [aliasMap, setAliasMap] = useState<Map<string, string>>(new Map())
+  const [showReportConfig, setShowReportConfig] = useState(false)
   const { getAccountAliases } = useTransactions(profile?.household_id)
+  const budgetHook = useCategoryBudgets(profile?.household_id)
+  const { prefs, updatePrefs } = useUiPrefs()
 
   const categoryLookup = useMemo(() =>
     Object.fromEntries(catConfig.categories.map(c => [c.id, { icon: c.icon, label: c.label, expenseType: c.expenseType }])),
@@ -88,6 +99,11 @@ export default function AnalysisPage() {
       cancelled = true
     }
   }, [profile?.household_id, getAccountAliases])
+
+  const fetchBudgets = budgetHook.fetch
+  useEffect(() => {
+    if (profile?.household_id) fetchBudgets()
+  }, [profile?.household_id, fetchBudgets])
 
   const handleRefreshData = useCallback(() => {
     if (selection.months.length > 0) {
@@ -185,13 +201,17 @@ export default function AnalysisPage() {
           fixedTotal,
           discretionaryTotal,
           headline,
+          reportConfig: prefs.analysisReportConfig as Record<string, boolean> | undefined,
+          budgets: budgetHook.budgets.map(b => ({ category_id: b.category_id, monthly_target: Number(b.monthly_target), is_discretionary: b.is_discretionary, subject_to_inflation: b.subject_to_inflation })),
+          inflationRate: prefs.assumedInflationRate ?? 3,
+          savingsGoals: prefs.savingsGoals,
         },
         mode,
       )
     } finally {
       setExportingPdf(null)
     }
-  }, [data, selection.months, categoryLookup])
+  }, [data, selection.months, categoryLookup, prefs, budgetHook.budgets])
 
   const noData = !loading && (!data || data.monthlyTotals.length === 0)
 
@@ -281,6 +301,16 @@ export default function AnalysisPage() {
             )}
             CSV
           </button>
+          <button
+            type="button"
+            onClick={() => setShowReportConfig(true)}
+            className="flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-surface-950/55 px-3 py-2 text-xs font-medium text-surface-300 transition-colors hover:bg-surface-900/70"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
         </div>
       )}
 
@@ -311,6 +341,11 @@ export default function AnalysisPage() {
           categoryLookup={categoryLookup}
           accountAliases={aliasMap}
           categories={catConfig.categories}
+          budgets={budgetHook.budgets}
+          inflationRate={prefs.assumedInflationRate ?? 3}
+          savingsGoals={prefs.savingsGoals ?? []}
+          reportConfig={prefs.analysisReportConfig ?? {}}
+          onSaveBudgets={async (params) => { for (const p of params) await budgetHook.upsert(p) }}
           onDataChange={handleRefreshData}
         />
       )}
@@ -328,18 +363,38 @@ export default function AnalysisPage() {
           />
         )}
       </AnimatePresence>
+
+      <ReportConfigModal
+        open={showReportConfig}
+        onClose={() => setShowReportConfig(false)}
+        config={prefs.analysisReportConfig ?? {}}
+        inflationRate={prefs.assumedInflationRate ?? 3}
+        savingsGoals={prefs.savingsGoals ?? []}
+        monthCount={selection.months.length}
+        onSave={(config, inflRate, goals) => {
+          updatePrefs({ analysisReportConfig: config, assumedInflationRate: inflRate, savingsGoals: goals })
+        }}
+      />
     </div>
   )
 }
 
-function AnalysisContent({ data, months, categoryLookup, accountAliases, categories, onDataChange }: {
+function AnalysisContent({ data, months, categoryLookup, accountAliases, categories, budgets, inflationRate, savingsGoals, reportConfig, onSaveBudgets, onDataChange }: {
   data: MultiMonthData
   months: string[]
   categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
   accountAliases: Map<string, string>
   categories: readonly CategoryDef[]
+  budgets: import('../../hooks/useCategoryBudgets').CategoryBudget[]
+  inflationRate: number
+  savingsGoals: import('../../types/database').SavingsGoal[]
+  reportConfig: import('../../types/database').AnalysisReportConfig
+  onSaveBudgets: (params: UpsertBudgetParams[]) => Promise<void>
   onDataChange: () => void
 }) {
+  const [showBudgetEditor, setShowBudgetEditor] = useState(false)
+  const rc = reportConfig
+  const show = (key: keyof typeof rc, minMonths: number) => (rc[key] ?? true) && months.length >= minMonths
   const recurringCharges = useMemo(
     () => detectRecurring(data.allTransactions, months),
     [data.allTransactions, months],
@@ -386,39 +441,79 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
 
   return (
     <div className="mt-4 space-y-5">
-      <HeadlineBanner headline={headline} verdict={healthSummary.verdict} />
+      {show('headline', 1) && <HeadlineBanner headline={headline} verdict={healthSummary.verdict} />}
 
-      <KpiCards data={data} months={months} categoryLookup={categoryLookup} />
+      {show('kpiCards', 1) && <KpiCards data={data} months={months} categoryLookup={categoryLookup} />}
 
-      <FixedDiscretionarySplit
-        fixedTotal={fixedTotal}
-        discretionaryTotal={discretionaryTotal}
-        months={months.length}
-        income={data.householdIncome}
-      />
+      {show('fixedDiscretionary', 1) && (
+        <FixedDiscretionarySplit
+          fixedTotal={fixedTotal}
+          discretionaryTotal={discretionaryTotal}
+          months={months.length}
+          income={data.householdIncome}
+        />
+      )}
 
-      <CategoryTrendChart data={data} months={months} categoryLookup={categoryLookup} />
+      {show('categoryTrend', 2) && <CategoryTrendChart data={data} months={months} categoryLookup={categoryLookup} />}
 
-      <DeltaDrivers drivers={deltaDrivers} />
+      {show('deltaDrivers', 2) && <DeltaDrivers drivers={deltaDrivers} />}
 
-      <MemberSpendingPanel spendingByAccount={data.spendingByAccount} months={months.length} />
+      {show('memberSpending', 1) && <MemberSpendingPanel spendingByAccount={data.spendingByAccount} months={months.length} />}
 
-      <RecurringPanel charges={recurringCharges} months={months.length} />
+      {show('topVendors', 3) && <TopVendorsPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />}
 
-      <ComparisonTable
-        data={data}
+      {show('cardCategorySplit', 3) && <CardCategorySplitPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />}
+
+      {show('budgetVsActual', 3) && (
+        <BudgetVsActualPanel
+          budgets={budgets}
+          summaryByMonth={data.summaryByMonth}
+          months={months}
+          income={data.householdIncome}
+          categoryLookup={categoryLookup}
+          onEditBudgets={() => setShowBudgetEditor(true)}
+        />
+      )}
+
+      {show('savingsProjection', 3) && (
+        <SavingsProjectionPanel
+          income={data.householdIncome}
+          budgets={budgets}
+          inflationRate={inflationRate}
+          savingsGoals={savingsGoals}
+          months={months.length}
+        />
+      )}
+
+      {show('recurring', 1) && <RecurringPanel charges={recurringCharges} months={months.length} />}
+
+      {show('comparisonTable', 2) && (
+        <ComparisonTable
+          data={data}
+          months={months}
+          categoryLookup={categoryLookup}
+          accountAliases={accountAliases}
+          categories={categories}
+          onDataChange={onDataChange}
+        />
+      )}
+
+      {show('calendarHeatmap', 2) && <CalendarHeatmap dailyTotals={data.dailyTotals} months={months} />}
+
+      {show('advisorNotes', 1) && <AdvisorNotes data={data} months={months} categoryLookup={categoryLookup} />}
+
+      {show('velocityGauge', 1) && <VelocityGauge velocity={velocity} />}
+
+      <BudgetEditorModal
+        open={showBudgetEditor}
+        onClose={() => setShowBudgetEditor(false)}
+        budgets={budgets}
+        summaryByMonth={data.summaryByMonth}
         months={months}
+        income={data.householdIncome}
         categoryLookup={categoryLookup}
-        accountAliases={accountAliases}
-        categories={categories}
-        onDataChange={onDataChange}
+        onSave={onSaveBudgets}
       />
-
-      <CalendarHeatmap dailyTotals={data.dailyTotals} months={months} />
-
-      <AdvisorNotes data={data} months={months} categoryLookup={categoryLookup} />
-
-      <VelocityGauge velocity={velocity} />
     </div>
   )
 }

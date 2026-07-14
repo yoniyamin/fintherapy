@@ -106,6 +106,8 @@ export default function MultiMonthSlideDeckPreview({
     { id: 'where-money-goes', label: 'Where Your Money Goes' },
     { id: 'how-changing', label: 'How Things Are Changing' },
     { id: 'biggest-movers', label: 'Biggest Movers' },
+    { id: 'top-merchants', label: 'Top Merchants' },
+    { id: 'who-pays', label: 'Who Pays What' },
     { id: 'top-transactions', label: 'Top Transactions' },
     { id: 'advisor-summary', label: 'Advisor Summary' },
   ], [])
@@ -144,6 +146,14 @@ export default function MultiMonthSlideDeckPreview({
           <ScrollReportDivider />
           <ScrollReportSection id="biggest-movers" title="Biggest Movers">
             <BiggestMoversSlide summaryByMonth={data.summaryByMonth} months={sorted} categoryLookup={categoryLookup} />
+          </ScrollReportSection>
+          <ScrollReportDivider />
+          <ScrollReportSection id="top-merchants" title="Top Merchants">
+            <TopMerchantsSlide transactions={filteredTransactions} months={sorted.length} categoryLookup={categoryLookup} />
+          </ScrollReportSection>
+          <ScrollReportDivider />
+          <ScrollReportSection id="who-pays" title="Who Pays What">
+            <WhoPaysSlide transactions={filteredTransactions} categoryLookup={categoryLookup} />
           </ScrollReportSection>
           <ScrollReportDivider />
           <ScrollReportSection id="top-transactions" title="Top Transactions">
@@ -441,6 +451,105 @@ function TopTransactionsSlide({ transactions, categoryLookup }: { transactions: 
             </RevealItem>
           )
         })}
+      </RevealStagger>
+    </div>
+  )
+}
+
+function TopMerchantsSlide({ transactions, months, categoryLookup }: { transactions: ExportRow[]; months: number; categoryLookup: Record<string, { icon: string; label: string }> }) {
+  const byCat = useMemo(() => {
+    const map = new Map<string, Map<string, number>>()
+    for (const tx of transactions) {
+      const cat = tx.category || 'uncategorized'
+      const merchant = (tx.merchant_clean || tx.merchant_raw).trim()
+      if (!merchant || !categoryLookup[cat]) continue
+      if (!map.has(cat)) map.set(cat, new Map())
+      const m = map.get(cat)!
+      m.set(merchant, (m.get(merchant) ?? 0) + Math.abs(Number(tx.normalized_amount ?? tx.amount)))
+    }
+    return Array.from(map.entries())
+      .map(([cat, merchants]) => ({
+        cat,
+        info: categoryLookup[cat],
+        top: Array.from(merchants.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3),
+      }))
+      .sort((a, b) => b.top.reduce((s, [, v]) => s + v, 0) - a.top.reduce((s, [, v]) => s + v, 0))
+      .slice(0, 4)
+  }, [transactions, categoryLookup])
+
+  return (
+    <div className="space-y-3">
+      <p className="text-center text-[11px] text-surface-400">Where spending concentrates by category</p>
+      <RevealStagger className="space-y-2">
+        {byCat.map(({ cat, info, top }) => (
+          <RevealItem key={cat}>
+            <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
+              <p className="text-xs font-medium text-surface-200 mb-1.5">{info?.icon} {info?.label}</p>
+              {top.map(([merchant, amount]) => (
+                <div key={merchant} className="flex items-center justify-between py-0.5">
+                  <span className="text-[11px] text-surface-400 truncate max-w-[160px]">{merchant}</span>
+                  <span className="text-[11px] tabular-nums text-surface-300">{fmt(amount / Math.max(months, 1))}/mo</span>
+                </div>
+              ))}
+            </div>
+          </RevealItem>
+        ))}
+      </RevealStagger>
+    </div>
+  )
+}
+
+function WhoPaysSlide({ transactions, categoryLookup }: { transactions: ExportRow[]; categoryLookup: Record<string, { icon: string; label: string }> }) {
+  const splits = useMemo(() => {
+    const matrix = new Map<string, Map<string, number>>()
+    for (const tx of transactions) {
+      const cat = tx.category || 'uncategorized'
+      const acct = tx.account_last4 || '????'
+      if (!categoryLookup[cat]) continue
+      if (!matrix.has(cat)) matrix.set(cat, new Map())
+      const m = matrix.get(cat)!
+      m.set(acct, (m.get(acct) ?? 0) + Math.abs(Number(tx.normalized_amount ?? tx.amount)))
+    }
+    return Array.from(matrix.entries())
+      .map(([cat, accounts]) => {
+        const total = Array.from(accounts.values()).reduce((s, v) => s + v, 0)
+        const cards = Array.from(accounts.entries())
+          .map(([acct, amt]) => ({ acct, amt, pct: total > 0 ? (amt / total) * 100 : 0 }))
+          .sort((a, b) => b.amt - a.amt)
+        return { cat, info: categoryLookup[cat], total, cards }
+      })
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+  }, [transactions, categoryLookup])
+
+  return (
+    <div className="space-y-3">
+      <p className="text-center text-[11px] text-surface-400">Card contribution by category</p>
+      <RevealStagger className="space-y-2">
+        {splits.map(({ cat, info, cards }) => (
+          <RevealItem key={cat}>
+            <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
+              <p className="text-xs font-medium text-surface-200 mb-1">{info?.icon} {info?.label}</p>
+              <div className="flex h-2 w-full overflow-hidden rounded-full">
+                {cards.map((c, i) => (
+                  <div
+                    key={c.acct}
+                    className="h-full"
+                    style={{ width: `${c.pct}%`, backgroundColor: COLORS[i % COLORS.length] }}
+                  />
+                ))}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-3">
+                {cards.map((c, i) => (
+                  <span key={c.acct} className="text-[10px] text-surface-400">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full mr-0.5" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                    ••{c.acct} {Math.round(c.pct)}%
+                  </span>
+                ))}
+              </div>
+            </div>
+          </RevealItem>
+        ))}
       </RevealStagger>
     </div>
   )

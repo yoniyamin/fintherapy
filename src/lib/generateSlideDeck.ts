@@ -613,6 +613,7 @@ export interface MultiMonthSlideDeckInput {
   transactions: ExportRow[]
   categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
   spendingByAccount?: AccountSpending[]
+  reportConfig?: Record<string, boolean>
 }
 
 function shortMonthLabel(value: string): string {
@@ -873,7 +874,50 @@ export async function generateMultiMonthSlideDeck(input: MultiMonthSlideDeckInpu
     })
   }
 
-  // Slide 9: Advisor Summary
+  // Slide 9: Top Merchants
+  if (sorted.length >= 3) {
+    const slide = pptx.addSlide()
+    applyMasterBackground(slide)
+    slide.addText('Top Spending Merchants', {
+      x: 0.5, y: 0.3, w: 9, h: 0.6,
+      fontSize: theme.sizes.headerFontSize, fontFace: theme.fonts.title, color: theme.colors.text, bold: true,
+    })
+
+    const merchantByCat = new Map<string, Map<string, number>>()
+    for (const tx of transactions) {
+      const cat = tx.category || 'uncategorized'
+      const merchant = (tx.merchant_clean || tx.merchant_raw).trim()
+      if (!merchant || !input.categoryLookup[cat]) continue
+      if (!merchantByCat.has(cat)) merchantByCat.set(cat, new Map())
+      const m = merchantByCat.get(cat)!
+      m.set(merchant, (m.get(merchant) ?? 0) + Math.abs(Number(tx.normalized_amount ?? tx.amount)))
+    }
+
+    const topCats = Array.from(merchantByCat.entries())
+      .map(([cat, merchants]) => ({
+        cat,
+        label: input.categoryLookup[cat]?.label ?? cat,
+        top: Array.from(merchants.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3),
+        total: Array.from(merchants.values()).reduce((s, v) => s + v, 0),
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+
+    topCats.forEach((cat, ci) => {
+      const yBase = 1.1 + ci * 0.9
+      slide.addShape(pptx.ShapeType.roundRect, { x: 0.5, y: yBase, w: 9, h: 0.8, fill: { color: theme.colors.dark }, rectRadius: 0.06 })
+      slide.addText(truncate(cat.label, 20), { x: 0.7, y: yBase, w: 3, h: 0.4, fontSize: 10, fontFace: theme.fonts.body, color: theme.colors.text, bold: true })
+      cat.top.forEach(([merchant, amount], mi) => {
+        const x = 0.7 + mi * 3
+        slide.addText(`${truncate(merchant, 18)}: ${fmt(amount / sorted.length)}/mo`, {
+          x, y: yBase + 0.35, w: 2.9, h: 0.35,
+          fontSize: 8, fontFace: theme.fonts.body, color: theme.colors.muted,
+        })
+      })
+    })
+  }
+
+  // Slide 10: Advisor Summary
   {
     const slide = pptx.addSlide()
     applyMasterBackground(slide)
