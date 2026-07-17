@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
+import PasswordInput from '../common/PasswordInput'
 import ScreenSurface from '../layout/ScreenSurface'
 import { ui } from '../../lib/uiClasses'
 
@@ -84,6 +85,7 @@ export default function LoginPage() {
                 <input
                   id="email"
                   type="email"
+                  autoFocus
                   required
                   disabled={submitting}
                   value={email}
@@ -97,16 +99,15 @@ export default function LoginPage() {
                 <label htmlFor="password" className="block text-sm font-medium text-surface-300">
                   Password
                 </label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  disabled={submitting}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className={`mt-1.5 block w-full disabled:opacity-60 ${ui.input}`}
-                  placeholder="••••••••"
-                />
+                <div className="mt-1.5">
+                  <PasswordInput
+                    id="password"
+                    required
+                    disabled={submitting}
+                    value={password}
+                    onChange={setPassword}
+                  />
+                </div>
                 <div className="mt-1.5 text-right">
                   <Link
                     to="/forgot-password"

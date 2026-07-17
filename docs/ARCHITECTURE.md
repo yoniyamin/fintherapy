@@ -26,7 +26,8 @@ A gamified household expense app. Partners upload bank CSVs, swipe-classify tran
 14. [Authentication & Authorization](#14-authentication--authorization)
 15. [Configuration & Setup](#15-configuration--setup)
 16. [Directory Structure](#16-directory-structure)
-17. [Recommendations & Known Issues](#17-recommendations--known-issues)
+17. [Testing](#17-testing)
+18. [Recommendations & Known Issues](#18-recommendations--known-issues)
 
 ---
 
@@ -738,7 +739,79 @@ SpentWhatt/
 
 ---
 
-## 17. Recommendations & Known Issues
+## 17. Testing
+
+### Setup
+
+**Vitest 4** is the test runner, configured in `vitest.config.ts`:
+
+| Option | Value |
+|--------|-------|
+| `environment` | `jsdom` (DOM APIs for future component tests) |
+| `globals` | `true` — `describe`, `it`, `expect` available without imports |
+| `setupFiles` | `./src/test/setup.ts` |
+| `include` | `src/**/*.test.{ts,tsx}` |
+
+The setup file (`src/test/setup.ts`) registers `@testing-library/jest-dom/vitest`, making DOM matchers like `toBeInTheDocument()` available when component tests are added. `@testing-library/react` is installed but not yet used.
+
+### Running Tests
+
+| Script | Command | Mode |
+|--------|---------|------|
+| `npm test` | `vitest run` | Single run, exits with non-zero on failure |
+| `npm run test:watch` | `vitest` | Watch mode — re-runs on file save |
+
+Expected output on success:
+
+```
+Test Files  5 passed (5)
+     Tests  60 passed (60)
+  Duration  ~2s
+```
+
+Each failing test prints the assertion diff; the run exits with code 1.
+
+### Test File Inventory
+
+| Test file | Source module | Tests |
+|-----------|---------------|------:|
+| `src/lib/csvColumnMap.test.ts` | `csvColumnMap.ts` — header normalization, synonym matching, column auto-detection | 14 |
+| `src/lib/xpLevels.test.ts` | `xpLevels.ts` — level thresholds, progress, titles | 20 |
+| `src/lib/recurringDetector.test.ts` | `recurringDetector.ts` — recurring charge heuristics | 7 |
+| `src/stores/classificationStore.test.ts` | `classificationStore.ts` — Zustand deck grouping, advance, undo | 13 |
+| `src/hooks/useMultiMonthReveal.test.ts` | `buildDailyTotals()` in `useMultiMonthReveal.ts` — daily spend aggregation | 6 |
+| **Total** | | **60** |
+
+### Writing New Tests
+
+- **File naming:** `*.test.ts` (or `.tsx`) alongside the source file under `src/`.
+- **Pattern:** AAA (Arrange / Act / Assert) with inline comments marking each phase — see existing tests for examples.
+- **Priority:** Pure logic first — functions with no Supabase or React dependencies need no mocking.
+- **Imports:** Explicit `import { describe, it, expect } from 'vitest'` (globals are enabled but imports are used consistently).
+- **Store tests:** Call `useClassificationStore.getState()` directly; reset in `beforeEach`.
+- **Setup helpers:** Factory functions like `makeTx()` at the top of each file keep fixtures readable.
+
+### Coverage Areas
+
+**Covered (pure logic, no mocks):**
+
+- CSV column mapping and header synonym detection
+- XP level calculation and progress
+- Recurring charge detection (CV, tier splitting, exclusions)
+- Classification store grouping, predicted category, session XP, rollback
+- Daily totals aggregation for analysis heatmap
+
+**Not covered yet:**
+
+- React component rendering (`@testing-library/react`)
+- Hook integration tests with mocked Supabase client
+- Upload amount/date parsing (lives inline in `UploadPage.tsx`)
+- Advisor insights rule engine (`advisorInsights.ts`)
+- End-to-end / browser tests
+
+---
+
+## 18. Recommendations & Known Issues
 
 ### Security Vulnerabilities
 
@@ -963,15 +1036,20 @@ The workspace rules target files under 300 lines. Several core files significant
 14b. ~~Wire `rejectAutoClassified` — swipe-left on predicted cards now rejects the auto-classification instead of flagging.~~ Done.
 14c. ~~XP undo on revert — `SessionAction` tracks `xpEarned`; rollback deducts from `sessionXpEarned` and calls negative `awardXp` (server-side `GREATEST(0, total_xp + p_xp)` floor guard).~~ Done.
 
-**Tier 4 — Missing basics (highest UX impact):**
+**Tier 4 — Auth UX & Profile Management:** ✅ Completed in v1.5.0
 
-15. Profile / settings page — change display name, password, household name; leave household.
-16. Transaction delete capability — at minimum "delete upload batch".
-17. Password visibility toggle on auth forms.
-18. First-run classify tutorial — dismiss-once coach overlay with gesture demo.
-19. Upload accessible from tab bar or persistent FAB.
-20. Sign-out confirmation dialog.
-21. Home loading states (skeleton or spinner for activity/leaderboard).
+15. ~~Profile / settings page — SettingsPage with display name, password, household name, leave household, sign-out with confirmations.~~ Done.
+16. ~~Password visibility toggle on all auth forms — shared `PasswordInput` component with eye icon.~~ Done.
+17. ~~Auto-focus on first input of each auth form.~~ Done.
+18. ~~Sign-out confirmation dialog — moved from HomePage to SettingsPage with confirmation step.~~ Done.
+19. ~~Migration `032_profile_management.sql` — `update_display_name`, `update_household_name`, `leave_household` RPCs.~~ Done.
+
+**Tier 5 — Missing basics (remaining UX impact):**
+
+20. Transaction delete capability — at minimum "delete upload batch".
+21. First-run classify tutorial — dismiss-once coach overlay with gesture demo.
+22. Upload accessible from tab bar or persistent FAB.
+23. Home loading states (skeleton or spinner for activity/leaderboard).
 
 **Tier 5 — Polish & infrastructure:**
 

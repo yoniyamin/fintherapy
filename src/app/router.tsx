@@ -12,6 +12,7 @@ import SwipeDeck from '../components/swipe/SwipeDeck'
 import RevealPage from '../components/reveal/RevealPage'
 import BetsPage from '../components/bets/BetsPage'
 import AnalysisPage from '../components/analysis/AnalysisPage'
+import SettingsPage from '../components/settings/SettingsPage'
 import AnimationTestPage from '../components/dev/AnimationTestPage'
 
 export const router = createBrowserRouter([
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
       { path: 'reveal', element: <RevealPage /> },
       { path: 'analysis', element: <AnalysisPage /> },
       { path: 'bets', element: <BetsPage /> },
+      { path: 'settings', element: <SettingsPage /> },
     ],
   },
   {

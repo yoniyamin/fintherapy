@@ -91,7 +91,7 @@ function StatusRow({ badge, badgeTone = 'default', detail, label, to }: StatusRo
 }
 
 export default function HomePage() {
-  const { profile, signOut } = useAuth()
+  const { profile } = useAuth()
   const {
     transactions: pending,
     autoClassified,
@@ -307,15 +307,19 @@ export default function HomePage() {
       )}
 
       {profile && (
-        <div className="mt-6 w-full text-center">
-          <button
-            type="button"
-            onClick={signOut}
-            className="text-xs font-medium text-surface-500 transition-colors hover:text-surface-300"
+        <div className="mt-6 flex w-full items-center justify-center gap-3">
+          <Link
+            to="/settings"
+            className="flex items-center gap-1.5 text-xs font-medium text-surface-500 transition-colors hover:text-surface-300"
           >
-            Sign out
-          </button>
-          <p className="mt-1.5 text-[11px] text-surface-500">Version {APP_VERSION}</p>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            Settings
+          </Link>
+          <span className="text-[11px] text-surface-600">|</span>
+          <span className="text-[11px] text-surface-500">v{APP_VERSION}</span>
         </div>
       )}
     </div>

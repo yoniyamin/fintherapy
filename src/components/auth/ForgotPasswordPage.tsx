@@ -78,6 +78,7 @@ export default function ForgotPasswordPage() {
                   <input
                     id="reset-email"
                     type="email"
+                    autoFocus
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}

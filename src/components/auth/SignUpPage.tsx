@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
+import PasswordInput from '../common/PasswordInput'
 import ScreenSurface from '../layout/ScreenSurface'
 import { ui } from '../../lib/uiClasses'
 
@@ -96,6 +97,7 @@ export default function SignUpPage() {
                 <input
                   id="name"
                   type="text"
+                  autoFocus
                   required
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
@@ -123,16 +125,15 @@ export default function SignUpPage() {
                 <label htmlFor="password" className="block text-sm font-medium text-surface-300">
                   Password
                 </label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className={`mt-1.5 block w-full ${ui.input}`}
-                  placeholder="••••••••"
-                />
+                <div className="mt-1.5">
+                  <PasswordInput
+                    id="password"
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={setPassword}
+                  />
+                </div>
               </div>
 
               <button

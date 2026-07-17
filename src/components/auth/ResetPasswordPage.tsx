@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import PasswordInput from '../common/PasswordInput'
 import ScreenSurface from '../layout/ScreenSurface'
 import { ui } from '../../lib/uiClasses'
 
@@ -131,16 +132,16 @@ export default function ResetPasswordPage() {
                   >
                     New Password
                   </label>
-                  <input
-                    id="new-password"
-                    type="password"
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className={`mt-1.5 block w-full ${ui.input}`}
-                    placeholder="••••••••"
-                  />
+                  <div className="mt-1.5">
+                    <PasswordInput
+                      id="new-password"
+                      autoFocus
+                      required
+                      minLength={6}
+                      value={password}
+                      onChange={setPassword}
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -150,16 +151,15 @@ export default function ResetPasswordPage() {
                   >
                     Confirm Password
                   </label>
-                  <input
-                    id="confirm-password"
-                    type="password"
-                    required
-                    minLength={6}
-                    value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
-                    className={`mt-1.5 block w-full ${ui.input}`}
-                    placeholder="••••••••"
-                  />
+                  <div className="mt-1.5">
+                    <PasswordInput
+                      id="confirm-password"
+                      required
+                      minLength={6}
+                      value={confirm}
+                      onChange={(v) => setConfirm(v)}
+                    />
+                  </div>
                 </div>
 
                 <button
