@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import {
   hasPostgresDumpTools,
   postgresDumpEnv,
-  printConnectionFailureHint,
+  printPgDumpFailureHint,
   printPostgresToolsInstallHint,
   printSupabaseDbUrlHint,
   resolvePgDumpallCli,
@@ -53,12 +53,14 @@ function runPgTool(executable, args, label, outputFileName, cwd, dbUrl) {
   console.log(`Dumping ${label} → ${resolve(cwd, outputFileName)}`)
   const result = spawnSync(executable, args, {
     cwd,
-    stdio: 'inherit',
+    encoding: 'utf8',
     env: postgresDumpEnv(),
   })
+  if (result.stdout) process.stdout.write(result.stdout)
+  if (result.stderr) process.stderr.write(result.stderr)
   if (result.status !== 0) {
     console.error(`Backup failed while dumping ${label}.`)
-    printConnectionFailureHint(dbUrl)
+    printPgDumpFailureHint(dbUrl, `${result.stderr ?? ''}\n${result.stdout ?? ''}`)
     process.exit(1)
   }
 }

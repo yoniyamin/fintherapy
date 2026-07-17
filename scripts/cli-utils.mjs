@@ -139,6 +139,36 @@ export function printConnectionFailureHint(dbUrl) {
   }
 }
 
+/** Prints targeted hints after pg_dump/pg_dumpall failure based on captured output. */
+export function printPgDumpFailureHint(dbUrl, toolOutput = '') {
+  const combined = toolOutput.toLowerCase()
+
+  if (combined.includes('server version mismatch') || combined.includes('version mismatch')) {
+    console.error('')
+    console.error('PostgreSQL client version does not match the server.')
+    console.error('Supabase uses Postgres 17 — install postgresql-client-17 (or newer) for pg_dump/pg_dumpall.')
+    console.error('  https://www.postgresql.org/download/')
+    console.error('')
+    return
+  }
+
+  if (
+    combined.includes('could not translate host name')
+    || combined.includes('connection refused')
+    || combined.includes('timeout expired')
+    || combined.includes('password authentication failed')
+    || combined.includes('no pg_hba.conf entry')
+    || combined.includes('could not connect to server')
+  ) {
+    printConnectionFailureHint(dbUrl)
+    return
+  }
+
+  console.error('')
+  console.error('pg_dump/pg_dumpall exited with an error. See output above for details.')
+  console.error('')
+}
+
 /** Prints install instructions when PostgreSQL client tools are missing. */
 export function printPostgresToolsInstallHint() {
   console.error('Missing required commands: pg_dump and pg_dumpall')
