@@ -752,7 +752,7 @@ SpentWhatt/
 | `setupFiles` | `./src/test/setup.ts` |
 | `include` | `src/**/*.test.{ts,tsx}` |
 
-The setup file (`src/test/setup.ts`) registers `@testing-library/jest-dom/vitest`, making DOM matchers like `toBeInTheDocument()` available when component tests are added. `@testing-library/react` is installed but not yet used.
+The setup file (`src/test/setup.ts`) registers `@testing-library/jest-dom/vitest`, making DOM matchers like `toBeInTheDocument()` available. `@testing-library/react` and `@testing-library/user-event` are used for component tests.
 
 ### Running Tests
 
@@ -764,9 +764,9 @@ The setup file (`src/test/setup.ts`) registers `@testing-library/jest-dom/vitest
 Expected output on success:
 
 ```
-Test Files  5 passed (5)
-     Tests  60 passed (60)
-  Duration  ~2s
+Test Files  11 passed (11)
+     Tests  98 passed (98)
+  Duration  ~8s
 ```
 
 Each failing test prints the assertion diff; the run exits with code 1.
@@ -780,15 +780,23 @@ Each failing test prints the assertion diff; the run exits with code 1.
 | `src/lib/recurringDetector.test.ts` | `recurringDetector.ts` — recurring charge heuristics | 7 |
 | `src/stores/classificationStore.test.ts` | `classificationStore.ts` — Zustand deck grouping, advance, undo | 13 |
 | `src/hooks/useMultiMonthReveal.test.ts` | `buildDailyTotals()` in `useMultiMonthReveal.ts` — daily spend aggregation | 6 |
-| **Total** | | **60** |
+| `src/components/auth/LoginPage.test.tsx` | `LoginPage.tsx` — form rendering, sign-in flow, error display, session expired/password reset banners | 7 |
+| `src/components/auth/SignUpPage.test.tsx` | `SignUpPage.tsx` — form rendering, sign-up flow, email confirmation, error display | 7 |
+| `src/components/bets/BetsPage.test.tsx` | `BetsPage.tsx` — bet category rendering, submit flow, error banner, disabled state | 6 |
+| `src/components/upload/UploadPage.test.tsx` | `UploadPage.tsx` — page rendering, CSV parse, column detection | 5 |
+| `src/components/swipe/SwipeDeck.test.tsx` | `SwipeDeck.tsx` — empty deck state, upload link, render smoke tests | 4 |
+| `src/components/reveal/RevealPage.test.tsx` | `RevealPage.tsx` — celebration screen, income editor, blocked/no-data states, month selector | 8 |
+| **Total** | | **98** |
 
 ### Writing New Tests
 
 - **File naming:** `*.test.ts` (or `.tsx`) alongside the source file under `src/`.
 - **Pattern:** AAA (Arrange / Act / Assert) with inline comments marking each phase — see existing tests for examples.
-- **Priority:** Pure logic first — functions with no Supabase or React dependencies need no mocking.
+- **Priority:** Pure logic first — functions with no Supabase or React dependencies need no mocking. Component tests mock hooks via `vi.mock()`.
 - **Imports:** Explicit `import { describe, it, expect } from 'vitest'` (globals are enabled but imports are used consistently).
 - **Store tests:** Call `useClassificationStore.getState()` directly; reset in `beforeEach`.
+- **Component tests:** Use `MockAuthProvider` from `src/test/mock-auth.tsx` and `MockRouter` from `src/test/mock-router.tsx`. Mock hooks like `useBets`, `useReveal`, `useTransactions` etc. via `vi.mock()`.
+- **CI enforcement:** `.github/workflows/ci.yml` runs `npm test` on every push/PR to main.
 - **Setup helpers:** Factory functions like `makeTx()` at the top of each file keep fixtures readable.
 
 ### Coverage Areas
@@ -961,11 +969,11 @@ Zero test files exist. No `vitest`, `jest`, or test scripts in `package.json`. H
 
 | Gap | Detail |
 |-----|--------|
-| **No CI/CD pipeline** | No `.github/workflows/`. Lint and build are manual. |
-| **No error tracking** | No Sentry, LogRocket, or equivalent. Production errors are invisible. |
+| ~~**No CI/CD pipeline**~~ | **Fixed v1.7.0** — `.github/workflows/ci.yml` runs lint, test, and build on push/PR to main. |
+| **No error tracking** | No Sentry, LogRocket, or equivalent. Production errors are invisible. (Deferred — requires external project setup.) |
 | **No health checks** | No `/health` endpoint or uptime probe. |
 | **No product analytics** | No PostHog, GA, Amplitude, or equivalent. |
-| **Lint not enforced** | `npm run lint:ci` exists but no CI runs it. |
+| ~~**Lint not enforced**~~ | **Fixed v1.7.0** — CI workflow enforces lint on every push. |
 
 ### Migration Risks
 
@@ -1053,12 +1061,12 @@ The workspace rules target files under 300 lines. Several core files significant
 
 **Tier 5 — Polish & infrastructure:**
 
-22. CI/CD pipeline — GitHub Action for lint + build; optional Supabase migration check.
-23. Error tracking — Sentry or equivalent on frontend + serverless.
-24. Wire `rejectAutoClassified` — swipe-left on predicted cards or "Wrong prediction" in picker.
-25. Undo XP clawback on revert-to-pending.
+22. ~~CI/CD pipeline — GitHub Action for lint + build.~~ ✅ v1.7.0
+23. Error tracking — Sentry or equivalent on frontend + serverless. (Deferred — requires external project setup.)
+24. ~~Wire `rejectAutoClassified` — swipe-left on predicted cards.~~ ✅ v1.4.0
+25. ~~Undo XP clawback on revert-to-pending.~~ ✅ v1.4.0
 26. Haptic feedback on swipe gestures.
-27. Skeleton loaders for major views.
+27. ~~Skeleton loaders for major views.~~ ✅ v1.6.0
 28. Transfer kind UI (salary vs card funding vs internal).
 29. Category merge and reorder.
 30. Batch multi-month RPC for analysis.
