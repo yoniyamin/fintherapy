@@ -164,23 +164,23 @@ describe('SwipeDeck', () => {
     vi.useRealTimers()
   })
 
-  it('renders the empty deck state when no groups are loaded', async () => {
+  it('shows classify tutorial when deck is empty', async () => {
     // Arrange & Act
     renderDeck()
 
     // Assert
     await waitFor(() => {
-      expect(screen.getByText(/no transactions yet/i)).toBeInTheDocument()
+      expect(screen.getByText(/how classification works/i)).toBeInTheDocument()
     })
   })
 
-  it('shows upload link in empty state', async () => {
+  it('shows swipe gesture instructions in tutorial', async () => {
     // Arrange & Act
     renderDeck()
 
     // Assert
     await waitFor(() => {
-      expect(screen.getByText(/upload csv/i)).toBeInTheDocument()
+      expect(screen.getByText(/pick a spending category/i)).toBeInTheDocument()
     })
   })
 

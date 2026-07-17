@@ -30,6 +30,7 @@ import ProgressBar from '../common/ProgressBar'
 import { AccountCardEditModal, type AccountCardEditDraft } from '../common/AccountCardEditModal'
 import Confetti from '../common/Confetti'
 import EncouragementBurst from './EncouragementBurst'
+import ClassifyTutorial from './ClassifyTutorial'
 import DeckClearedScreen from './DeckClearedScreen'
 import { Link, useLocation } from 'react-router-dom'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
@@ -137,6 +138,7 @@ function buildHistoricalRecentActions(txs: Transaction[]): SessionAction[] {
       txSnapshots: transactions.map((t) => ({ ...t })),
       totalAmount,
       count: transactions.length,
+      xpEarned: 0,
       timestamp: tsMax,
     }
   })
@@ -1400,36 +1402,7 @@ export default function SwipeDeck() {
         </div>
       )
     }
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-        <div className={`max-w-sm space-y-4 ${ui.glass} px-8 py-10`}>
-          <motion.div
-            className="text-5xl drop-shadow-[0_10px_28px_rgba(28,176,246,0.2)]"
-            animate={{ y: [0, -8, 0] }}
-            transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
-          >
-            📭
-          </motion.div>
-          <h2 className="bg-gradient-to-r from-surface-50 to-ice bg-clip-text text-xl font-bold text-transparent">
-            No transactions yet
-          </h2>
-          <p className="text-sm text-surface-400">
-            Upload a CSV from the Upload tab to start your session!
-          </p>
-          {refundsOffset > 0 && (
-            <p className="text-sm font-semibold text-gem">
-              {refundsOffset} refund pair{refundsOffset > 1 ? 's' : ''} auto-offset
-            </p>
-          )}
-          <Link
-            to="/upload"
-            className="inline-block rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
-          >
-            Upload CSV
-          </Link>
-        </div>
-      </div>
-    )
+    return <ClassifyTutorial hasTransactions={false} />
   }
 
   const monthClassified = monthStats ? Number(monthStats.classified_count) : 0

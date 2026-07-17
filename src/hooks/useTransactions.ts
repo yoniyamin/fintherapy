@@ -540,6 +540,26 @@ export function useTransactions(
     return (data as number) ?? 0
   }, [householdId])
 
+  const deleteTransactionsByBatch = useCallback(async (batchId: string): Promise<{ error: Error | null; count: number }> => {
+    if (!householdId) return { error: new Error('No household'), count: 0 }
+    const { data, error } = await supabase.rpc('delete_transactions_by_batch', {
+      p_household_id: householdId,
+      p_batch_id: batchId,
+    })
+    if (error) return { error: new Error(error.message), count: 0 }
+    return { error: null, count: (data as number) ?? 0 }
+  }, [householdId])
+
+  const deleteTransactionsByIds = useCallback(async (ids: string[]): Promise<{ error: Error | null; count: number }> => {
+    if (!householdId) return { error: new Error('No household'), count: 0 }
+    const { data, error } = await supabase.rpc('delete_transactions_by_ids', {
+      p_household_id: householdId,
+      p_ids: ids,
+    })
+    if (error) return { error: new Error(error.message), count: 0 }
+    return { error: null, count: (data as number) ?? 0 }
+  }, [householdId])
+
   const getClassifiedCountsForAccount = useCallback(async (
     accountLast4: string,
   ): Promise<AccountClassifiedBreakdownRow[]> => {
@@ -597,5 +617,7 @@ export function useTransactions(
     deleteAccountAlias,
     autoMarkDebitLoads,
     getClassifiedCountsForAccount,
+    deleteTransactionsByBatch,
+    deleteTransactionsByIds,
   }
 }

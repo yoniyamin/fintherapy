@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { motion, useAnimation, useMotionValue, useTransform } from 'framer-motion'
+import { motion, useAnimation, useMotionValue, useMotionValueEvent, useTransform } from 'framer-motion'
 import type { MerchantGroup } from '../../stores/classificationStore'
 import type { CategoryDef } from '../../lib/constants'
 import { formatAccountLabel } from '../../lib/accountDisplay'
@@ -80,6 +80,34 @@ export default function SwipeCard({
   const scale = 1 - stackIndex * 0.05
   const yOffset = stackIndex * 10
   const predicted = group.predictedCategory ? catLookup[group.predictedCategory] : null
+
+  const hapticFiredRef = useRef<'none' | 'right' | 'left' | 'up'>('none')
+  const tryHaptic = () => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(10)
+  }
+
+  useMotionValueEvent(x, 'change', (latest) => {
+    if (!isTopCard) return
+    if (latest > SWIPE_DISTANCE && hapticFiredRef.current !== 'right') {
+      hapticFiredRef.current = 'right'
+      tryHaptic()
+    } else if (latest < -SWIPE_DISTANCE && hapticFiredRef.current !== 'left') {
+      hapticFiredRef.current = 'left'
+      tryHaptic()
+    } else if (Math.abs(latest) < SWIPE_DISTANCE * 0.5) {
+      hapticFiredRef.current = 'none'
+    }
+  })
+
+  useMotionValueEvent(y, 'change', (latest) => {
+    if (!isTopCard) return
+    if (latest < -SWIPE_DISTANCE && hapticFiredRef.current !== 'up') {
+      hapticFiredRef.current = 'up'
+      tryHaptic()
+    } else if (latest > -SWIPE_DISTANCE * 0.5) {
+      if (hapticFiredRef.current === 'up') hapticFiredRef.current = 'none'
+    }
+  })
 
   const handleDragEnd = (
     _: unknown,

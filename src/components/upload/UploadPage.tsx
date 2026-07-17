@@ -113,6 +113,7 @@ export default function UploadPage() {
   const { profile } = useAuth()
   const { autoClassify } = useMerchantKnowledge(profile?.household_id)
   const {
+    deleteTransactionsByBatch,
     getAccountAliases,
     getDistinctAccountLast4ForHousehold,
     detectRefunds,
@@ -192,10 +193,13 @@ export default function UploadPage() {
       autoCount: number
       loadCount: number
       monthsTouched: string[]
+      batchId: string | null
     } | null
   >(null)
   const [error, setError] = useState<string | null>(null)
   const [pendingTypePrompt, setPendingTypePrompt] = useState<string | null>(null)
+  const [undoing, setUndoing] = useState(false)
+  const [undone, setUndone] = useState(false)
   const [bucketSyncBusy, setBucketSyncBusy] = useState(false)
   const [bucketSyncFeedback, setBucketSyncFeedback] = useState<{ text: string; ok: boolean } | null>(null)
 
@@ -357,7 +361,13 @@ export default function UploadPage() {
             setError(insertError.message)
           } else {
             invalidatePendingTransactionsInflight(profile.household_id!)
-            const insertedCount = (inserted as number) ?? rows.length
+            const insertResult = inserted as { inserted: number; batch_id: string } | number | null
+            const insertedCount = typeof insertResult === 'object' && insertResult !== null
+              ? insertResult.inserted
+              : (insertResult as number) ?? rows.length
+            const batchId = typeof insertResult === 'object' && insertResult !== null
+              ? insertResult.batch_id
+              : null
             if (insertedCount > 0) {
               await detectRefunds()
             }
@@ -380,6 +390,7 @@ export default function UploadPage() {
               autoCount,
               loadCount,
               monthsTouched,
+              batchId,
             })
             void refreshAccountPickers()
             setFile(null)
@@ -673,12 +684,38 @@ export default function UploadPage() {
                   : `${result.monthsTouched.length} months · ${formatMonthLabel(result.monthsTouched[0]!)} – ${formatMonthLabel(result.monthsTouched[result.monthsTouched.length - 1]!)}`}
               {accountLast4 ? ` · ${formatAccountLabel(accountLast4, accountAliases)}` : ''}
             </p>
-            <Link
-              to="/classify"
-              className="mt-4 inline-block rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
-            >
-              Go classify
-            </Link>
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <Link
+                to="/classify"
+                className="inline-block rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
+              >
+                Go classify
+              </Link>
+              {result.batchId && !undone && (
+                <button
+                  type="button"
+                  disabled={undoing}
+                  onClick={async () => {
+                    if (!window.confirm('Delete all transactions from this upload?')) return
+                    setUndoing(true)
+                    const { error: delErr } = await deleteTransactionsByBatch(result.batchId!)
+                    setUndoing(false)
+                    if (delErr) {
+                      setError(delErr.message)
+                    } else {
+                      setUndone(true)
+                      if (profile?.household_id) invalidatePendingTransactionsInflight(profile.household_id)
+                    }
+                  }}
+                  className="text-xs font-medium text-surface-500 underline decoration-surface-600 underline-offset-2 transition-colors hover:text-surface-300 disabled:opacity-40"
+                >
+                  {undoing ? 'Deleting…' : 'Undo this upload'}
+                </button>
+              )}
+              {undone && (
+                <p className="text-xs font-semibold text-flame">Upload undone — transactions deleted.</p>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

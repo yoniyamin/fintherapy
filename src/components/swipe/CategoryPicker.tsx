@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CATEGORIES, type CategoryDef } from '../../lib/constants'
+import { DEFAULT_CATEGORIES, type CategoryDef } from '../../lib/constants'
 
 interface CategoryPickerProps {
   open: boolean
@@ -13,7 +13,7 @@ interface CategoryPickerProps {
 export default function CategoryPicker({ open, onSelect, onClose, categories }: CategoryPickerProps) {
   if (typeof document === 'undefined') return null
 
-  const cats = categories ?? CATEGORIES
+  const cats = categories ?? DEFAULT_CATEGORIES
 
   return createPortal(
     <AnimatePresence>

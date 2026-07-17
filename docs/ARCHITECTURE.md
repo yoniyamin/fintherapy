@@ -860,7 +860,7 @@ These are standard patterns that most users would expect but are currently absen
 
 | Gap | Detail |
 |-----|--------|
-| **No first-run classify tutorial** | Swipe hints exist as footer text on cards ("Swipe right to categorize · left to flag") and drag overlays, but there is no coach-mark overlay, gesture animation demo, or dismiss-once tutorial for new users. Easy to miss on mobile. |
+| ~~**No first-run classify tutorial**~~ | ~~Swipe hints exist as footer text on cards ("Swipe right to categorize · left to flag") and drag overlays, but there is no coach-mark overlay, gesture animation demo, or dismiss-once tutorial for new users. Easy to miss on mobile.~~ **Fixed in v1.8.0** — `ClassifyTutorial` component with animated gesture demo (4-step walkthrough: right/left/up/transfer), localStorage dismiss-once, shown on empty deck. |
 | **No about / help page** | No in-app documentation, FAQ, or feature walkthrough. |
 | **No terms / privacy / contact** | No legal pages or support link. |
 | **No changelog / what's new** | Version string on Home footer only; no release notes. |
@@ -880,7 +880,7 @@ These are standard patterns that most users would expect but are currently absen
 
 | Gap | Detail |
 |-----|--------|
-| **Can't delete uploaded transactions** | No delete-transaction RPC or UI. Bad uploads are permanent. |
+| ~~**Can't delete uploaded transactions**~~ | ~~No delete-transaction RPC or UI. Bad uploads are permanent.~~ **Fixed in v1.8.0** — `delete_transactions_by_batch` and `delete_transactions_by_ids` RPCs + "Undo this upload" button on upload success screen. `insert_transactions` now returns `{inserted, batch_id}`. |
 | **Can't edit transaction fields** | Amount, date, and merchant are immutable after upload. Classify allows category, transfer, flag, and notes only. |
 | **No global transaction browser** | Users can only see pending (classify deck), recent (7-day Recent panel), or per-category (Reveal drill-down). No searchable, filterable "all transactions" view. |
 | **No bulk classify / multi-select** | One stack at a time. |
@@ -907,7 +907,7 @@ These are standard patterns that most users would expect but are currently absen
 
 | Gap | Detail |
 |-----|--------|
-| **No haptic feedback on swipe** | No `navigator.vibrate()` on classify gestures — common in swipe-heavy mobile UX. |
+| ~~**No haptic feedback on swipe**~~ | ~~No `navigator.vibrate()` on classify gestures — common in swipe-heavy mobile UX.~~ **Fixed in v1.8.0** — `navigator.vibrate(10)` fires when drag crosses swipe threshold in `SwipeCard`, with feature-detection fallback. |
 | **No sound effects** | Silent app throughout. |
 | **Note save failure is silent** | `handleSaveNote` returns on error with no toast or feedback. |
 | **Category/alias save confirmation is silent** | Modal closes with no success toast after saving. |
