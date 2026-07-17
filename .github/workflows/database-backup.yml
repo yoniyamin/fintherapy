@@ -11,6 +11,7 @@ on:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    environment: SupabaseBackup  # Add this line
     steps:
       - uses: actions/checkout@v4
 
