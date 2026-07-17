@@ -36,7 +36,6 @@ jobs:
         run: npm run backup:db
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          PATH: /usr/lib/postgresql/17/bin:${{ env.PATH }}
 
       - name: Upload backup artifact
         uses: actions/upload-artifact@v4
