@@ -333,7 +333,6 @@ export default function UploadPage() {
               const merchant_raw = (row[merchantKey] ?? '').trim()
               const tx_date = parseDate(dateKey ? row[dateKey] ?? '' : '')
               return {
-                uploaded_by: profile.id,
                 merchant_raw,
                 amount: amountAsSpend(merchant_raw, parseAmount(row[amountKey] ?? '')),
                 tx_date,

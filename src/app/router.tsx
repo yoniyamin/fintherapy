@@ -44,13 +44,15 @@ export const router = createBrowserRouter([
   { path: '/signup', element: <SignUpPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/reset-password', element: <ResetPasswordPage /> },
-  {
-    path: '/dev/animations',
-    element: (
-      <AuthGuard requireHousehold={false}>
-        <AnimationTestPage />
-      </AuthGuard>
-    ),
-  },
+  ...(import.meta.env.DEV
+    ? [{
+        path: '/dev/animations',
+        element: (
+          <AuthGuard requireHousehold={false}>
+            <AnimationTestPage />
+          </AuthGuard>
+        ),
+      }]
+    : []),
   { path: '*', element: <Navigate to="/" replace /> },
 ])

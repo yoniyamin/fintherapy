@@ -742,21 +742,21 @@ SpentWhatt/
 
 ### Security Vulnerabilities
 
-| Severity | Issue | Detail |
-|----------|-------|--------|
-| **Critical** | **`profiles` RLS allows `household_id` and `total_xp` tampering** | The `profiles_update_own` policy allows updating _any_ column on the user's own row. A user can call PostgREST directly to set `household_id` to any UUID (bypassing invite flow) or inflate `total_xp`. Since `_resolve_household_schema` trusts `profiles.household_id`, this grants access to another household's data. Fix: column-level privileges or a trigger restricting direct updates to `ui_prefs` and `display_name` only. |
-| **High** | **`award_xp` has no authorization** | Any authenticated user can add XP to _any_ `p_user_id` — no `auth.uid()` check, no household membership check. Fix: require `p_user_id = auth.uid()` or move XP grants inside the classify RPCs. |
-| **High** | **`/api/search` is unauthenticated** | The Brave Search proxy accepts anonymous GET requests. No JWT check, no rate limit — anyone can abuse the API key. Fix: require Supabase JWT in the request header. |
-| **Medium** | **`p_classified_by` not bound to `auth.uid()`** | Callers can attribute classifications to another household member. |
-| **Medium** | **Invite code brute-force** | 6 chars (~1B combinations) with no lockout or per-user rate limiting on `join_household_by_code`. |
-| **Medium** | **`uploaded_by` is client-supplied** | `insert_transactions` trusts `elem->>'uploaded_by'` from the JSON payload rather than enforcing `auth.uid()`. |
+| Severity | Issue | Detail | Status |
+|----------|-------|--------|--------|
+| **Critical** | **`profiles` RLS allows `household_id` and `total_xp` tampering** | The `profiles_update_own` policy allows updating _any_ column on the user's own row. A user can call PostgREST directly to set `household_id` to any UUID (bypassing invite flow) or inflate `total_xp`. Since `_resolve_household_schema` trusts `profiles.household_id`, this grants access to another household's data. Fix: column-level privileges or a trigger restricting direct updates to `ui_prefs` and `display_name` only. | **Fixed in v1.2.0** — `migration_030` replaces policy with `profiles_update_safe_columns` (WITH CHECK prevents `household_id` / `total_xp` changes). |
+| **High** | **`award_xp` has no authorization** | Any authenticated user can add XP to _any_ `p_user_id` — no `auth.uid()` check, no household membership check. Fix: require `p_user_id = auth.uid()` or move XP grants inside the classify RPCs. | **Fixed in v1.2.0** — `migration_030` adds `auth.uid()` check; client `awardXp` no longer passes `user.id`. |
+| **High** | **`/api/search` is unauthenticated** | The Brave Search proxy accepts anonymous GET requests. No JWT check, no rate limit — anyone can abuse the API key. Fix: require Supabase JWT in the request header. | **Fixed in v1.2.0** — `api/search.ts` requires `Authorization: Bearer` header and validates JWT via Supabase. Client sends session token. |
+| **Medium** | **`p_classified_by` not bound to `auth.uid()`** | Callers can attribute classifications to another household member. | **Fixed in v1.2.0** — `migration_030` binds `classified_by := auth.uid()` in `classify_transaction`, `confirm_auto_classified`, `reclassify_transaction`, `mark_as_transfer`. Client no longer passes `user.id`. |
+| **Medium** | **Invite code brute-force** | 6 chars (~1B combinations) with no lockout or per-user rate limiting on `join_household_by_code`. | Open |
+| **Medium** | **`uploaded_by` is client-supplied** | `insert_transactions` trusts `elem->>'uploaded_by'` from the JSON payload rather than enforcing `auth.uid()`. | **Fixed in v1.2.0** — `migration_030` uses `auth.uid()` for `uploaded_by`; client no longer sends the field. |
 
 ### Race Conditions & Data Integrity
 
 | Severity | Issue | Detail |
 |----------|-------|--------|
 | **High** | **No concurrent deck sync** | Presence shows who's online but there's no `postgres_changes` subscription, no polling, and no realtime transaction sync. Two members can classify the same transaction — last writer wins with no conflict message, and both earn XP. |
-| **High** | **`classify_transaction` has no status guard** | The RPC updates _any_ transaction by ID regardless of current status — already-classified, flagged, transfer, or offset rows can be silently overwritten. Fix: add `WHERE status IN ('pending', 'auto', 'flagged')` + check `ROW_COUNT`. |
+| **High** | **`classify_transaction` has no status guard** | The RPC updates _any_ transaction by ID regardless of current status — already-classified, flagged, transfer, or offset rows can be silently overwritten. Fix: add `WHERE status IN ('pending', 'auto', 'flagged')` + check `ROW_COUNT`. | **Fixed in v1.2.0** — `migration_030` adds `WHERE status IN ('pending', 'auto', 'flagged')` + raises on 0 rows. |
 | **Medium** | **Double XP for same transaction** | XP is awarded client-side after classify with no server-side idempotency. Two members classifying the same tx both call `award_xp`. |
 | **Medium** | **Partial group failure leaves split state** | `runGroupRpc` classifies transactions sequentially; on failure mid-stack, earlier txs are already classified on the server but the entire group is re-injected locally as if unclassified. |
 | **Medium** | **Auto-confirm swallows RPC errors** | `confirmAutoClassified` always returns `{ error: null }` to `runGroupRpc`. If the server fails or the tx was already classified by a partner, the UI still advances and awards XP. |
@@ -938,13 +938,13 @@ The workspace rules target files under 300 lines. Several core files significant
 
 ### Recommended Priority Order
 
-**Tier 1 — Security (fix before sharing widely):**
+**Tier 1 — Security (fix before sharing widely):** ✅ Completed in v1.2.0
 
-1. Lock down `profiles` RLS — column-level privileges or trigger restricting direct updates to `ui_prefs` and `display_name` only; route `household_id` and `total_xp` changes through SECURITY DEFINER RPCs.
-2. Harden `award_xp` — require `p_user_id = auth.uid()` or move XP grants inside classify RPCs (idempotent, server-side).
-3. Protect `/api/search` — require Supabase JWT in the request header; add rate limiting.
-4. Bind `p_classified_by` to `auth.uid()` inside classify RPCs.
-5. Add `WHERE status IN ('pending', 'auto', 'flagged')` guard to `classify_transaction` + verify `ROW_COUNT`.
+1. ~~Lock down `profiles` RLS — column-level privileges or trigger restricting direct updates to `ui_prefs` and `display_name` only; route `household_id` and `total_xp` changes through SECURITY DEFINER RPCs.~~ Done.
+2. ~~Harden `award_xp` — require `p_user_id = auth.uid()` or move XP grants inside classify RPCs (idempotent, server-side).~~ Done.
+3. ~~Protect `/api/search` — require Supabase JWT in the request header; add rate limiting.~~ Done (JWT required; rate limiting not yet added).
+4. ~~Bind `p_classified_by` to `auth.uid()` inside classify RPCs.~~ Done.
+5. ~~Add `WHERE status IN ('pending', 'auto', 'flagged')` guard to `classify_transaction` + verify `ROW_COUNT`.~~ Done.
 
 **Tier 2 — Data integrity & concurrent use:**
 
@@ -974,4 +974,4 @@ The workspace rules target files under 300 lines. Several core files significant
 23. Category merge and reorder.
 24. Batch multi-month RPC for analysis.
 25. Generated Supabase types for RPC type safety.
-26. Gate `/dev/animations` behind `import.meta.env.DEV`.
+26. ~~Gate `/dev/animations` behind `import.meta.env.DEV`.~~ Done in v1.2.0.

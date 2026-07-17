@@ -16,6 +16,9 @@ dist-ssr
 .env
 .env.local
 
+# On-demand database dumps (never commit production data)
+backups/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

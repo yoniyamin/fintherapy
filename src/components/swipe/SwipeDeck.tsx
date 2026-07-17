@@ -1078,7 +1078,7 @@ export default function SwipeDeck() {
     if (deckMode === 'pending' && group.predictedCategory) {
       const predicted = group.predictedCategory
       const ok = await runGroupRpc(group, async (txId) => {
-        await confirmAutoClassified(txId, user.id)
+        await confirmAutoClassified(txId)
         return { error: null }
       })
       if (!ok) return
@@ -1090,7 +1090,7 @@ export default function SwipeDeck() {
       store.advance(txCount)
       const action = recordSessionAction(group, 'auto-confirmed', predicted)
       showUndoToast(action)
-      await awardXp(user.id, xpEarned)
+      await awardXp(xpEarned)
       celebrateClassifySuccess(xpEarned)
 
       xpCounter.current += 1
@@ -1120,7 +1120,7 @@ export default function SwipeDeck() {
     }
     const group = store.activeGroup
     if (!group) return
-    const ok = await runGroupRpc(group, (txId) => flagTransaction(txId))
+    const ok = await runGroupRpc(group, (txId: string) => flagTransaction(txId))
     if (!ok) return
     removeTransactions(group.transactions.map((t) => t.id))
     store.flag()
@@ -1132,7 +1132,7 @@ export default function SwipeDeck() {
   const handleTransfer = async () => {
     const group = store.activeGroup
     if (!group || !user) return
-    const ok = await runGroupRpc(group, (txId) => markTransfer(txId, user.id))
+    const ok = await runGroupRpc(group, (txId: string) => markTransfer(txId))
     if (!ok) return
     removeTransactions(group.transactions.map((t) => t.id))
     store.markTransfer()
@@ -1149,7 +1149,7 @@ export default function SwipeDeck() {
       store.closeCategoryPicker()
       if (!user) return
       for (const tx of target.txSnapshots) {
-        await reclassifyTransaction(tx.id, categoryId, user.id)
+        await reclassifyTransaction(tx.id, categoryId)
       }
       learnMerchant(target.merchantRaw, categoryId)
       if (origin === 'session') {
@@ -1166,7 +1166,7 @@ export default function SwipeDeck() {
 
     store.closeCategoryPicker()
 
-    const ok = await runGroupRpc(group, (txId) => classifyTransaction(txId, categoryId, user.id))
+    const ok = await runGroupRpc(group, (txId: string) => classifyTransaction(txId, categoryId))
     if (!ok) return
     learnMerchant(group.merchantRaw, categoryId)
     removeTransactions(group.transactions.map((t) => t.id))
@@ -1178,7 +1178,7 @@ export default function SwipeDeck() {
     store.advance(txCount)
     const action = recordSessionAction(group, 'classified', categoryId)
     showUndoToast(action)
-    await awardXp(user.id, xpEarned)
+    await awardXp(xpEarned)
     celebrateClassifySuccess(xpEarned)
 
     xpCounter.current += 1
@@ -1224,9 +1224,8 @@ export default function SwipeDeck() {
   /** Convert any prior action into a "marked as transfer". Used from the Recent panel. */
   const handleConvertActionToTransfer = useCallback(
     async (action: SessionAction, origin: 'session' | 'history') => {
-      if (!user) return
       for (const tx of action.txSnapshots) {
-        await markTransfer(tx.id, user.id)
+        await markTransfer(tx.id)
       }
       if (origin === 'session') {
         store.updateActionInHistory(action.id, 'transfer', OWN_TRANSFERS_CATEGORY_ID)
@@ -1235,7 +1234,7 @@ export default function SwipeDeck() {
       }
       invalidateFlaggedCount()
     },
-    [markTransfer, user, store, loadHistoryRecentActions],
+    [markTransfer, store, loadHistoryRecentActions],
   )
 
   /** Move a prior action into the No idea queue. */

@@ -20,12 +20,12 @@ export function useMerchantKnowledge(householdId: string | null | undefined) {
     return (data as number) ?? 0
   }, [householdId])
 
-  const confirmAutoClassified = useCallback(async (txId: string, userId: string) => {
+  const confirmAutoClassified = useCallback(async (txId: string) => {
     if (!householdId) return
     await supabase.rpc('confirm_auto_classified', {
       p_household_id: householdId,
       p_tx_id: txId,
-      p_classified_by: userId,
+      p_classified_by: '00000000-0000-0000-0000-000000000000',
     })
   }, [householdId])
 

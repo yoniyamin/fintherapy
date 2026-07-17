@@ -1,3 +1,5 @@
+import { supabase } from './supabase'
+
 /**
  * Cleans a raw bank merchant string for search and fetches results
  * via Google Custom Search API so the user can identify the business.
@@ -81,7 +83,12 @@ export async function searchMerchant(
 
   const url = `/api/search?q=${encodeURIComponent(query)}&count=${count}`
 
-  const res = await fetch(url)
+  const { data: { session } } = await supabase.auth.getSession()
+  const res = await fetch(url, {
+    headers: session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {},
+  })
 
   if (!res.ok) {
     let msg = `HTTP ${res.status}`

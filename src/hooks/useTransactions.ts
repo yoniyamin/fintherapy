@@ -152,7 +152,6 @@ export function useTransactions(
   const classifyTransaction = async (
     txId: string,
     category: string,
-    userId: string,
   ) => {
     if (!householdId) return { error: new Error('No household') }
 
@@ -160,7 +159,7 @@ export function useTransactions(
       p_household_id: householdId,
       p_tx_id: txId,
       p_category: category,
-      p_classified_by: userId,
+      p_classified_by: '00000000-0000-0000-0000-000000000000',
     })
 
     return { error }
@@ -190,13 +189,13 @@ export function useTransactions(
     return { error }
   }
 
-  const markTransfer = async (txId: string, userId: string) => {
+  const markTransfer = async (txId: string) => {
     if (!householdId) return { error: new Error('No household') }
 
     const { error } = await supabase.rpc('mark_as_transfer', {
       p_household_id: householdId,
       p_tx_id: txId,
-      p_classified_by: userId,
+      p_classified_by: '00000000-0000-0000-0000-000000000000',
     })
 
     return { error }
@@ -216,9 +215,11 @@ export function useTransactions(
     return (data as number) ?? 0
   }, [householdId])
 
-  const awardXp = async (userId: string, xp: number) => {
+  const awardXp = async (xp: number) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: new Error('Not authenticated') }
     const { error } = await supabase.rpc('award_xp', {
-      p_user_id: userId,
+      p_user_id: user.id,
       p_xp: xp,
     })
     return { error }
@@ -270,7 +271,6 @@ export function useTransactions(
   const reclassifyTransaction = async (
     txId: string,
     newCategory: string,
-    userId: string,
   ) => {
     if (!householdId) return { error: new Error('No household') }
 
@@ -278,7 +278,7 @@ export function useTransactions(
       p_household_id: householdId,
       p_tx_id: txId,
       p_new_category: newCategory,
-      p_classified_by: userId,
+      p_classified_by: '00000000-0000-0000-0000-000000000000',
     })
 
     return { error }

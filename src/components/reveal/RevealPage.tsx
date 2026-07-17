@@ -48,7 +48,7 @@ const fmt = (v: number) =>
 
 export default function RevealPage() {
   const location = useLocation()
-  const { profile, user } = useAuth()
+  const { profile } = useAuth()
   const {
     summary, leaderboard, monthlyTotals, householdIncome,
     loading, fetchSummary, setIncome,
@@ -251,18 +251,16 @@ export default function RevealPage() {
   }
 
   const handleReclassify = useCallback(async (txId: string, newCategory: string) => {
-    if (!user) return
-    await reclassifyTransaction(txId, newCategory, user.id)
+    await reclassifyTransaction(txId, newCategory)
     setDrillTxns(prev => prev.filter(t => t.id !== txId))
     fetchSummary(month, accountRpcFilter, includeOwnTransfers)
-  }, [user, reclassifyTransaction, fetchSummary, month, accountRpcFilter, includeOwnTransfers])
+  }, [reclassifyTransaction, fetchSummary, month, accountRpcFilter, includeOwnTransfers])
 
   const handleMarkTransfer = useCallback(async (txId: string) => {
-    if (!user) return
-    await markTransfer(txId, user.id)
+    await markTransfer(txId)
     setDrillTxns(prev => prev.filter(t => t.id !== txId))
     fetchSummary(month, accountRpcFilter, includeOwnTransfers)
-  }, [user, markTransfer, fetchSummary, month, accountRpcFilter, includeOwnTransfers])
+  }, [markTransfer, fetchSummary, month, accountRpcFilter, includeOwnTransfers])
 
   const handleSaveNote = useCallback(async (txId: string, note: string | null) => {
     await setTransactionsUserNote([txId], note)

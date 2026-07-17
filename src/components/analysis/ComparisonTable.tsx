@@ -305,7 +305,7 @@ export default function ComparisonTable({
   const rows = useMemo(() => buildRows(data, sorted, categoryLookup), [data, sorted, categoryLookup])
   const { prefs, updatePrefs } = useUiPrefs()
   const mode: ViewMode = prefs.comparisonView ?? 'cards'
-  const { profile, user } = useAuth()
+  const { profile } = useAuth()
   const {
     getTransactionsByCategory,
     reclassifyTransaction,
@@ -330,18 +330,16 @@ export default function ComparisonTable({
   }, [getTransactionsByCategory])
 
   const handleReclassify = useCallback(async (txId: string, newCategory: string) => {
-    if (!user) return
-    await reclassifyTransaction(txId, newCategory, user.id)
+    await reclassifyTransaction(txId, newCategory)
     setDrillTxns(prev => prev.filter(t => t.id !== txId))
     onDataChange()
-  }, [user, reclassifyTransaction, onDataChange])
+  }, [reclassifyTransaction, onDataChange])
 
   const handleMarkTransfer = useCallback(async (txId: string) => {
-    if (!user) return
-    await markTransfer(txId, user.id)
+    await markTransfer(txId)
     setDrillTxns(prev => prev.filter(t => t.id !== txId))
     onDataChange()
-  }, [user, markTransfer, onDataChange])
+  }, [markTransfer, onDataChange])
 
   const handleSaveNote = useCallback(async (txId: string, note: string | null) => {
     await setTransactionsUserNote([txId], note)
