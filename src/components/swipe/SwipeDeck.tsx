@@ -1088,6 +1088,7 @@ export default function SwipeDeck() {
       const txCount = group.count
       const xpEarned = txCount * XP_VALUES.CLASSIFY_EASY
       store.advance(txCount)
+      store.addSessionXp(xpEarned)
       const action = recordSessionAction(group, 'auto-confirmed', predicted)
       showUndoToast(action)
       await awardXp(xpEarned)
@@ -1173,9 +1174,8 @@ export default function SwipeDeck() {
 
     const txCount = group.count
     const xpEarned = txCount * XP_VALUES.CLASSIFY_MANUAL
-    // See handleSwipeRight — advance must run synchronously with removeTransactions
-    // so the deck-sync useEffect doesn't reset currentIndex between the two awaits.
     store.advance(txCount)
+    store.addSessionXp(xpEarned)
     const action = recordSessionAction(group, 'classified', categoryId)
     showUndoToast(action)
     await awardXp(xpEarned)
@@ -1336,6 +1336,7 @@ export default function SwipeDeck() {
         deckMode={deckMode}
         flaggedCount={store.flaggedCount}
         refundsOffset={refundsOffset}
+        sessionXpEarned={store.sessionXpEarned}
         transferCount={store.transferCount}
         viewport="in-app"
       />

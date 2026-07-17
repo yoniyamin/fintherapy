@@ -35,6 +35,7 @@ interface ClassificationState {
   currentIndex: number
   completedCount: number
   classifiedTxCount: number
+  sessionXpEarned: number
   flaggedCount: number
   transferCount: number
   showCategoryPicker: boolean
@@ -46,6 +47,7 @@ interface ClassificationState {
   /** Rebuild groups from updated txns without resetting session counters. */
   refreshDeck: (txns: Transaction[]) => void
   advance: (txCount: number) => void
+  addSessionXp: (amount: number) => void
   flag: () => void
   /** Move current group to end of queue (e.g. skip in No idea deck). */
   rotateCurrentToEnd: () => void
@@ -108,6 +110,7 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
   currentIndex: 0,
   completedCount: 0,
   classifiedTxCount: 0,
+  sessionXpEarned: 0,
   flaggedCount: 0,
   transferCount: 0,
   showCategoryPicker: false,
@@ -126,6 +129,7 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
       currentIndex: 0,
       completedCount: 0,
       classifiedTxCount: 0,
+      sessionXpEarned: 0,
       flaggedCount: 0,
       transferCount: 0,
       showCategoryPicker: false,
@@ -161,6 +165,10 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
       activeGroup: groups[nextIndex] ?? null,
       activeTransaction: groups[nextIndex]?.transactions[0] ?? null,
     })
+  },
+
+  addSessionXp: (amount: number) => {
+    set((state) => ({ sessionXpEarned: state.sessionXpEarned + amount }))
   },
 
   flag: () => {
@@ -231,6 +239,7 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
       currentIndex: 0,
       completedCount: 0,
       classifiedTxCount: 0,
+      sessionXpEarned: 0,
       flaggedCount: 0,
       transferCount: 0,
       showCategoryPicker: false,

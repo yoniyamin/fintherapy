@@ -112,6 +112,7 @@ export default function BetsPage() {
   const [draftAmounts, setDraftAmounts] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [monthStats, setMonthStats] = useState<MonthStats | null>(null)
   const [statsLoadedMonth, setStatsLoadedMonth] = useState<string | null>(null)
   const monthOptions = getMonthOptions()
@@ -170,6 +171,7 @@ export default function BetsPage() {
   const handleSubmit = async () => {
     setSubmitting(true)
     setSuccess(false)
+    setSubmitError(null)
     const bets = selectedCategories
       .filter((cat) => amounts[cat.id] && Number(amounts[cat.id]) > 0)
       .map((cat) => ({
@@ -177,9 +179,13 @@ export default function BetsPage() {
         predicted_amount: Number(amounts[cat.id]),
       }))
 
-    await submitBets(month, bets)
-    fetchHouseholdBetStatus(month)
+    const { error } = await submitBets(month, bets)
     setSubmitting(false)
+    if (error) {
+      setSubmitError(error.message ?? 'Failed to place bets')
+      return
+    }
+    fetchHouseholdBetStatus(month)
     setSuccess(true)
     fireConfetti()
     setTimeout(() => setSuccess(false), 3000)
@@ -395,6 +401,16 @@ export default function BetsPage() {
                 exit={{ opacity: 0 }}
               >
                 🎲 Bets placed!
+              </motion.div>
+            )}
+            {submitError && (
+              <motion.div
+                className="rounded-xl border border-flame/20 bg-flame/10 p-3 text-center text-sm font-semibold text-flame"
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                {submitError}
               </motion.div>
             )}
           </AnimatePresence>

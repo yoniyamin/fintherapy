@@ -63,6 +63,7 @@ const DECK_CLEARED_MOCK = {
   classifiedTxCount: 47,
   completedCount: 12,
   flaggedCount: 3,
+  sessionXpEarned: 350,
   transferCount: 2,
   refundsOffset: 1,
 } as const

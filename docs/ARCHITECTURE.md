@@ -946,32 +946,41 @@ The workspace rules target files under 300 lines. Several core files significant
 4. ~~Bind `p_classified_by` to `auth.uid()` inside classify RPCs.~~ Done.
 5. ~~Add `WHERE status IN ('pending', 'auto', 'flagged')` guard to `classify_transaction` + verify `ROW_COUNT`.~~ Done.
 
-**Tier 2 — Data integrity & concurrent use:**
+**Tier 2 — Bug fixes, error handling & test foundation:** ✅ Completed in v1.3.0
 
-6. Concurrent classify sync — subscribe to `postgres_changes` on household transactions or poll on visibility/presence and call `refetchFresh`.
-7. Batch classify RPC — replace per-tx loop in `runGroupRpc` with single multi-row RPC (also fixes partial-failure split state).
-8. Fix auto-confirm error swallowing — propagate `confirmAutoClassified` errors.
+6. ~~Fix deck-cleared XP display — tracked `sessionXpEarned` in store instead of incorrect `classifiedTxCount * CLASSIFY_MANUAL` calculation.~~ Done.
+7. ~~BetsPage error handling — `submitBets` now checks returned error and shows banner instead of always firing confetti.~~ Done.
+8. ~~AnalysisPage error display — `useMultiMonthReveal` error is now destructured and rendered as banner.~~ Done.
+9. ~~Theme-color mismatch — `index.html` meta tag aligned with PWA manifest (`#6366f1`).~~ Done.
+10. ~~Duplicate font link — removed Google Fonts `<link>` from `index.html` (CSS `@import` is the single source).~~ Done.
+11. ~~Vitest test foundation — config, setup, 5 pure-logic test files (59 tests): `csvColumnMap`, `xpLevels`, `recurringDetector`, `classificationStore`, `buildDailyTotals`.~~ Done.
 
-**Tier 3 — Missing basics (highest UX impact):**
+**Tier 3 — Data integrity & concurrent use:**
 
-9. Profile / settings page — change display name, password, household name; leave household.
-10. Transaction delete capability — at minimum "delete upload batch".
-11. Password visibility toggle on auth forms.
-12. First-run classify tutorial — dismiss-once coach overlay with gesture demo.
-13. Upload accessible from tab bar or persistent FAB.
-14. Sign-out confirmation dialog.
-15. Home loading states (skeleton or spinner for activity/leaderboard).
+12. Concurrent classify sync — subscribe to `postgres_changes` on household transactions or poll on visibility/presence and call `refetchFresh`.
+13. Batch classify RPC — replace per-tx loop in `runGroupRpc` with single multi-row RPC (also fixes partial-failure split state).
+14. Fix auto-confirm error swallowing — propagate `confirmAutoClassified` errors.
 
-**Tier 4 — Polish & infrastructure:**
+**Tier 4 — Missing basics (highest UX impact):**
 
-16. CI/CD pipeline — GitHub Action for lint + build; optional Supabase migration check.
-17. Error tracking — Sentry or equivalent on frontend + serverless.
-18. Fix deck-cleared XP display and undo XP clawback.
-19. Wire `rejectAutoClassified` — swipe-left on predicted cards or "Wrong prediction" in picker.
-20. Haptic feedback on swipe gestures.
-21. Skeleton loaders for major views.
-22. Transfer kind UI (salary vs card funding vs internal).
-23. Category merge and reorder.
-24. Batch multi-month RPC for analysis.
-25. Generated Supabase types for RPC type safety.
-26. ~~Gate `/dev/animations` behind `import.meta.env.DEV`.~~ Done in v1.2.0.
+15. Profile / settings page — change display name, password, household name; leave household.
+16. Transaction delete capability — at minimum "delete upload batch".
+17. Password visibility toggle on auth forms.
+18. First-run classify tutorial — dismiss-once coach overlay with gesture demo.
+19. Upload accessible from tab bar or persistent FAB.
+20. Sign-out confirmation dialog.
+21. Home loading states (skeleton or spinner for activity/leaderboard).
+
+**Tier 5 — Polish & infrastructure:**
+
+22. CI/CD pipeline — GitHub Action for lint + build; optional Supabase migration check.
+23. Error tracking — Sentry or equivalent on frontend + serverless.
+24. Wire `rejectAutoClassified` — swipe-left on predicted cards or "Wrong prediction" in picker.
+25. Undo XP clawback on revert-to-pending.
+26. Haptic feedback on swipe gestures.
+27. Skeleton loaders for major views.
+28. Transfer kind UI (salary vs card funding vs internal).
+29. Category merge and reorder.
+30. Batch multi-month RPC for analysis.
+31. Generated Supabase types for RPC type safety.
+32. ~~Gate `/dev/animations` behind `import.meta.env.DEV`.~~ Done in v1.2.0.

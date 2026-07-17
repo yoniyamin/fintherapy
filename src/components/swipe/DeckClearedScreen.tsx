@@ -2,7 +2,6 @@ import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import Confetti from '../common/Confetti'
 import DeckClearedAnimation from './DeckClearedAnimation'
-import { XP_VALUES } from '../../lib/constants'
 import { ui } from '../../lib/uiClasses'
 
 export type DeckClearedViewport = 'in-app' | 'standalone'
@@ -14,6 +13,7 @@ interface Props {
   deckMode?: 'pending' | 'no-idea'
   flaggedCount?: number
   refundsOffset?: number
+  sessionXpEarned?: number
   showConfetti?: boolean
   transferCount?: number
   viewport?: DeckClearedViewport
@@ -36,11 +36,12 @@ export default function DeckClearedScreen({
   deckMode = 'pending',
   flaggedCount = 0,
   refundsOffset = 0,
+  sessionXpEarned = 0,
   showConfetti = true,
   transferCount = 0,
   viewport = 'in-app',
 }: Props) {
-  const totalXp = classifiedTxCount * XP_VALUES.CLASSIFY_MANUAL
+  const totalXp = sessionXpEarned
 
   return (
     <>
