@@ -27,6 +27,7 @@ export interface SessionAction {
   txSnapshots: Transaction[]
   totalAmount: number
   count: number
+  xpEarned: number
   timestamp: number
 }
 
@@ -263,7 +264,10 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
       const target = state.sessionHistory.find((h) => h.id === actionId)
       if (!target) return state
       const nextHistory = state.sessionHistory.filter((h) => h.id !== actionId)
-      const patch: Partial<ClassificationState> = { sessionHistory: nextHistory }
+      const patch: Partial<ClassificationState> = {
+        sessionHistory: nextHistory,
+        sessionXpEarned: Math.max(0, state.sessionXpEarned - target.xpEarned),
+      }
       switch (target.kind) {
         case 'classified':
         case 'auto-confirmed':

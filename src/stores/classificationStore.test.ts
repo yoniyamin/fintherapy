@@ -187,7 +187,7 @@ describe('classificationStore', () => {
   })
 
   describe('recordAction / rollbackAction', () => {
-    it('records and rolls back a classified action', () => {
+    it('records and rolls back a classified action including XP', () => {
       // Arrange
       useClassificationStore.getState().load([makeTx()])
       useClassificationStore.getState().advance(2)
@@ -202,6 +202,7 @@ describe('classificationStore', () => {
         txSnapshots: [],
         totalAmount: 5.5,
         count: 2,
+        xpEarned: 20,
       })
       useClassificationStore.getState().rollbackAction(action.id)
 
@@ -210,6 +211,28 @@ describe('classificationStore', () => {
       expect(state.sessionHistory.length).toBe(0)
       expect(state.completedCount).toBe(0)
       expect(state.classifiedTxCount).toBe(0)
+      expect(state.sessionXpEarned).toBe(0)
+    })
+
+    it('rollback deducts xpEarned from sessionXpEarned', () => {
+      // Arrange
+      useClassificationStore.getState().addSessionXp(50)
+      const action = useClassificationStore.getState().recordAction({
+        kind: 'auto-confirmed',
+        category: 'transport',
+        merchantRaw: 'Uber',
+        merchantClean: 'Uber',
+        txSnapshots: [],
+        totalAmount: 12,
+        count: 3,
+        xpEarned: 15,
+      })
+
+      // Act
+      useClassificationStore.getState().rollbackAction(action.id)
+
+      // Assert
+      expect(useClassificationStore.getState().sessionXpEarned).toBe(35)
     })
   })
 

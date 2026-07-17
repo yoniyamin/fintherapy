@@ -340,15 +340,18 @@ export default function SwipeDeck() {
   const {
     transactions: fetched, autoClassified, loading,
     removeTransactions, addPendingTransactions, refetchFresh,
-    classifyTransaction, flagTransaction, markTransfer,
-    reclassifyTransaction, revertToPending,
+    classifyTransactionsBatch,
+    flagTransactionsBatch,
+    markTransferBatch,
+    reclassifyTransactionsBatch,
+    revertToPendingBatch,
     detectRefunds, awardXp, getLeaderboard, getMonthStats, getAccountAliases, upsertAccountAlias,
     setTransactionsUserNote,
     getDistinctAccountLast4ForHousehold,
     getClassifiedCountsForAccount,
     getTransactionsClassifiedInDateRange,
   } = useTransactions(profile?.household_id, deckMode)
-  const { learnMerchant, confirmAutoClassified } = useMerchantKnowledge(profile?.household_id)
+  const { learnMerchant, confirmAutoClassifiedBatch, rejectAutoClassified } = useMerchantKnowledge(profile?.household_id)
   const { onlineUsers } = usePresence(profile?.household_id, user?.id, profile?.display_name)
   const catConfig = useCategoryConfig(profile?.household_id)
   const resolvedCategories = catConfig.categories
@@ -1030,11 +1033,32 @@ export default function SwipeDeck() {
     deckMode,
   ])
 
+  useEffect(() => {
+    if (!profile?.household_id) return
+    const POLL_MS = 30_000
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refetchFresh({ silent: true })
+      }
+    }, POLL_MS)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refetchFresh({ silent: true })
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [profile?.household_id, refetchFresh])
+
   const recordSessionAction = useCallback(
     (
       group: { merchantRaw: string; merchantClean: string | null; transactions: Transaction[]; totalAmount: number; count: number },
       kind: SessionActionKind,
       category: string | null,
+      xpEarned = 0,
     ): SessionAction => {
       return store.recordAction({
         kind,
@@ -1044,25 +1068,25 @@ export default function SwipeDeck() {
         txSnapshots: group.transactions.map((t) => ({ ...t })),
         totalAmount: group.totalAmount,
         count: group.count,
+        xpEarned,
       })
     },
     [store],
   )
 
   /** Runs an async RPC per tx; on first failure re-injects the group and surfaces an error. */
-  const runGroupRpc = useCallback(
+  const runBatchRpc = useCallback(
     async (
       group: MerchantGroup,
-      rpc: (txId: string) => Promise<{ error: unknown }>,
+      batchRpc: (txIds: string[]) => Promise<{ error: unknown }>,
     ): Promise<boolean> => {
-      for (const tx of group.transactions) {
-        const { error } = await rpc(tx.id)
-        if (error) {
-          addPendingTransactions(group.transactions.map((t) => ({ ...t })))
-          setActionError('Could not save — try again. Your stack was put back.')
-          setTimeout(() => setActionError(null), 5000)
-          return false
-        }
+      const ids = group.transactions.map((t) => t.id)
+      const { error } = await batchRpc(ids)
+      if (error) {
+        addPendingTransactions(group.transactions.map((t) => ({ ...t })))
+        setActionError('Could not save — try again. Your stack was put back.')
+        setTimeout(() => setActionError(null), 5000)
+        return false
       }
       return true
     },
@@ -1077,10 +1101,7 @@ export default function SwipeDeck() {
     }
     if (deckMode === 'pending' && group.predictedCategory) {
       const predicted = group.predictedCategory
-      const ok = await runGroupRpc(group, async (txId) => {
-        await confirmAutoClassified(txId)
-        return { error: null }
-      })
+      const ok = await runBatchRpc(group, (ids) => confirmAutoClassifiedBatch(ids))
       if (!ok) return
       learnMerchant(group.merchantRaw, predicted)
       removeTransactions(group.transactions.map((t) => t.id))
@@ -1089,7 +1110,7 @@ export default function SwipeDeck() {
       const xpEarned = txCount * XP_VALUES.CLASSIFY_EASY
       store.advance(txCount)
       store.addSessionXp(xpEarned)
-      const action = recordSessionAction(group, 'auto-confirmed', predicted)
+      const action = recordSessionAction(group, 'auto-confirmed', predicted, xpEarned)
       showUndoToast(action)
       await awardXp(xpEarned)
       celebrateClassifySuccess(xpEarned)
@@ -1121,7 +1142,23 @@ export default function SwipeDeck() {
     }
     const group = store.activeGroup
     if (!group) return
-    const ok = await runGroupRpc(group, (txId: string) => flagTransaction(txId))
+
+    if (group.predictedCategory) {
+      const ok = await runBatchRpc(group, async (ids) => {
+        const results = await Promise.all(ids.map((id) => rejectAutoClassified(id)))
+        const firstError = results.find((r) => r?.error)
+        return { error: firstError?.error ?? null }
+      })
+      if (!ok) return
+      removeTransactions(group.transactions.map((t) => t.id))
+      store.flag()
+      const action = recordSessionAction(group, 'flagged', null)
+      showUndoToast(action)
+      invalidateFlaggedCount()
+      return
+    }
+
+    const ok = await runBatchRpc(group, (ids) => flagTransactionsBatch(ids))
     if (!ok) return
     removeTransactions(group.transactions.map((t) => t.id))
     store.flag()
@@ -1133,7 +1170,7 @@ export default function SwipeDeck() {
   const handleTransfer = async () => {
     const group = store.activeGroup
     if (!group || !user) return
-    const ok = await runGroupRpc(group, (txId: string) => markTransfer(txId))
+    const ok = await runBatchRpc(group, (ids) => markTransferBatch(ids))
     if (!ok) return
     removeTransactions(group.transactions.map((t) => t.id))
     store.markTransfer()
@@ -1143,15 +1180,13 @@ export default function SwipeDeck() {
   }
 
   const handleCategorySelect = async (categoryId: string) => {
-    // Re-classify mode: the picker was opened from the Recent panel for a previously-actioned group.
     if (recentReclassifyTarget) {
       const { action: target, origin } = recentReclassifyTarget
       setRecentReclassifyTarget(null)
       store.closeCategoryPicker()
       if (!user) return
-      for (const tx of target.txSnapshots) {
-        await reclassifyTransaction(tx.id, categoryId)
-      }
+      const ids = target.txSnapshots.map((t) => t.id)
+      await reclassifyTransactionsBatch(ids, categoryId)
       learnMerchant(target.merchantRaw, categoryId)
       if (origin === 'session') {
         store.updateActionInHistory(target.id, 'classified', categoryId)
@@ -1167,7 +1202,7 @@ export default function SwipeDeck() {
 
     store.closeCategoryPicker()
 
-    const ok = await runGroupRpc(group, (txId: string) => classifyTransaction(txId, categoryId))
+    const ok = await runBatchRpc(group, (ids) => classifyTransactionsBatch(ids, categoryId))
     if (!ok) return
     learnMerchant(group.merchantRaw, categoryId)
     removeTransactions(group.transactions.map((t) => t.id))
@@ -1176,7 +1211,7 @@ export default function SwipeDeck() {
     const xpEarned = txCount * XP_VALUES.CLASSIFY_MANUAL
     store.advance(txCount)
     store.addSessionXp(xpEarned)
-    const action = recordSessionAction(group, 'classified', categoryId)
+    const action = recordSessionAction(group, 'classified', categoryId, xpEarned)
     showUndoToast(action)
     await awardXp(xpEarned)
     celebrateClassifySuccess(xpEarned)
@@ -1198,9 +1233,8 @@ export default function SwipeDeck() {
    *  back into the deck so the user can re-handle it. Removes from session history. */
   const handleRevertAction = useCallback(
     async (action: SessionAction, origin: 'session' | 'history') => {
-      for (const tx of action.txSnapshots) {
-        await revertToPending(tx.id)
-      }
+      const ids = action.txSnapshots.map((t) => t.id)
+      await revertToPendingBatch(ids)
       const reverted: Transaction[] = action.txSnapshots.map((t) => ({
         ...t,
         status: 'pending',
@@ -1209,6 +1243,9 @@ export default function SwipeDeck() {
         classified_at: null,
       }))
       addPendingTransactions(reverted)
+      if (action.xpEarned > 0) {
+        await awardXp(-action.xpEarned)
+      }
       if (origin === 'session') {
         store.rollbackAction(action.id)
         setUndoToast((cur) => (cur?.id === action.id ? null : cur))
@@ -1218,15 +1255,14 @@ export default function SwipeDeck() {
       }
       invalidateFlaggedCount()
     },
-    [revertToPending, addPendingTransactions, store, loadHistoryRecentActions],
+    [revertToPendingBatch, addPendingTransactions, awardXp, store, loadHistoryRecentActions],
   )
 
   /** Convert any prior action into a "marked as transfer". Used from the Recent panel. */
   const handleConvertActionToTransfer = useCallback(
     async (action: SessionAction, origin: 'session' | 'history') => {
-      for (const tx of action.txSnapshots) {
-        await markTransfer(tx.id)
-      }
+      const ids = action.txSnapshots.map((t) => t.id)
+      await markTransferBatch(ids)
       if (origin === 'session') {
         store.updateActionInHistory(action.id, 'transfer', OWN_TRANSFERS_CATEGORY_ID)
       } else {
@@ -1234,15 +1270,14 @@ export default function SwipeDeck() {
       }
       invalidateFlaggedCount()
     },
-    [markTransfer, store, loadHistoryRecentActions],
+    [markTransferBatch, store, loadHistoryRecentActions],
   )
 
   /** Move a prior action into the No idea queue. */
   const handleConvertActionToFlagged = useCallback(
     async (action: SessionAction, origin: 'session' | 'history') => {
-      for (const tx of action.txSnapshots) {
-        await flagTransaction(tx.id)
-      }
+      const ids = action.txSnapshots.map((t) => t.id)
+      await flagTransactionsBatch(ids)
       if (origin === 'session') {
         store.updateActionInHistory(action.id, 'flagged', null)
       } else {
@@ -1250,7 +1285,7 @@ export default function SwipeDeck() {
       }
       invalidateFlaggedCount()
     },
-    [flagTransaction, store, loadHistoryRecentActions],
+    [flagTransactionsBatch, store, loadHistoryRecentActions],
   )
 
   const openNoteModal = useCallback(() => {

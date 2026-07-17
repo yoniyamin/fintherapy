@@ -165,6 +165,16 @@ export function useTransactions(
     return { error }
   }
 
+  const classifyTransactionsBatch = async (txIds: string[], category: string) => {
+    if (!householdId) return { error: new Error('No household') }
+    const { error } = await supabase.rpc('classify_transactions_batch', {
+      p_household_id: householdId,
+      p_tx_ids: txIds,
+      p_category: category,
+    })
+    return { error }
+  }
+
   const flagTransaction = async (txId: string) => {
     if (!householdId) return { error: new Error('No household') }
 
@@ -173,6 +183,15 @@ export function useTransactions(
       p_tx_id: txId,
     })
 
+    return { error }
+  }
+
+  const flagTransactionsBatch = async (txIds: string[]) => {
+    if (!householdId) return { error: new Error('No household') }
+    const { error } = await supabase.rpc('flag_transactions_batch', {
+      p_household_id: householdId,
+      p_tx_ids: txIds,
+    })
     return { error }
   }
 
@@ -198,6 +217,15 @@ export function useTransactions(
       p_classified_by: '00000000-0000-0000-0000-000000000000',
     })
 
+    return { error }
+  }
+
+  const markTransferBatch = async (txIds: string[]) => {
+    if (!householdId) return { error: new Error('No household') }
+    const { error } = await supabase.rpc('mark_as_transfer_batch', {
+      p_household_id: householdId,
+      p_tx_ids: txIds,
+    })
     return { error }
   }
 
@@ -284,11 +312,30 @@ export function useTransactions(
     return { error }
   }
 
+  const reclassifyTransactionsBatch = async (txIds: string[], newCategory: string) => {
+    if (!householdId) return { error: new Error('No household') }
+    const { error } = await supabase.rpc('reclassify_transactions_batch', {
+      p_household_id: householdId,
+      p_tx_ids: txIds,
+      p_new_category: newCategory,
+    })
+    return { error }
+  }
+
   const revertToPending = async (txId: string) => {
     if (!householdId) return { error: new Error('No household') }
     const { error } = await supabase.rpc('revert_to_pending', {
       p_household_id: householdId,
       p_tx_id: txId,
+    })
+    return { error }
+  }
+
+  const revertToPendingBatch = async (txIds: string[]) => {
+    if (!householdId) return { error: new Error('No household') }
+    const { error } = await supabase.rpc('revert_to_pending_batch', {
+      p_household_id: householdId,
+      p_tx_ids: txIds,
     })
     return { error }
   }
@@ -520,9 +567,12 @@ export function useTransactions(
     removeTransactions,
     addPendingTransactions,
     classifyTransaction,
+    classifyTransactionsBatch,
     flagTransaction,
+    flagTransactionsBatch,
     setTransactionsUserNote,
     markTransfer,
+    markTransferBatch,
     detectRefunds,
     awardXp,
     getMonthStats,
@@ -530,7 +580,9 @@ export function useTransactions(
     getDailyActivity,
     getTransactionsByCategory,
     reclassifyTransaction,
+    reclassifyTransactionsBatch,
     revertToPending,
+    revertToPendingBatch,
     getTransactionsClassifiedInDateRange,
     syncBillingMonthFromTxDate,
     getExportData,

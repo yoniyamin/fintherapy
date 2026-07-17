@@ -955,11 +955,13 @@ The workspace rules target files under 300 lines. Several core files significant
 10. ~~Duplicate font link — removed Google Fonts `<link>` from `index.html` (CSS `@import` is the single source).~~ Done.
 11. ~~Vitest test foundation — config, setup, 5 pure-logic test files (59 tests): `csvColumnMap`, `xpLevels`, `recurringDetector`, `classificationStore`, `buildDailyTotals`.~~ Done.
 
-**Tier 3 — Data integrity & concurrent use:**
+**Tier 3 — Data integrity & concurrent use:** ✅ Completed in v1.4.0
 
-12. Concurrent classify sync — subscribe to `postgres_changes` on household transactions or poll on visibility/presence and call `refetchFresh`.
-13. Batch classify RPC — replace per-tx loop in `runGroupRpc` with single multi-row RPC (also fixes partial-failure split state).
-14. Fix auto-confirm error swallowing — propagate `confirmAutoClassified` errors.
+12. ~~Concurrent classify sync — 30-second polling + visibility-change refetch keeps the deck in sync across household members.~~ Done.
+13. ~~Batch classify RPCs — `classify_transactions_batch`, `confirm_auto_classified_batch`, `flag_transactions_batch`, `mark_as_transfer_batch`, `revert_to_pending_batch`, `reclassify_transactions_batch`. Eliminates per-tx loops and partial-failure split state.~~ Done.
+14. ~~Fix auto-confirm error swallowing — `confirmAutoClassified` now returns `{ error }` and is checked by `runBatchRpc`.~~ Done.
+14b. ~~Wire `rejectAutoClassified` — swipe-left on predicted cards now rejects the auto-classification instead of flagging.~~ Done.
+14c. ~~XP undo on revert — `SessionAction` tracks `xpEarned`; rollback deducts from `sessionXpEarned` and calls negative `awardXp` (server-side `GREATEST(0, total_xp + p_xp)` floor guard).~~ Done.
 
 **Tier 4 — Missing basics (highest UX impact):**
 

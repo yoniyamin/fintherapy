@@ -21,21 +21,32 @@ export function useMerchantKnowledge(householdId: string | null | undefined) {
   }, [householdId])
 
   const confirmAutoClassified = useCallback(async (txId: string) => {
-    if (!householdId) return
-    await supabase.rpc('confirm_auto_classified', {
+    if (!householdId) return { error: new Error('No household') }
+    const { error } = await supabase.rpc('confirm_auto_classified', {
       p_household_id: householdId,
       p_tx_id: txId,
       p_classified_by: '00000000-0000-0000-0000-000000000000',
     })
+    return { error }
+  }, [householdId])
+
+  const confirmAutoClassifiedBatch = useCallback(async (txIds: string[]) => {
+    if (!householdId) return { error: new Error('No household') }
+    const { error } = await supabase.rpc('confirm_auto_classified_batch', {
+      p_household_id: householdId,
+      p_tx_ids: txIds,
+    })
+    return { error }
   }, [householdId])
 
   const rejectAutoClassified = useCallback(async (txId: string) => {
-    if (!householdId) return
-    await supabase.rpc('reject_auto_classified', {
+    if (!householdId) return { error: new Error('No household') }
+    const { error } = await supabase.rpc('reject_auto_classified', {
       p_household_id: householdId,
       p_tx_id: txId,
     })
+    return { error }
   }, [householdId])
 
-  return { learnMerchant, autoClassify, confirmAutoClassified, rejectAutoClassified }
+  return { learnMerchant, autoClassify, confirmAutoClassified, confirmAutoClassifiedBatch, rejectAutoClassified }
 }
