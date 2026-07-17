@@ -28,7 +28,7 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
-          pg_dump --version
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - run: npm ci
 
@@ -36,6 +36,7 @@ jobs:
         run: npm run backup:db
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PATH: /usr/lib/postgresql/17/bin:${{ env.PATH }}
 
       - name: Upload backup artifact
         uses: actions/upload-artifact@v4

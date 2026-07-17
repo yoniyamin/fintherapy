@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process'
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 
 /** Returns true when a command exits successfully. */
 function commandWorks(command, args = ['--version'], options = {}) {
@@ -18,9 +20,27 @@ function whereExecutables(name) {
     .filter(Boolean)
 }
 
-/** Finds the first working executable from PATH or where.exe. */
+/** Versioned pg client paths on Linux (e.g. /usr/lib/postgresql/17/bin/pg_dump). */
+function linuxPostgresToolCandidates(name) {
+  if (process.platform === 'win32') return []
+
+  const installRoot = '/usr/lib/postgresql'
+  if (!existsSync(installRoot)) return []
+
+  const versions = readdirSync(installRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^\d+$/.test(entry.name))
+    .map((entry) => Number(entry.name))
+    .sort((a, b) => b - a)
+
+  return versions.map((version) => join(installRoot, String(version), 'bin', name))
+}
+
+/** Finds the first working executable from versioned installs, PATH, or where.exe. */
 function resolvePostgresTool(names) {
   for (const name of names) {
+    for (const candidate of linuxPostgresToolCandidates(name)) {
+      if (commandWorks(candidate)) return candidate
+    }
     for (const candidate of whereExecutables(name)) {
       if (commandWorks(candidate)) return candidate
     }
