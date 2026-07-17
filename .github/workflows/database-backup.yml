@@ -6,12 +6,11 @@ on:
     branches: [main, master]
     paths:
       - 'supabase/migration*.sql'
-      - 'supabase/migration_*.sql'
 
 jobs:
   backup:
     runs-on: ubuntu-latest
-    environment: SupabaseBackup  # Add this line
+    environment: SupabaseBackup
     steps:
       - uses: actions/checkout@v4
 
@@ -33,7 +32,7 @@ jobs:
       - name: Upload backup artifact
         uses: actions/upload-artifact@v4
         with:
-          name: db-backup-${{ github.sha }}
+          name: db-backup-${{ github.run_id }}
           path: backups/
           retention-days: 90
           if-no-files-found: error
