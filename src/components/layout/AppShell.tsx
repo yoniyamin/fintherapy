@@ -5,6 +5,7 @@ import InstallPrompt from './InstallPrompt'
 
 const navItems = [
   { to: '/', label: 'Home', icon: HomeIcon, activeIcon: HomeIconFilled },
+  { to: '/upload', label: 'Upload', icon: UploadIcon, activeIcon: UploadIconFilled },
   { to: '/classify', label: 'Classify', icon: SwipeIcon, activeIcon: SwipeIconFilled },
   { to: '/reveal', label: 'Reveal', icon: RevealIcon, activeIcon: RevealIconFilled },
   { to: '/analysis', label: 'Analysis', icon: AnalysisIcon, activeIcon: AnalysisIconFilled },
@@ -121,6 +122,26 @@ export default function AppShell() {
       </main>
       <TabBar />
     </div>
+  )
+}
+
+function UploadIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  )
+}
+
+function UploadIconFilled() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" fill="none" />
+      <polyline points="17 8 12 3 7 8" fill="none" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
   )
 }
 

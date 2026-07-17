@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useCategoryBudgets, type UpsertBudgetParams } from '../../hooks/useCategoryBudgets'
@@ -339,6 +340,17 @@ export default function AnalysisPage() {
               Select months with uploaded and classified transactions to see your analysis.
             </p>
           </div>
+          <Link
+            to="/upload"
+            className="mt-2 inline-flex items-center gap-2 rounded-xl bg-duo-green/15 px-4 py-2.5 text-sm font-semibold text-duo-green transition-colors hover:bg-duo-green/25"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            Upload a statement
+          </Link>
         </motion.div>
       ) : data && (
         <AnalysisContent

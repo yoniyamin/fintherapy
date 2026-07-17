@@ -284,7 +284,7 @@ The `merchant_knowledge` table (per-household schema) stores learned mappings:
 | Manual classify (pick category) | 10 |
 | Confirm auto-classification | 5 |
 
-Constants `FIRST_STRIKE_PER_AUTO` (×2) and `STREAK_MULTIPLIER` (×1.5) are defined but **not yet applied**.
+`XP_VALUES` contains `CLASSIFY_MANUAL` (10) and `CLASSIFY_EASY` (5). Unused streak/auto constants were removed in v1.6.0.
 
 ### Levels
 
@@ -499,7 +499,7 @@ Shows which members have submitted predictions for the selected month.
 
 - **5-tab bottom bar:** Home, Classify, Reveal, Analysis, Bets.
 - Active tab: `duo-green` text + green glow blur. Inactive: `surface-500`.
-- Upload is **not in the tab bar** — linked from Home page.
+- Upload is in the **tab bar** as the second tab (added v1.6.0), and also linked from the Home page CTA.
 - `OrganicBackdrop`: animated jewel-tone blobs, gradient, SVG wave texture behind all screens.
 
 ### Animation Systems
@@ -890,10 +890,10 @@ These are standard patterns that most users would expect but are currently absen
 
 | Gap | Detail |
 |-----|--------|
-| **Upload not in tab bar** | Linked from Home CTA and classify empty state, but not in persistent navigation. Easy to miss after onboarding. |
-| **Home has no loading state** | Activity section, leaderboard, and invite code fetch in parallel with no spinner or skeleton. |
-| **Analysis empty state has no upload link** | Shows guidance text but no CTA to `/upload`. |
-| **No skeleton loaders anywhere** | All loading uses spinners; no content-shaped placeholders. |
+| ~~**Upload not in tab bar**~~ | ✅ *Fixed v1.6.0* — Upload is now a 6th tab in the persistent tab bar. |
+| ~~**Home has no loading state**~~ | ✅ *Fixed v1.6.0* — Skeleton placeholder shown while household data loads. |
+| ~~**Analysis empty state has no upload link**~~ | ✅ *Fixed v1.6.0* — "Upload a statement" CTA added to the empty state. |
+| **No skeleton loaders anywhere** | Partially addressed in v1.6.0 (Home page). Other pages still use spinners. |
 
 **Visual & Interaction Feedback:**
 
@@ -925,13 +925,13 @@ These are standard patterns that most users would expect but are currently absen
 
 | Item | Location |
 |------|----------|
-| `reject_auto_classified` | `useMerchantKnowledge.ts` — RPC exists, hook exports it, UI never calls it |
-| `useStandalonePwa` | `src/hooks/useStandalonePwa.ts` — exported, never imported; standalone detection duplicated inline in 2 other files |
-| `inferTransferKind` | `src/lib/transferKind.ts` — defined, never imported |
+| ~~`reject_auto_classified`~~ | ✅ *Fixed v1.4.0* — now wired to left-swipe on auto-classified cards. |
+| ~~`useStandalonePwa`~~| ✅ *Removed v1.6.0* — file deleted; standalone detection remains inline in `InstallPrompt.tsx`. |
+| ~~`inferTransferKind`~~ | ✅ *Removed v1.6.0* — `src/lib/transferKind.ts` deleted. |
 | `set_transfer_kind` RPC | Migration grants it, no client call |
-| `XP_VALUES.FIRST_STRIKE_PER_AUTO`, `STREAK_MULTIPLIER` | `constants.ts` — defined, never applied |
-| `Guess` interface | `database.ts` — unused type |
-| Deprecated `CATEGORIES` fallbacks | `SwipeCard`, `CategoryPicker`, `CategoryDetail` still fall back to static `CATEGORIES` instead of always using `useCategoryConfig` |
+| ~~`XP_VALUES.FIRST_STRIKE_PER_AUTO`, `STREAK_MULTIPLIER`~~ | ✅ *Removed v1.6.0* — pruned from `constants.ts`. |
+| ~~`Guess` interface~~ | ✅ *Removed v1.6.0* — pruned from `database.ts`. |
+| ~~Deprecated `CATEGORIES` fallbacks~~ | ✅ *Removed v1.6.0* — `CATEGORIES` alias deleted; `categories` is now a required prop in `SwipeCard` and `CategoryDetail`. |
 
 ### Silent Error Handling
 
@@ -1048,8 +1048,8 @@ The workspace rules target files under 300 lines. Several core files significant
 
 20. Transaction delete capability — at minimum "delete upload batch".
 21. First-run classify tutorial — dismiss-once coach overlay with gesture demo.
-22. Upload accessible from tab bar or persistent FAB.
-23. Home loading states (skeleton or spinner for activity/leaderboard).
+22. ~~Upload accessible from tab bar or persistent FAB.~~ ✅ v1.6.0
+23. ~~Home loading states (skeleton or spinner for activity/leaderboard).~~ ✅ v1.6.0
 
 **Tier 5 — Polish & infrastructure:**
 

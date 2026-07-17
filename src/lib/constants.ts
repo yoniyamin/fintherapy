@@ -18,9 +18,6 @@ export const DEFAULT_CATEGORIES = [
   { id: 'own_transfers', label: 'Own transfers', icon: '🔁', color: 'bg-slate-600/25 border-slate-500/35', expenseType: 'fixed' as ExpenseType },
 ] as const
 
-/** @deprecated Use `useCategoryConfig()` for runtime categories. This alias exists for call-sites that need a quick static fallback. */
-export const CATEGORIES = DEFAULT_CATEGORIES
-
 export type CategoryId = (typeof DEFAULT_CATEGORIES)[number]['id']
 
 export interface CategoryDef {
@@ -54,8 +51,6 @@ export const COLOR_PALETTE: { label: string; value: string }[] = [
 export const XP_VALUES = {
   CLASSIFY_MANUAL: 10,
   CLASSIFY_EASY: 5,
-  STREAK_MULTIPLIER: 1.5,
-  FIRST_STRIKE_PER_AUTO: 2,
 } as const
 
 export const SWIPE_THRESHOLD = 100

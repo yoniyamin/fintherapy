@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, useAnimation, useMotionValue, useTransform } from 'framer-motion'
 import type { MerchantGroup } from '../../stores/classificationStore'
-import { CATEGORIES, type CategoryDef } from '../../lib/constants'
+import type { CategoryDef } from '../../lib/constants'
 import { formatAccountLabel } from '../../lib/accountDisplay'
 import MerchantSearchPanel from './MerchantSearchPanel'
 import type { AccountType } from '../../types/database'
@@ -26,8 +26,7 @@ interface SwipeCardProps {
   /** Shown when any transaction has a note (top card). */
   notePreview?: string | null
   onOpenNote?: () => void
-  /** Resolved categories from useCategoryConfig; falls back to hard-coded defaults. */
-  categories?: readonly CategoryDef[]
+  categories: readonly CategoryDef[]
   /** Increments when the picker is dismissed without a selection. The top card
    *  springs back to center so a swipe-right that opened the picker can be undone. */
   pickerCancelTick?: number
@@ -63,7 +62,7 @@ export default function SwipeCard({
   sessionStackTotal,
 }: SwipeCardProps) {
   const [searchOpen, setSearchOpen] = useState(false)
-  const cats = categories ?? CATEGORIES
+  const cats = categories
   const catLookup = useMemo(
     () => Object.fromEntries(cats.map((c) => [c.id, c])) as Record<string, CategoryDef | undefined>,
     [cats],

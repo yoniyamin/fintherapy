@@ -107,11 +107,4 @@ export interface MerchantKnowledge {
   created_at: string
 }
 
-export interface Guess {
-  id: string
-  user_id: string
-  month: string
-  category: string
-  predicted_amount: number
-  created_at: string
-}
+
