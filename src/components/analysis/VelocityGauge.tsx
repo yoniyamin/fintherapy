@@ -1,12 +1,10 @@
 import { motion } from 'framer-motion'
 import type { VelocityInsight } from '../../lib/advisorInsights'
+import { formatCurrency } from '../../lib/formatCurrency'
 
 interface Props {
   velocity: VelocityInsight | null
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 export default function VelocityGauge({ velocity }: Props) {
   if (!velocity) return null
@@ -43,24 +41,24 @@ export default function VelocityGauge({ velocity }: Props) {
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
         <div>
           <p className="text-[10px] text-slate-500 uppercase">Spent so far</p>
-          <p className="text-sm font-bold text-slate-200">{fmt(spentSoFar)}</p>
+          <p className="text-sm font-bold text-slate-200">{formatCurrency(spentSoFar, false)}</p>
         </div>
         <div>
           <p className="text-[10px] text-slate-500 uppercase">Projected</p>
           <p className={`text-sm font-bold ${onTrack ? 'text-green-400' : 'text-red-400'}`}>
-            {fmt(paceProjection)}
+            {formatCurrency(paceProjection, false)}
           </p>
         </div>
         <div>
           <p className="text-[10px] text-slate-500 uppercase">Left/day</p>
           <p className={`text-sm font-bold ${remainingPerDay > 0 ? 'text-slate-200' : 'text-red-400'}`}>
-            {fmt(Math.max(remainingPerDay, 0))}
+            {formatCurrency(Math.max(remainingPerDay, 0), false)}
           </p>
         </div>
       </div>
 
       <p className="mt-2 text-[10px] text-slate-500 text-center">
-        Day {dayOfMonth} of {daysInMonth} · Budget: {fmt(budget)}
+        Day {dayOfMonth} of {daysInMonth} · Budget: {formatCurrency(budget, false)}
       </p>
     </motion.div>
   )

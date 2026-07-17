@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import type { DailyTotal } from '../../hooks/useMultiMonthReveal'
 import { detectDayOfWeekPattern } from '../../lib/advisorInsights'
+import { formatCurrency } from '../../lib/formatCurrency'
 import { ui } from '../../lib/uiClasses'
 
 function computeTooltipPos(el: HTMLElement, tipW = 180, tipH = 48) {
@@ -23,7 +24,7 @@ function CalendarTooltip({ tooltip }: { tooltip: { date: string; amount: number;
     >
       <p className="font-medium text-surface-200">{tooltip.date}</p>
       <p className="mt-0.5 text-surface-400">
-        {fmt(tooltip.amount)} &middot; {tooltip.count} transaction{tooltip.count !== 1 ? 's' : ''}
+        {formatCurrency(tooltip.amount, false)} &middot; {tooltip.count} transaction{tooltip.count !== 1 ? 's' : ''}
       </p>
     </div>
   )
@@ -35,9 +36,6 @@ interface Props {
 }
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 function getWeeksForMonth(year: number, month: number): Date[][] {
   const weeks: Date[][] = []
@@ -158,7 +156,7 @@ export default function CalendarHeatmap({ dailyTotals, months }: Props) {
                             setTooltip({ date: dateStr, amount, count, left, top })
                           }}
                           onMouseLeave={() => setTooltip(null)}
-                            title={`${dateStr}: ${fmt(amount)} (${count} txns)`}
+                            title={`${dateStr}: ${formatCurrency(amount, false)} (${count} txns)`}
                           />
                         )
                       })}

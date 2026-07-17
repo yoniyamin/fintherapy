@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { COLOR_PALETTE, OWN_TRANSFERS_CATEGORY_ID, type CategoryDef } from '../../lib/constants'
+import { formatCurrency } from '../../lib/formatCurrency'
 import type { useCategoryConfig } from '../../hooks/useCategoryConfig'
 
 type CatConfig = ReturnType<typeof useCategoryConfig>
@@ -34,9 +35,6 @@ interface SampleTx {
   amount: number
   tx_date: string
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(v)
 
 export default function CategoryEditorModal({ open, onClose, config }: Props) {
   const { categories, upsertCategory, renameCategory, deleteCategory, countTransactions, sampleTransactions } = config
@@ -367,7 +365,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                                   {new Date(tx.tx_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                 </span>
                                 <span className="shrink-0 text-xs font-semibold tabular-nums text-surface-200">
-                                  {fmt(Number(tx.amount))}
+                                  {formatCurrency(Number(tx.amount))}
                                 </span>
                               </div>
                             ))}

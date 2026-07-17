@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import type { CategorySummary } from '../../hooks/useReveal'
-import { ui } from '../../lib/uiClasses'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { formatCurrency } from '../../lib/formatCurrency'
+import { ui } from '../../lib/uiClasses'
 
 interface Props {
   summary: CategorySummary[]
@@ -18,9 +19,6 @@ const PIE_COLORS = [
   '#818cf8', '#ec4899', '#06b6d4', '#eab308',
   '#ef4444', '#6366f1', '#f97316', '#10b981',
 ]
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(v)
 
 export default function SpendingChart({
   summary,
@@ -72,7 +70,7 @@ export default function SpendingChart({
                 <span className="text-base">{cat?.icon ?? '📦'}</span>
                 <span className="flex-1 text-sm font-medium text-surface-200">{cat?.label ?? item.category}</span>
                 <span className="text-xs text-surface-500">{count}</span>
-                <span className="text-sm font-semibold tabular-nums text-surface-50">{fmt(value)}</span>
+                <span className="text-sm font-semibold tabular-nums text-surface-50">{formatCurrency(value)}</span>
               </motion.button>
             )
           })}
@@ -130,14 +128,14 @@ export default function SpendingChart({
                 backdropFilter: 'blur(8px)',
               }}
               itemStyle={{ color: '#f8fafc' }}
-              formatter={(value) => fmt(Number(value ?? 0))}
+              formatter={(value) => formatCurrency(Number(value ?? 0))}
             />
           </PieChart>
         </ResponsiveContainer>
 
         <div className="pointer-events-none -mt-[150px] mb-[110px] text-center">
           <p className="text-[10px] font-medium text-surface-500">Spending total</p>
-          <p className="text-base font-bold tabular-nums text-surface-50">{fmt(pieTotal)}</p>
+          <p className="text-base font-bold tabular-nums text-surface-50">{formatCurrency(pieTotal)}</p>
           {excludeFromPieIds.length > 0 && Math.abs(pieTotal - total) > 0.005 && (
             <p className="mt-1 text-[10px] text-surface-500">Excl. own transfers</p>
           )}
@@ -174,7 +172,7 @@ export default function SpendingChart({
                 )}
               </span>
               <span className="text-xs text-surface-500">{count}</span>
-              <span className="text-sm font-semibold tabular-nums text-surface-50">{fmt(value)}</span>
+              <span className="text-sm font-semibold tabular-nums text-surface-50">{formatCurrency(value)}</span>
               <span className="w-10 text-right text-xs tabular-nums text-surface-500">{inPie ? `${pct.toFixed(0)}%` : '—'}</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0 text-surface-600">
                 <polyline points="9 18 15 12 9 6" />

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ExportRow } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { formatCurrency } from '../../lib/formatCurrency'
 
 interface Props {
   transactions: ExportRow[]
@@ -30,9 +31,6 @@ interface CategoryVendors {
   vendors: VendorAggregate[]
   paidFrom: CardPct[]
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 function buildVendorData(
   transactions: ExportRow[],
@@ -155,7 +153,7 @@ export default function TopVendorsPanel({ transactions, months, categoryLookup, 
                   <span className="truncate text-xs font-medium text-slate-200">{cat.label}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs font-medium text-slate-300">{fmt(cat.categoryTotal / Math.max(months, 1))}/mo</span>
+                  <span className="text-xs font-medium text-slate-300">{formatCurrency(cat.categoryTotal / Math.max(months, 1), false)}/mo</span>
                   <svg
                     className={`h-3.5 w-3.5 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}
                     fill="none"
@@ -191,7 +189,7 @@ export default function TopVendorsPanel({ transactions, months, categoryLookup, 
                             <span className="text-[10px] text-slate-500 shrink-0">{v.txCount}tx</span>
                           </div>
                           <span className="text-xs font-medium tabular-nums text-slate-200 shrink-0 ml-2">
-                            {fmt(v.monthlyAvg)}/mo
+                            {formatCurrency(v.monthlyAvg, false)}/mo
                           </span>
                         </div>
                       ))}

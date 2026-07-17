@@ -1,12 +1,10 @@
 import { motion } from 'framer-motion'
 import type { DeltaDriver } from '../../lib/advisorInsights'
+import { formatCurrency } from '../../lib/formatCurrency'
 
 interface Props {
   drivers: DeltaDriver[]
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 export default function DeltaDrivers({ drivers }: Props) {
   if (drivers.length === 0) return null
@@ -29,7 +27,7 @@ export default function DeltaDrivers({ drivers }: Props) {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-slate-200">{driver.label}</span>
                 <span className={`text-xs font-bold ${isUp ? 'text-red-400' : 'text-green-400'}`}>
-                  {isUp ? '+' : ''}{Math.round(driver.pct)}% ({isUp ? '+' : ''}{fmt(driver.delta)})
+                  {isUp ? '+' : ''}{Math.round(driver.pct)}% ({isUp ? '+' : ''}{formatCurrency(driver.delta, false)})
                 </span>
               </div>
               {driver.topTransactions.length > 0 && (
@@ -37,7 +35,7 @@ export default function DeltaDrivers({ drivers }: Props) {
                   {driver.topTransactions.map((tx, i) => (
                     <span key={i} className="inline-flex items-center gap-1 rounded-md bg-slate-600/40 px-2 py-0.5 text-[10px] text-slate-300">
                       {tx.merchant.substring(0, 20)}
-                      <span className="text-slate-400">{fmt(tx.amount)}</span>
+                      <span className="text-slate-400">{formatCurrency(tx.amount, false)}</span>
                     </span>
                   ))}
                 </div>

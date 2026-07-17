@@ -18,6 +18,7 @@ import type { CategorySummary } from '../../hooks/useReveal'
 import type { ExportRow } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
 import { exportSpendMagnitude, topSpendingTransactions } from '../../lib/exportSpend'
+import { formatCurrency } from '../../lib/formatCurrency'
 import {
   buildInsightInput,
   generateInsights,
@@ -36,9 +37,6 @@ interface Props {
 }
 
 const COLORS = ['#34D399', '#60A5FA', '#F59E0B', '#F472B6', '#A78BFA', '#FB923C']
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 const fmtFull = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(v)
@@ -212,7 +210,7 @@ function TitleSlide({
           transition={{ duration: 0.45, delay: 0.2, ease: REPORT_EASE }}
         >
           <div>
-            <p className="text-xl font-bold tabular-nums text-surface-50">{fmt(totalSpent)}</p>
+            <p className="text-xl font-bold tabular-nums text-surface-50">{formatCurrency(totalSpent, false)}</p>
             <p className="mt-0.5 text-[10px] text-surface-500">total spent</p>
           </div>
           <div className="h-8 w-px bg-white/[0.06]" />
@@ -248,8 +246,8 @@ function BigPictureSlide({ totalSpent, avgMonthly, monthCount, income, health }:
       </motion.div>
       <RevealStagger className="grid grid-cols-2 gap-2">
         {[
-          { label: 'Total Spent', value: fmt(totalSpent) },
-          { label: 'Avg Monthly', value: fmt(avgMonthly) },
+          { label: 'Total Spent', value: formatCurrency(totalSpent, false) },
+          { label: 'Avg Monthly', value: formatCurrency(avgMonthly, false) },
           { label: 'Months', value: String(monthCount) },
           ...(savingsRate != null ? [{ label: 'Savings Rate', value: `${Math.round(savingsRate)}%` }] : []),
         ].map((m) => (
@@ -286,7 +284,7 @@ function TrajectorySlide({ monthlyTotals, income }: { monthlyTotals: import('../
             <BarChart data={chartData} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
               <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
-              <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11 }} formatter={(value) => [fmt(Number(value ?? 0)), 'Spent']} />
+              <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11 }} formatter={(value) => [formatCurrency(Number(value ?? 0), false), 'Spent']} />
               {income != null && income > 0 && <ReferenceLine y={income} stroke="#64748b" strokeDasharray="6 4" label={{ value: 'Income', position: 'right', fill: '#64748b', fontSize: 9 }} />}
               <Bar dataKey="amount" radius={[6, 6, 0, 0]} maxBarSize={28} fill="#6366F1" />
             </BarChart>
@@ -295,7 +293,7 @@ function TrajectorySlide({ monthlyTotals, income }: { monthlyTotals: import('../
       </motion.div>
       {minMonth && maxMonth && (
         <p className="text-center text-[11px] text-surface-400">
-          Lightest: <span className="font-medium text-emerald-400">{shortMonth(minMonth.billing_month)}</span> ({fmt(min)}) · Heaviest: <span className="font-medium text-amber-400">{shortMonth(maxMonth.billing_month)}</span> ({fmt(max)})
+          Lightest: <span className="font-medium text-emerald-400">{shortMonth(minMonth.billing_month)}</span> ({formatCurrency(min, false)}) · Heaviest: <span className="font-medium text-amber-400">{shortMonth(maxMonth.billing_month)}</span> ({formatCurrency(max, false)})
         </p>
       )}
     </div>
@@ -381,7 +379,7 @@ function HowChangingSlide({ trend, months, aggregated, categoryLookup }: { trend
           <LineChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
             <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
-            <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11 }} formatter={(value) => [fmt(Number(value ?? 0)), '']} />
+            <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11 }} formatter={(value) => [formatCurrency(Number(value ?? 0), false), '']} />
             <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconType="circle" iconSize={6} />
             {labels.map((label, i) => <Line key={label} type="monotone" dataKey={label} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 2 }} />)}
           </LineChart>
@@ -413,7 +411,7 @@ function BiggestMoversSlide({ summaryByMonth, months, categoryLookup }: { summar
                 <span className="text-xl">{info?.icon ?? '📦'}</span>
                 <div className="flex-1">
                   <p className="text-xs font-medium text-surface-200">{info?.label ?? m.category}</p>
-                  <p className="text-[10px] text-surface-500">{fmt(m.prev)} → {fmt(m.current)}</p>
+                  <p className="text-[10px] text-surface-500">{formatCurrency(m.prev, false)} → {formatCurrency(m.current, false)}</p>
                 </div>
                 <span className={`text-sm font-bold ${isUp ? 'text-red-400' : 'text-emerald-400'}`}>
                   {isUp ? '↑' : '↓'} {Math.abs(Math.round(m.pct))}%
@@ -488,7 +486,7 @@ function TopMerchantsSlide({ transactions, months, categoryLookup }: { transacti
               {top.map(([merchant, amount]) => (
                 <div key={merchant} className="flex items-center justify-between py-0.5">
                   <span className="text-[11px] text-surface-400 truncate max-w-[160px]">{merchant}</span>
-                  <span className="text-[11px] tabular-nums text-surface-300">{fmt(amount / Math.max(months, 1))}/mo</span>
+                  <span className="text-[11px] tabular-nums text-surface-300">{formatCurrency(amount / Math.max(months, 1), false)}/mo</span>
                 </div>
               ))}
             </div>

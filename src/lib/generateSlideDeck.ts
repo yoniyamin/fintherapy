@@ -2,6 +2,7 @@ import PptxGenJS from 'pptxgenjs'
 import type { CategorySummary, MonthlyTotal } from '../hooks/useReveal'
 import type { ExportRow } from '../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from './constants'
+import { formatCurrency } from './formatCurrency'
 import {
   exportSpendMagnitude,
   isSpendingOutflow,
@@ -41,9 +42,6 @@ export interface SlideDeckInput {
   transactions: ExportRow[]
   categoryLookup: Record<string, { icon: string; label: string }>
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(v)
 
 function formatMonthLabel(value: string): string {
   const [year, month] = value.split('-')
@@ -122,13 +120,13 @@ function addOverviewSlide(
   const freeIncome = income != null ? income - totalSpent : null
 
   const metrics: [string, string][] = [
-    ['Total Spent', fmt(totalSpent)],
+    ['Total Spent', formatCurrency(totalSpent)],
     ['Transactions', String(txCount)],
     ['Categories', String(summary.length)],
   ]
   if (income != null) {
-    metrics.push(['Income', fmt(income)])
-    metrics.push(['Free Income', fmt(freeIncome!)])
+    metrics.push(['Income', formatCurrency(income)])
+    metrics.push(['Free Income', formatCurrency(freeIncome!)])
   }
 
   const colW = 8.5 / metrics.length
@@ -248,7 +246,7 @@ function addCategoryBreakdownSlide(
       const pct = total > 0 ? ((Number(c.total_amount) / total) * 100).toFixed(1) + '%' : '\u2014'
       return [
         { text: label, options: { color: theme.colors.text, fontSize: 9, fill: { color: theme.colors.dark } } },
-        { text: fmt(Number(c.total_amount)), options: { color: theme.colors.text, fontSize: 9, fill: { color: theme.colors.dark } } },
+        { text: formatCurrency(Number(c.total_amount)), options: { color: theme.colors.text, fontSize: 9, fill: { color: theme.colors.dark } } },
         { text: pct, options: { color: theme.colors.muted, fontSize: 9, fill: { color: theme.colors.dark } } },
         { text: String(Number(c.tx_count)), options: { color: theme.colors.muted, fontSize: 9, fill: { color: theme.colors.dark } } },
       ]
@@ -298,7 +296,7 @@ function addTopTransactionsSlide(
       const catLabel = categoryLookup[tx.category]?.label ?? tx.category
       return [
         { text: merchantName, options: { color: theme.colors.text, fontSize: 9, fill: { color: theme.colors.dark } } },
-        { text: fmt(exportSpendMagnitude(tx)), options: { color: theme.colors.primary, fontSize: 9, bold: true, fill: { color: theme.colors.dark } } },
+        { text: formatCurrency(exportSpendMagnitude(tx)), options: { color: theme.colors.primary, fontSize: 9, bold: true, fill: { color: theme.colors.dark } } },
         { text: truncate(catLabel, 18), options: { color: theme.colors.muted, fontSize: 9, fill: { color: theme.colors.dark } } },
         { text: tx.tx_date, options: { color: theme.colors.muted, fontSize: 9, fill: { color: theme.colors.dark } } },
       ]
@@ -390,7 +388,7 @@ function addHighlightsSlide(
   if (topTx) {
     highlights.push({
       label: 'Biggest Transaction',
-      value: fmt(exportSpendMagnitude(topTx)),
+      value: formatCurrency(exportSpendMagnitude(topTx)),
       sub: truncate(topTx.merchant_clean || topTx.merchant_raw, 30),
     })
   }
@@ -398,13 +396,13 @@ function addHighlightsSlide(
     const catLabel = categoryLookup[topCategory.category]?.label ?? topCategory.category
     highlights.push({
       label: 'Top Category',
-      value: fmt(Number(topCategory.total_amount)),
+      value: formatCurrency(Number(topCategory.total_amount)),
       sub: catLabel,
     })
   }
   highlights.push({
     label: 'Average per Transaction',
-    value: fmt(avgPerTx),
+    value: formatCurrency(avgPerTx),
     sub: `${spendingTxCount} transactions total`,
   })
 
@@ -482,7 +480,7 @@ function addTopCategorySlide(
     fontSize: theme.sizes.headerFontSize, fontFace: theme.fonts.title, color: theme.colors.text, bold: true,
   })
 
-  slide.addText(fmt(Number(topCat.total_amount)), {
+  slide.addText(formatCurrency(Number(topCat.total_amount)), {
     x: 0.5, y: 1.0, w: 4, h: 0.6,
     fontSize: 24, fontFace: theme.fonts.title, color: theme.colors.primary, bold: true,
   })
@@ -507,7 +505,7 @@ function addTopCategorySlide(
 
     const tableRows: PptxGenJS.TableRow[] = topInCategory.map((tx): PptxGenJS.TableRow => [
       { text: truncate(tx.merchant_clean || tx.merchant_raw, 28), options: { color: theme.colors.text, fontSize: 9, fill: { color: theme.colors.dark } } },
-      { text: fmt(exportSpendMagnitude(tx)), options: { color: theme.colors.primary, fontSize: 9, bold: true, fill: { color: theme.colors.dark } } },
+      { text: formatCurrency(exportSpendMagnitude(tx)), options: { color: theme.colors.primary, fontSize: 9, bold: true, fill: { color: theme.colors.dark } } },
       { text: tx.tx_date, options: { color: theme.colors.muted, fontSize: 9, fill: { color: theme.colors.dark } } },
     ])
 
@@ -671,7 +669,7 @@ export async function generateMultiMonthSlideDeck(input: MultiMonthSlideDeckInpu
       x: 0.8, y: 2.7, w: 8.4, h: 0.6,
       fontSize: theme.sizes.headerFontSize, fontFace: theme.fonts.body, color: theme.colors.primary, bold: true,
     })
-    const stats = `${fmt(totalSpent)} total · ${transactions.length} transactions · ${sorted.length} months`
+    const stats = `${formatCurrency(totalSpent)} total · ${transactions.length} transactions · ${sorted.length} months`
     slide.addText(stats, {
       x: 0.8, y: 3.5, w: 8.4, h: 0.4,
       fontSize: theme.sizes.bodyFontSize, fontFace: theme.fonts.body, color: theme.colors.muted,
@@ -698,8 +696,8 @@ export async function generateMultiMonthSlideDeck(input: MultiMonthSlideDeckInpu
     })
 
     const metrics: [string, string][] = [
-      ['Total Spent', fmt(totalSpent)],
-      ['Avg Monthly', fmt(avgMonthly)],
+      ['Total Spent', formatCurrency(totalSpent)],
+      ['Avg Monthly', formatCurrency(avgMonthly)],
       ['Months', String(sorted.length)],
     ]
     if (input.income != null) {
@@ -753,7 +751,7 @@ export async function generateMultiMonthSlideDeck(input: MultiMonthSlideDeckInpu
     const minI = amounts.indexOf(Math.min(...amounts))
     const maxI = amounts.indexOf(Math.max(...amounts))
     slide.addText(
-      `Best: ${shortMonthLabel(input.monthlyTotals[minI].billing_month)} (${fmt(amounts[minI])}) · Worst: ${shortMonthLabel(input.monthlyTotals[maxI].billing_month)} (${fmt(amounts[maxI])})`,
+      `Best: ${shortMonthLabel(input.monthlyTotals[minI].billing_month)} (${formatCurrency(amounts[minI])}) · Worst: ${shortMonthLabel(input.monthlyTotals[maxI].billing_month)} (${formatCurrency(amounts[maxI])})`,
       { x: 0.5, y: 4.9, w: 9, h: 0.3, fontSize: theme.sizes.smallFontSize, fontFace: theme.fonts.body, color: theme.colors.muted, align: 'center' },
     )
   }
@@ -823,7 +821,7 @@ export async function generateMultiMonthSlideDeck(input: MultiMonthSlideDeckInpu
 
       slide.addShape(pptx.ShapeType.roundRect, { x, y, w: 9, h: 0.6, fill: { color: theme.colors.dark }, rectRadius: 0.06 })
       slide.addText(`${label}`, { x: x + 0.2, y, w: 3, h: 0.6, fontSize: 11, fontFace: theme.fonts.body, color: theme.colors.text })
-      slide.addText(`${fmt(m.prev)} → ${fmt(m.current)}`, { x: x + 3.2, y, w: 3, h: 0.6, fontSize: 10, fontFace: theme.fonts.body, color: theme.colors.muted })
+      slide.addText(`${formatCurrency(m.prev)} → ${formatCurrency(m.current)}`, { x: x + 3.2, y, w: 3, h: 0.6, fontSize: 10, fontFace: theme.fonts.body, color: theme.colors.muted })
       slide.addText(`${isUp ? '↑' : '↓'} ${Math.abs(Math.round(m.pct))}%`, {
         x: x + 7, y, w: 2, h: 0.6, fontSize: 12, fontFace: theme.fonts.title,
         color: isUp ? 'EF4444' : '10B981', bold: true, align: 'right',
@@ -862,7 +860,7 @@ export async function generateMultiMonthSlideDeck(input: MultiMonthSlideDeckInpu
           const monthData = input.summaryByMonth.get(m) ?? []
           const entry = monthData.find(c => c.category === cat.category)
           const amount = entry ? Number(entry.total_amount) : 0
-          return { text: amount > 0 ? fmt(amount) : '—', options: { color: theme.colors.text, fontSize: 8, fill: { color: theme.colors.dark }, align: 'right' as const } }
+          return { text: amount > 0 ? formatCurrency(amount) : '—', options: { color: theme.colors.text, fontSize: 8, fill: { color: theme.colors.dark }, align: 'right' as const } }
         }),
       ]
     })
@@ -909,7 +907,7 @@ export async function generateMultiMonthSlideDeck(input: MultiMonthSlideDeckInpu
       slide.addText(truncate(cat.label, 20), { x: 0.7, y: yBase, w: 3, h: 0.4, fontSize: 10, fontFace: theme.fonts.body, color: theme.colors.text, bold: true })
       cat.top.forEach(([merchant, amount], mi) => {
         const x = 0.7 + mi * 3
-        slide.addText(`${truncate(merchant, 18)}: ${fmt(amount / sorted.length)}/mo`, {
+        slide.addText(`${truncate(merchant, 18)}: ${formatCurrency(amount / sorted.length)}/mo`, {
           x, y: yBase + 0.35, w: 2.9, h: 0.35,
           fontSize: 8, fontFace: theme.fonts.body, color: theme.colors.muted,
         })

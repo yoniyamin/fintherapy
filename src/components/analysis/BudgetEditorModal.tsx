@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { CategoryBudget, UpsertBudgetParams } from '../../hooks/useCategoryBudgets'
 import type { CategorySummary } from '../../hooks/useReveal'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { formatCurrency } from '../../lib/formatCurrency'
 
 interface Props {
   open: boolean
@@ -26,9 +27,6 @@ interface DraftRow {
   subject_to_inflation: boolean
   notes: string
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 function median(values: number[]): number {
   if (values.length === 0) return 0
@@ -268,7 +266,7 @@ export default function BudgetEditorModal({ open, onClose, budgets, summaryByMon
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-sm">{row.icon}</span>
                     <span className="flex-1 truncate text-xs font-medium text-surface-200">{row.label}</span>
-                    <span className="text-[10px] text-surface-500">Median: {fmt(row.medianActual)}</span>
+                    <span className="text-[10px] text-surface-500">Median: {formatCurrency(row.medianActual, false)}</span>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -310,10 +308,10 @@ export default function BudgetEditorModal({ open, onClose, budgets, summaryByMon
           {/* Footer with totals */}
           <div className="border-t border-white/[0.06] px-5 py-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-surface-400">Total target: {fmt(totalTarget)}/mo</span>
+              <span className="text-xs text-surface-400">Total target: {formatCurrency(totalTarget, false)}/mo</span>
               {surplus != null && (
                 <span className={`text-xs font-bold ${surplus >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {surplus >= 0 ? 'Surplus' : 'Deficit'}: {fmt(Math.abs(surplus))}/mo
+                  {surplus >= 0 ? 'Surplus' : 'Deficit'}: {formatCurrency(Math.abs(surplus), false)}/mo
                 </span>
               )}
             </div>

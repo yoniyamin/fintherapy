@@ -4,6 +4,7 @@ import type { ExportRow } from '../hooks/useTransactions'
 import type { RecurringCharge } from './recurringDetector'
 import { detectRecurring } from './recurringDetector'
 import { OWN_TRANSFERS_CATEGORY_ID } from './constants'
+import { formatCurrency } from './formatCurrency'
 
 export type InsightSeverity = 'positive' | 'neutral' | 'warning' | 'concern'
 
@@ -82,9 +83,6 @@ export function buildInsightInput(params: {
   }
 }
 
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
-
 function pctChange(from: number, to: number): number {
   if (Math.abs(from) < 1) return 0
   const raw = ((to - from) / Math.abs(from)) * 100
@@ -123,12 +121,12 @@ export function generateHeadline(input: InsightInput): string {
     const driverNames = topDrivers.slice(0, 2).map(d => d.label).join(' and ')
 
     if (diff > 50) {
-      return `You overspent by ${fmt(diff)}/month on average. ${driverNames ? `${driverNames} drove most of the increase.` : 'Review your top categories for adjustment opportunities.'}`
+      return `You overspent by ${formatCurrency(diff, false)}/month on average. ${driverNames ? `${driverNames} drove most of the increase.` : 'Review your top categories for adjustment opportunities.'}`
     }
     if (diff < -50) {
-      return `You saved ${fmt(Math.abs(diff))}/month on average — solid household discipline.${driverNames ? ` ${driverNames} were your biggest categories.` : ''}`
+      return `You saved ${formatCurrency(Math.abs(diff), false)}/month on average — solid household discipline.${driverNames ? ` ${driverNames} were your biggest categories.` : ''}`
     }
-    return `You're breaking even at ${fmt(avgMonthly)}/month vs ${fmt(income)} income.${driverNames ? ` Watch ${driverNames} for savings opportunities.` : ''}`
+    return `You're breaking even at ${formatCurrency(avgMonthly, false)}/month vs ${formatCurrency(income, false)} income.${driverNames ? ` Watch ${driverNames} for savings opportunities.` : ''}`
   }
 
   if (totals.length >= 2) {
@@ -140,11 +138,11 @@ export function generateHeadline(input: InsightInput): string {
 
     if (Math.abs(change) > 10) {
       const dir = change > 0 ? 'increased' : 'decreased'
-      return `Your spending ${dir} ${Math.abs(Math.round(change))}% over the last ${months.length} months, averaging ${fmt(avgMonthly)}/month.`
+      return `Your spending ${dir} ${Math.abs(Math.round(change))}% over the last ${months.length} months, averaging ${formatCurrency(avgMonthly, false)}/month.`
     }
   }
 
-  return `Your household spent ${fmt(avgMonthly)}/month on average across ${months.length} months.`
+  return `Your household spent ${formatCurrency(avgMonthly, false)}/month on average across ${months.length} months.`
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +207,7 @@ export function getHealthSummary(input: InsightInput): HealthSummary {
     if (savingsRate >= 10) {
       return {
         verdict: 'green',
-        message: `Your household is in good shape — saving ${Math.round(savingsRate)}% of income (${fmt(income - avgSpend)}/month).`,
+        message: `Your household is in good shape — saving ${Math.round(savingsRate)}% of income (${formatCurrency(income - avgSpend, false)}/month).`,
       }
     }
     if (savingsRate >= 0) {
@@ -220,7 +218,7 @@ export function getHealthSummary(input: InsightInput): HealthSummary {
     }
     return {
       verdict: 'red',
-      message: `Spending exceeds income by ${fmt(avgSpend - income)}/month. Let's find where to adjust.`,
+      message: `Spending exceeds income by ${formatCurrency(avgSpend - income, false)}/month. Let's find where to adjust.`,
     }
   }
 
@@ -271,14 +269,14 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
       insights.push({
         id: 'fixed-discretionary-split',
         emoji: '🔒',
-        text: `${fmt(fixedAvg)} is committed to fixed costs monthly. You have ${fmt(discretionaryBudget)} for choices — but spent ${fmt(discretionaryAvg)} on discretionary items (${fmt(discretionaryAvg - discretionaryBudget)} over).`,
+        text: `${formatCurrency(fixedAvg, false)} is committed to fixed costs monthly. You have ${formatCurrency(discretionaryBudget, false)} for choices — but spent ${formatCurrency(discretionaryAvg, false)} on discretionary items (${formatCurrency(discretionaryAvg - discretionaryBudget, false)} over).`,
         severity: 'warning',
       })
     } else if (fixedAvg > 0) {
       insights.push({
         id: 'fixed-discretionary-split',
         emoji: '🔒',
-        text: `${fmt(fixedAvg)}/month is committed (fixed). You had ${fmt(discretionaryBudget)} for choices and spent ${fmt(discretionaryAvg)} — within budget.`,
+        text: `${formatCurrency(fixedAvg, false)}/month is committed (fixed). You had ${formatCurrency(discretionaryBudget, false)} for choices and spent ${formatCurrency(discretionaryAvg, false)} — within budget.`,
         severity: 'positive',
       })
     }
@@ -291,7 +289,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
     insights.push({
       id: 'recurring-total',
       emoji: '🔄',
-      text: `${recurringCharges.length} recurring charges total ${fmt(recurringTotal)}/month (${fmt(recurringTotal * 12)}/year). Top: ${topNames}.`,
+      text: `${recurringCharges.length} recurring charges total ${formatCurrency(recurringTotal, false)}/month (${formatCurrency(recurringTotal * 12, false)}/year). Top: ${topNames}.`,
       severity: recurringTotal > avgMonthly * 0.15 ? 'warning' : 'neutral',
     })
   }
@@ -311,7 +309,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
     insights.push({
       id: 'micro-spend',
       emoji: '🪙',
-      text: `${Math.round(avgMicroPerMonth)} small purchases (under ${fmt(microThreshold)}) per month totaling ${fmt(microMonthly)}.`,
+      text: `${Math.round(avgMicroPerMonth)} small purchases (under ${formatCurrency(microThreshold, false)}) per month totaling ${formatCurrency(microMonthly, false)}.`,
       severity: microMonthly > avgMonthly * 0.05 ? 'warning' : 'neutral',
     })
   }
@@ -332,7 +330,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
       const parts = Array.from(accountTotals.values())
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 3)
-        .map(a => `${a.label}: ${fmt(a.amount / Math.max(months.length, 1))}/mo`)
+        .map(a => `${a.label}: ${formatCurrency(a.amount / Math.max(months.length, 1), false)}/mo`)
         .join(' · ')
       insights.push({
         id: 'member-breakdown',
@@ -352,7 +350,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
       insights.push({
         id: 'overspending',
         emoji: '🔴',
-        text: `Spending exceeds income by ${fmt(avgMonthly - income)}/month.${names ? ` Watch ${names}.` : ''}`,
+        text: `Spending exceeds income by ${formatCurrency(avgMonthly - income, false)}/month.${names ? ` Watch ${names}.` : ''}`,
         severity: 'concern',
       })
     } else if (savingsRate >= 20) {
@@ -395,7 +393,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
       insights.push({
         id: 'delta-driver',
         emoji: '📈',
-        text: `${catLabel(biggestRise.cat)} grew ${Math.round(biggestRise.pct)}% (+${fmt(biggestRise.delta)})${driverHint}.`,
+        text: `${catLabel(biggestRise.cat)} grew ${Math.round(biggestRise.pct)}% (+${formatCurrency(biggestRise.delta, false)})${driverHint}.`,
         severity: 'warning',
       })
     }
@@ -471,7 +469,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
       insights.push({
         id: 'best-worst-month',
         emoji: '📅',
-        text: `Lightest month: ${formatMonth(bestMonth.billing_month)} (${fmt(Number(bestMonth.total_amount))}). Heaviest: ${formatMonth(worstMonth.billing_month)} (${fmt(Number(worstMonth.total_amount))}).`,
+        text: `Lightest month: ${formatMonth(bestMonth.billing_month)} (${formatCurrency(Number(bestMonth.total_amount), false)}). Heaviest: ${formatMonth(worstMonth.billing_month)} (${formatCurrency(Number(worstMonth.total_amount), false)}).`,
         severity: 'neutral',
       })
     }

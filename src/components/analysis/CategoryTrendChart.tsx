@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts'
 import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
+import { formatCurrency } from '../../lib/formatCurrency'
 import { ui } from '../../lib/uiClasses'
 
 interface Props {
@@ -14,9 +15,6 @@ const PALETTE = [
   '#34D399', '#60A5FA', '#F59E0B', '#F472B6', '#A78BFA',
   '#FB923C', '#38BDF8', '#818CF8', '#22D3EE', '#E879F9',
 ]
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 function formatMonth(m: string): string {
   const [, mo] = m.split('-')
@@ -103,7 +101,7 @@ export default function CategoryTrendChart({ data, months, categoryLookup }: Pro
             <Tooltip
               contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 12 }}
               labelStyle={{ color: '#e2e8f0', fontWeight: 600 }}
-              formatter={(value) => [fmt(Number(value ?? 0)), '']}
+              formatter={(value) => [formatCurrency(Number(value ?? 0), false), '']}
             />
             <Legend
               iconType="circle"

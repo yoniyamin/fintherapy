@@ -1,13 +1,11 @@
 import { motion } from 'framer-motion'
+import { formatCurrency } from '../../lib/formatCurrency'
 import type { RecurringCharge } from '../../lib/recurringDetector'
 
 interface Props {
   charges: RecurringCharge[]
   months: number
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 export default function RecurringPanel({ charges, months }: Props) {
   if (charges.length < 3) return null
@@ -25,7 +23,7 @@ export default function RecurringPanel({ charges, months }: Props) {
           Recurring Charges
         </h3>
         <span className="text-xs text-slate-300 font-medium">
-          {fmt(total)}/mo ({fmt(total * 12)}/yr)
+          {formatCurrency(total, false)}/mo ({formatCurrency(total * 12, false)}/yr)
         </span>
       </div>
 
@@ -41,7 +39,7 @@ export default function RecurringPanel({ charges, months }: Props) {
               </span>
             </div>
             <span className="text-xs font-medium text-slate-200 shrink-0 ml-2">
-              {fmt(charge.avgAmount)}
+              {formatCurrency(charge.avgAmount, false)}
             </span>
           </div>
         ))}

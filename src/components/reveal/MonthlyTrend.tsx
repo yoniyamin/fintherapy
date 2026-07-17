@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, Cell,
 } from 'recharts'
 import type { MonthlyTotal } from '../../hooks/useReveal'
+import { formatCurrency } from '../../lib/formatCurrency'
 import { ui } from '../../lib/uiClasses'
 
 interface Props {
@@ -19,9 +20,6 @@ function shortMonth(billing: string): string {
   const d = new Date(Number(year), Number(month) - 1)
   return d.toLocaleDateString('en-US', { month: 'short' })
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 export default function MonthlyTrend({ data, selectedMonth, income, subtitle }: Props) {
   if (data.length < 1) {
@@ -79,7 +77,7 @@ export default function MonthlyTrend({ data, selectedMonth, income, subtitle }: 
                 fontSize: '12px',
               }}
               itemStyle={{ color: '#f8fafc' }}
-              formatter={(value) => fmt(Number(value ?? 0))}
+              formatter={(value) => formatCurrency(Number(value ?? 0), false)}
               labelFormatter={(label) => label}
             />
             <Bar dataKey="amount" radius={[6, 6, 0, 0]} maxBarSize={36}>

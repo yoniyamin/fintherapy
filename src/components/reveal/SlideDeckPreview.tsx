@@ -21,6 +21,7 @@ import {
   isSpendingOutflow,
   topSpendingTransactions,
 } from '../../lib/exportSpend'
+import { formatCurrency } from '../../lib/formatCurrency'
 
 interface Props {
   month: string
@@ -36,9 +37,6 @@ interface Props {
 }
 
 const COLORS = ['#58CC02', '#1CB0F6', '#A560E8', '#FF9600', '#818cf8', '#ec4899']
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 const fmtFull = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(v)
@@ -271,7 +269,7 @@ function TitleSlide({
           transition={{ duration: 0.45, delay: 0.2, ease: REPORT_EASE }}
         >
           <div>
-            <p className="text-xl font-bold tabular-nums text-surface-50">{fmt(totalSpent)}</p>
+            <p className="text-xl font-bold tabular-nums text-surface-50">{formatCurrency(totalSpent, false)}</p>
             <p className="mt-0.5 text-[10px] text-surface-500">total spent</p>
           </div>
           <div className="h-8 w-px bg-white/[0.06]" />
@@ -311,7 +309,7 @@ function OverviewSlide({
           viewport={{ once: true }}
           transition={{ type: 'spring', stiffness: 200, damping: 16, delay: 0.08 }}
         >
-          {fmt(totalSpent)}
+          {formatCurrency(totalSpent, false)}
         </motion.p>
         {spendDelta && spendDelta.direction !== 'flat' && (
           <div className="mt-2 flex items-center justify-center gap-2">
@@ -325,7 +323,7 @@ function OverviewSlide({
         {[
           { label: 'Transactions', value: String(txCount) },
           { label: 'Categories', value: String(categoryCount) },
-          ...(income != null ? [{ label: 'Savings Rate', value: `${Math.round(((income - totalSpent) / income) * 100)}%` }] : [{ label: 'Avg/Tx', value: fmt(txCount > 0 ? totalSpent / txCount : 0) }]),
+          ...(income != null ? [{ label: 'Savings Rate', value: `${Math.round(((income - totalSpent) / income) * 100)}%` }] : [{ label: 'Avg/Tx', value: formatCurrency(txCount > 0 ? totalSpent / txCount : 0, false) }]),
         ].map((m) => (
           <RevealItem key={m.label}>
             <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3 text-center">
@@ -345,9 +343,9 @@ function OverviewSlide({
           transition={{ duration: 0.4, delay: 0.15, ease: REPORT_EASE }}
         >
           <div className="flex items-center justify-between text-xs">
-            <span className="text-surface-400">Income: {fmt(income)}</span>
+            <span className="text-surface-400">Income: {formatCurrency(income, false)}</span>
             <span className={`font-semibold ${freeIncome! >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {freeIncome! >= 0 ? '+' : ''}{fmt(freeIncome!)} free
+              {freeIncome! >= 0 ? '+' : ''}{formatCurrency(freeIncome!, false)} free
             </span>
           </div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-900">
@@ -460,7 +458,7 @@ function TopCategorySlide({
       >
         <span className="text-3xl">{icon}</span>
         <p className="mt-2 text-lg font-bold text-surface-50">{label}</p>
-        <p className="mt-1 text-2xl font-extrabold tabular-nums text-[#58CC02]">{fmt(amount)}</p>
+        <p className="mt-1 text-2xl font-extrabold tabular-nums text-[#58CC02]">{formatCurrency(amount, false)}</p>
         <div className="mt-2 flex items-center justify-center gap-2">
           <span className="text-[10px] text-surface-500">{Number(category.tx_count)} transactions</span>
           {delta && delta.direction !== 'flat' && (
@@ -542,7 +540,7 @@ function TrendSlide({ monthlyTotals, selectedMonth }: { monthlyTotals: MonthlyTo
             <Tooltip
               contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '11px' }}
               itemStyle={{ color: '#f8fafc' }}
-              formatter={(value) => fmt(Number(value ?? 0))}
+              formatter={(value) => formatCurrency(Number(value ?? 0), false)}
             />
             <Bar dataKey="amount" radius={[6, 6, 0, 0]} maxBarSize={28}>
               {chartData.map((entry, i) => (
@@ -580,7 +578,7 @@ function IncomeVsSpendingSlide({ monthlyTotals, income }: { monthlyTotals: Month
               <Tooltip
                 contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '11px' }}
                 itemStyle={{ color: '#f8fafc' }}
-                formatter={(value) => fmt(Number(value ?? 0))}
+                formatter={(value) => formatCurrency(Number(value ?? 0), false)}
               />
               <Legend
                 wrapperStyle={{ fontSize: '10px', paddingTop: '8px' }}
@@ -643,7 +641,7 @@ function HighlightsSlide({
     cards.push({
       emoji: categoryLookup[topCategory.category]?.icon ?? '📊',
       title: 'Top Category',
-      value: fmt(Number(topCategory.total_amount)),
+      value: formatCurrency(Number(topCategory.total_amount), false),
       sub: `${catLabel} \u2022 ${Number(topCategory.tx_count)} txns`,
       accent: 'from-purple-500/10 to-transparent border-purple-500/20',
     })
@@ -653,7 +651,7 @@ function HighlightsSlide({
     cards.push({
       emoji: '📈',
       title: 'Biggest Increase',
-      value: `+${fmt(biggestIncrease.delta)}`,
+      value: `+${formatCurrency(biggestIncrease.delta, false)}`,
       sub: `${catLabel} \u2022 +${biggestIncrease.pct.toFixed(0)}% vs last month`,
       accent: 'from-red-500/10 to-transparent border-red-500/20',
     })
@@ -671,7 +669,7 @@ function HighlightsSlide({
       emoji: savingsRate >= 0 ? '💚' : '🔴',
       title: 'Savings Rate',
       value: `${savingsRate}%`,
-      sub: savingsRate >= 0 ? `Saved ${fmt(income - totalSpent)}` : `Over budget by ${fmt(totalSpent - income)}`,
+      sub: savingsRate >= 0 ? `Saved ${formatCurrency(income - totalSpent, false)}` : `Over budget by ${formatCurrency(totalSpent - income, false)}`,
       accent: savingsRate >= 0 ? 'from-emerald-500/10 to-transparent border-emerald-500/20' : 'from-red-500/10 to-transparent border-red-500/20',
     })
   }

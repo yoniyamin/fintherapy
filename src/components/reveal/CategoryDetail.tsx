@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { Transaction } from '../../types/database'
 import type { CategoryDef } from '../../lib/constants'
 import { formatAccountLabel } from '../../lib/accountDisplay'
+import { formatCurrency } from '../../lib/formatCurrency'
 
 interface Props {
   category: string
@@ -18,9 +19,6 @@ interface Props {
   /** Optional context line (e.g. billing month). */
   subtitle?: string
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(v)
 
 export default function CategoryDetail({
   category,
@@ -147,7 +145,7 @@ export default function CategoryDetail({
                       {new Date(tx.tx_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
                     <span className="flex-1 text-right text-sm font-semibold tabular-nums text-primary-400">
-                      {fmt(Number(tx.amount))}
+                      {formatCurrency(Number(tx.amount))}
                     </span>
                     {onMarkTransfer && (
                       <button

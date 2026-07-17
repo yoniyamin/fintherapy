@@ -1,3 +1,4 @@
+import { formatCurrency } from '../../lib/formatCurrency'
 import { motion } from 'framer-motion'
 
 interface Props {
@@ -6,9 +7,6 @@ interface Props {
   months: number
   income: number | null
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 export default function FixedDiscretionarySplit({ fixedTotal, discretionaryTotal, months, income }: Props) {
   if (fixedTotal <= 0 && discretionaryTotal <= 0) return null
@@ -43,20 +41,20 @@ export default function FixedDiscretionarySplit({ fixedTotal, discretionaryTotal
       <div className="mt-3 flex justify-between text-xs">
         <div>
           <span className="inline-block h-2 w-2 rounded-full bg-purple-500 mr-1.5" />
-          <span className="text-slate-300 font-medium">Fixed: {fmt(fixedMonthly)}/mo</span>
+          <span className="text-slate-300 font-medium">Fixed: {formatCurrency(fixedMonthly, false)}/mo</span>
         </div>
         <div>
           <span className="inline-block h-2 w-2 rounded-full bg-cyan-500 mr-1.5" />
-          <span className="text-slate-300 font-medium">Discretionary: {fmt(discretionaryMonthly)}/mo</span>
+          <span className="text-slate-300 font-medium">Discretionary: {formatCurrency(discretionaryMonthly, false)}/mo</span>
         </div>
       </div>
 
       {discretionaryBudget != null && (
         <p className="mt-2 text-xs text-slate-400">
-          After fixed costs, you have <span className="text-slate-200 font-medium">{fmt(discretionaryBudget)}</span> for choices.
+          After fixed costs, you have <span className="text-slate-200 font-medium">{formatCurrency(discretionaryBudget, false)}</span> for choices.
           {discretionaryMonthly > discretionaryBudget && (
             <span className="text-red-400 ml-1">
-              ({fmt(discretionaryMonthly - discretionaryBudget)} over)
+              ({formatCurrency(discretionaryMonthly - discretionaryBudget, false)} over)
             </span>
           )}
         </p>

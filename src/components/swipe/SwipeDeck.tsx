@@ -389,6 +389,9 @@ export default function SwipeDeck() {
   const [householdLast4List, setHouseholdLast4List] = useState<string[]>([])
   const [accountBreakdown, setAccountBreakdown] = useState<AccountClassifiedBreakdownRow[] | null>(null)
   const [breakdownLoading, setBreakdownLoading] = useState(false)
+  const [showTutorial, setShowTutorial] = useState(
+    () => localStorage.getItem('classify_tutorial_dismissed') !== '1',
+  )
   // Bumps when the category picker is dismissed without a selection. SwipeCard watches
   // this to spring the just-flown-off card back into view, so a swipe-right that opens
   // the picker can be undone by closing the picker.
@@ -1402,7 +1405,48 @@ export default function SwipeDeck() {
         </div>
       )
     }
-    return <ClassifyTutorial hasTransactions={false} />
+    if (showTutorial) {
+      return <ClassifyTutorial hasTransactions={false} onDismiss={() => setShowTutorial(false)} />
+    }
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+        <div className={`max-w-sm space-y-4 ${ui.glass} px-8 py-10`}>
+          <motion.div
+            className="text-5xl drop-shadow-[0_10px_28px_rgba(28,176,246,0.2)]"
+            animate={{ y: [0, -8, 0] }}
+            transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+          >
+            📭
+          </motion.div>
+          <h2 className="bg-gradient-to-r from-surface-50 to-ice bg-clip-text text-xl font-bold text-transparent">
+            No transactions yet
+          </h2>
+          <p className="text-sm text-surface-400">
+            Upload a CSV from the Upload tab to start classifying!
+          </p>
+          {refundsOffset > 0 && (
+            <p className="text-sm font-semibold text-gem">
+              {refundsOffset} refund pair{refundsOffset > 1 ? 's' : ''} auto-offset
+            </p>
+          )}
+          <div className="flex flex-col items-center gap-2">
+            <Link
+              to="/upload"
+              className="inline-block rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
+            >
+              Upload CSV
+            </Link>
+            <button
+              type="button"
+              onClick={() => setShowTutorial(true)}
+              className="text-xs font-medium text-surface-500 underline decoration-surface-600 underline-offset-2 transition-colors hover:text-surface-300"
+            >
+              How does swiping work?
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const monthClassified = monthStats ? Number(monthStats.classified_count) : 0

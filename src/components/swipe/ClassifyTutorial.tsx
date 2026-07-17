@@ -79,22 +79,18 @@ function DemoCard({ step }: { step: number }) {
 
 interface ClassifyTutorialProps {
   hasTransactions: boolean
+  onDismiss?: () => void
 }
 
-export default function ClassifyTutorial({ hasTransactions }: ClassifyTutorialProps) {
-  const [dismissed, setDismissed] = useState(
-    () => localStorage.getItem(STORAGE_KEY) === '1',
-  )
+export default function ClassifyTutorial({ hasTransactions, onDismiss }: ClassifyTutorialProps) {
   const [step, setStep] = useState(0)
-
-  if (dismissed) return null
 
   const gesture = GESTURES[step]
   const isLast = step === GESTURES.length - 1
 
   const handleDismiss = () => {
     localStorage.setItem(STORAGE_KEY, '1')
-    setDismissed(true)
+    onDismiss?.()
   }
 
   return (

@@ -15,6 +15,7 @@ import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import type { AccountType, Transaction } from '../../types/database'
 import { ui } from '../../lib/uiClasses'
 import { formatAccountLabel } from '../../lib/accountDisplay'
+import { formatCurrency } from '../../lib/formatCurrency'
 import { downloadTransactionsCsv } from '../../lib/exportTransactionsCsv'
 import { generateSlideDeck, downloadBlob } from '../../lib/generateSlideDeck'
 import SlideDeckPreview from './SlideDeckPreview'
@@ -42,9 +43,6 @@ function getMonthOptions(): { value: string; label: string }[] {
   }
   return options
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(v)
 
 export default function RevealPage() {
   const location = useLocation()
@@ -757,7 +755,7 @@ export default function RevealPage() {
                   className="flex items-center gap-1.5 rounded-lg px-2 py-1 transition-colors hover:bg-surface-700/50"
                 >
                   <span className="text-sm font-bold tabular-nums text-duo-green">
-                    {incomeNum > 0 ? fmt(incomeNum) : 'Set income'}
+                    {incomeNum > 0 ? formatCurrency(incomeNum) : 'Set income'}
                   </span>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-surface-500">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" strokeLinecap="round" strokeLinejoin="round" />
@@ -769,7 +767,7 @@ export default function RevealPage() {
 
             <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
               <span className="text-sm text-surface-400">Total spent</span>
-              <span className="text-sm font-bold tabular-nums text-primary-400">{fmt(totalSpent)}</span>
+              <span className="text-sm font-bold tabular-nums text-primary-400">{formatCurrency(totalSpent)}</span>
             </div>
             <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
               <div className="flex items-center gap-1.5">
@@ -813,7 +811,7 @@ export default function RevealPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-surface-400">Free Income</span>
                   <span className={`text-xl font-extrabold tabular-nums ${freeIncome >= 0 ? 'text-duo-green' : 'text-danger'}`}>
-                    {fmt(freeIncome)}
+                    {formatCurrency(freeIncome)}
                   </span>
                 </div>
                 <div className="mt-2 flex items-center gap-2">

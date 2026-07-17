@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useMemo } from 'react'
 
 interface ConfettiProps {
@@ -13,6 +13,8 @@ function randomBetween(min: number, max: number) {
 }
 
 export default function Confetti({ count = 50, active }: ConfettiProps) {
+  const prefersReduced = useReducedMotion()
+
   const particles = useMemo(
     () =>
       Array.from({ length: count }, (_, i) => ({
@@ -27,15 +29,14 @@ export default function Confetti({ count = 50, active }: ConfettiProps) {
         size: randomBetween(6, 12),
         shape: Math.random() > 0.5 ? 'circle' : 'rect',
       })),
-    // Only regenerate when toggled from inactive to active
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [active],
   )
 
-  if (!active) return null
+  if (!active || prefersReduced) return null
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[100] overflow-hidden">
+    <div className="pointer-events-none fixed inset-0 z-[100] overflow-hidden" aria-hidden>
       {particles.map((p) => (
         <motion.div
           key={p.id}

@@ -1,3 +1,4 @@
+import { formatCurrency } from '../../lib/formatCurrency'
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import type { CategoryBudget } from '../../hooks/useCategoryBudgets'
@@ -10,9 +11,6 @@ interface Props {
   savingsGoals: SavingsGoal[]
   months: number
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 interface Projection {
   fixedCosts: number
@@ -98,19 +96,19 @@ export default function SavingsProjectionPanel({ income, budgets, inflationRate,
       <div className="mb-3 rounded-lg bg-slate-700/30 p-3">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[10px] text-slate-500">Income</span>
-          <span className="text-xs font-medium tabular-nums text-slate-200">{fmt(income!)}</span>
+          <span className="text-xs font-medium tabular-nums text-slate-200">{formatCurrency(income!, false)}</span>
         </div>
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[10px] text-slate-500">Fixed costs</span>
-          <span className="text-xs tabular-nums text-slate-300">-{fmt(projection.fixedCosts)}</span>
+          <span className="text-xs tabular-nums text-slate-300">-{formatCurrency(projection.fixedCosts, false)}</span>
         </div>
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[10px] text-slate-500">Variable costs (adj. {inflationRate}% infl.)</span>
-          <span className="text-xs tabular-nums text-slate-300">-{fmt(projection.variableCosts * (1 + inflationRate / 1200))}</span>
+          <span className="text-xs tabular-nums text-slate-300">-{formatCurrency(projection.variableCosts * (1 + inflationRate / 1200), false)}</span>
         </div>
         <div className="border-t border-slate-600/40 pt-1.5 mt-1.5 flex items-center justify-between">
           <span className="text-[10px] font-medium text-slate-400">Monthly surplus (real)</span>
-          <span className={`text-xs font-bold tabular-nums ${surplusColor}`}>{fmt(projection.inflationAdjustedSurplus)}</span>
+          <span className={`text-xs font-bold tabular-nums ${surplusColor}`}>{formatCurrency(projection.inflationAdjustedSurplus, false)}</span>
         </div>
       </div>
 
@@ -139,7 +137,7 @@ export default function SavingsProjectionPanel({ income, budgets, inflationRate,
                       className={`h-full rounded-full ${goal.funded ? 'bg-emerald-400' : 'bg-amber-400'}`}
                     />
                   </div>
-                  <span className="text-[10px] tabular-nums text-slate-500">{fmt(goal.target)}</span>
+                  <span className="text-[10px] tabular-nums text-slate-500">{formatCurrency(goal.target, false)}</span>
                 </div>
               </div>
             )
@@ -153,7 +151,7 @@ export default function SavingsProjectionPanel({ income, budgets, inflationRate,
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-slate-500">Free savings after goals</span>
             <span className={`text-xs font-bold tabular-nums ${projection.freeSavings >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {fmt(projection.freeSavings)}/mo
+              {formatCurrency(projection.freeSavings, false)}/mo
             </span>
           </div>
         </div>

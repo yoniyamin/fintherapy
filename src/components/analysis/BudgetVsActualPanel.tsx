@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import type { CategoryBudget } from '../../hooks/useCategoryBudgets'
 import type { CategorySummary } from '../../hooks/useReveal'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { formatCurrency } from '../../lib/formatCurrency'
 
 interface Props {
   budgets: CategoryBudget[]
@@ -23,9 +24,6 @@ interface BudgetRow {
   deltaPct: number
   isOver: boolean
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 function median(values: number[]): number {
   if (values.length === 0) return 0
@@ -128,9 +126,9 @@ export default function BudgetVsActualPanel({ budgets, summaryByMonth, months, i
           <div key={row.category} className="flex items-center gap-2 rounded-lg px-2 py-1.5 bg-slate-700/20">
             <span className="text-sm shrink-0">{row.icon}</span>
             <span className="flex-1 truncate text-xs text-slate-300">{row.label}</span>
-            <span className="text-xs tabular-nums text-slate-400 shrink-0">{fmt(row.target)}</span>
+            <span className="text-xs tabular-nums text-slate-400 shrink-0">{formatCurrency(row.target, false)}</span>
             <span className={`text-xs tabular-nums font-medium shrink-0 ${row.isOver ? 'text-red-400' : 'text-emerald-400'}`}>
-              {row.isOver ? '+' : ''}{fmt(row.delta)}
+              {row.isOver ? '+' : ''}{formatCurrency(row.delta, false)}
             </span>
           </div>
         ))}
@@ -140,17 +138,17 @@ export default function BudgetVsActualPanel({ budgets, summaryByMonth, months, i
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-slate-300">Total</span>
           <div className="flex items-center gap-3">
-            <span className="text-xs tabular-nums text-slate-400">Target: {fmt(totalTarget)}</span>
+            <span className="text-xs tabular-nums text-slate-400">Target: {formatCurrency(totalTarget, false)}</span>
             <span className={`text-xs tabular-nums font-bold ${totalDelta > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-              {totalDelta > 0 ? '+' : ''}{fmt(totalDelta)}/mo
+              {totalDelta > 0 ? '+' : ''}{formatCurrency(totalDelta, false)}/mo
             </span>
           </div>
         </div>
         {income != null && income > 0 && (
           <div className="mt-1.5 flex items-center justify-between">
-            <span className="text-[10px] text-slate-500">vs Income ({fmt(income)})</span>
+            <span className="text-[10px] text-slate-500">vs Income ({formatCurrency(income, false)})</span>
             <span className={`text-[10px] font-medium ${income - totalTarget > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              Surplus: {fmt(income - totalTarget)}/mo
+              Surplus: {formatCurrency(income - totalTarget, false)}/mo
             </span>
           </div>
         )}

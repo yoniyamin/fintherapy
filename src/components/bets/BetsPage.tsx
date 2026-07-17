@@ -8,6 +8,7 @@ import { useTransactions, type MonthStats } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID, type CategoryDef } from '../../lib/constants'
 import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import Button from '../common/Button'
+import { SkeletonCard } from '../common/Skeleton'
 import { ui } from '../../lib/uiClasses'
 
 function getCurrentMonth(): string {
@@ -350,8 +351,9 @@ export default function BetsPage() {
       </div>
 
       {loading || statsLoading ? (
-        <div className="mt-12 flex items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
+        <div className="mt-6 space-y-3">
+          <SkeletonCard rows={4} />
+          <SkeletonCard rows={3} />
         </div>
       ) : tab === 'predict' && !allClassified ? (
         /* Bet amounts for the 4 randomly chosen categories */

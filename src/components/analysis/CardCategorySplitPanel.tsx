@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ExportRow } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { formatCurrency } from '../../lib/formatCurrency'
 
 interface Props {
   transactions: ExportRow[]
@@ -24,9 +25,6 @@ interface CategorySplit {
   total: number
   cards: CardAmount[]
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 const CARD_COLORS = ['#22d3ee', '#a78bfa', '#f59e0b', '#58CC02', '#f472b6', '#64748b']
 
@@ -124,7 +122,7 @@ export default function CardCategorySplitPanel({ transactions, months, categoryL
               >
                 <span className="text-sm shrink-0">{cat.icon}</span>
                 <span className="truncate text-xs font-medium text-slate-200 flex-1">{cat.label}</span>
-                <span className="text-xs tabular-nums text-slate-300 shrink-0">{fmt(cat.total / Math.max(months, 1))}/mo</span>
+                <span className="text-xs tabular-nums text-slate-300 shrink-0">{formatCurrency(cat.total / Math.max(months, 1), false)}/mo</span>
                 <svg
                   className={`h-3.5 w-3.5 text-slate-500 transition-transform shrink-0 ${isOpen ? 'rotate-180' : ''}`}
                   fill="none"
@@ -151,7 +149,7 @@ export default function CardCategorySplitPanel({ transactions, months, categoryL
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-slate-300">{card.label}</span>
                             <span className="text-xs tabular-nums text-slate-200">
-                              {fmt(card.amount / Math.max(months, 1))}/mo
+                              {formatCurrency(card.amount / Math.max(months, 1), false)}/mo
                               <span className="ml-1.5 text-[10px] text-slate-500">{Math.round(card.pct)}%</span>
                             </span>
                           </div>

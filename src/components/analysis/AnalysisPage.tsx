@@ -32,6 +32,7 @@ import { detectRecurring } from '../../lib/recurringDetector'
 import { generateHeadline, getDeltaDrivers, getHealthSummary, getSpendingVelocity, type InsightInput } from '../../lib/advisorInsights'
 import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
 import { ui } from '../../lib/uiClasses'
+import { SkeletonCard } from '../common/Skeleton'
 import { supabase } from '../../lib/supabase'
 import type { MonthlyTotal } from '../../hooks/useReveal'
 
@@ -322,8 +323,10 @@ export default function AnalysisPage() {
       )}
 
       {loading ? (
-        <div className="mt-12 flex items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
+        <div className="mt-6 space-y-3">
+          <SkeletonCard rows={4} />
+          <SkeletonCard rows={5} />
+          <SkeletonCard rows={3} />
         </div>
       ) : noData ? (
         <motion.div

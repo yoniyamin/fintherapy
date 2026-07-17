@@ -1,3 +1,4 @@
+import { formatCurrency } from '../../lib/formatCurrency'
 import { motion } from 'framer-motion'
 import type { AccountSpending } from '../../hooks/useMultiMonthReveal'
 
@@ -5,9 +6,6 @@ interface Props {
   spendingByAccount: AccountSpending[]
   months: number
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 const BAR_COLORS = ['#22d3ee', '#a78bfa', '#f59e0b', '#58CC02', '#f472b6']
 
@@ -49,7 +47,7 @@ export default function MemberSpendingPanel({ spendingByAccount, months }: Props
             <div key={i}>
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-slate-300 font-medium">{row.label}</span>
-                <span className="text-slate-200 font-semibold">{fmt(monthly)}/mo</span>
+                <span className="text-slate-200 font-semibold">{formatCurrency(monthly, false)}/mo</span>
               </div>
               <div className="h-2 w-full rounded-full bg-slate-700/50 overflow-hidden">
                 <motion.div

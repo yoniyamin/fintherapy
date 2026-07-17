@@ -13,6 +13,7 @@ import {
 import type { AccountSpending, CardFundingRow, DailyTotal, CategoryTrendPoint, SalaryRow } from '../hooks/useMultiMonthReveal'
 import type { RecurringCharge } from './recurringDetector'
 import { OWN_TRANSFERS_CATEGORY_ID } from './constants'
+import { formatCurrency } from './formatCurrency'
 
 export interface BudgetEntry {
   category_id: string
@@ -65,13 +66,6 @@ const SEVERITY_BULLETS: Record<string, string> = {
   warning: '!!',
   concern: 'XX',
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(v)
 
 const fmtCompact = (v: number) => {
   if (v >= 1000) return `${(v / 1000).toFixed(1)}k`
@@ -560,20 +554,20 @@ async function drawPage1(
   const kpis: { title: string; value: string; sub: string; accent: string }[] = [
     {
       title: 'AVG MONTHLY',
-      value: fmt(avgMonthly),
+      value: formatCurrency(avgMonthly, false),
       sub: savingsRate != null ? `${Math.round(savingsRate)}% savings rate${incomeRef}` : `across ${input.months.length} months`,
       accent: PRIMARY,
     },
     {
       title: 'FIXED COSTS',
-      value: fmt(fixedAvg),
+      value: formatCurrency(fixedAvg, false),
       sub: input.income ? `${Math.round((fixedAvg / input.income) * 100)}% of income` : 'committed monthly',
       accent: '#a78bfa',
     },
     {
       title: 'DISCRETIONARY',
-      value: fmt(discretionaryAvg),
-      sub: input.income ? `${fmt(input.income - fixedAvg)} available` : 'flexible spending',
+      value: formatCurrency(discretionaryAvg, false),
+      sub: input.income ? `${formatCurrency(input.income - fixedAvg, false)} available` : 'flexible spending',
       accent: CYAN,
     },
   ]
@@ -672,7 +666,7 @@ async function drawPage1(
       pdf.setFontSize(6.5)
       pdf.setFont('helvetica', 'normal')
       pdf.text(
-        `Lightest: ${formatMonthLabel(minT.billing_month)} (${fmt(Number(minT.total_amount))})   |   Heaviest: ${formatMonthLabel(maxT.billing_month)} (${fmt(Number(maxT.total_amount))})`,
+        `Lightest: ${formatMonthLabel(minT.billing_month)} (${formatCurrency(Number(minT.total_amount), false)})   |   Heaviest: ${formatMonthLabel(maxT.billing_month)} (${formatCurrency(Number(maxT.total_amount), false)})`,
         mx, y,
       )
       y += 5
@@ -697,7 +691,7 @@ async function drawPage1(
 
       setCol(pdf, TEXT_DIM)
       pdf.setFontSize(6.5)
-      const amtStr = fmt(slice.amount)
+      const amtStr = formatCurrency(slice.amount, false)
       pdf.text(`${amtStr}  (${slice.pct}%)`, barX + barW, ly + 2, { align: 'right' })
 
       drawProgressBar(pdf, barX, ly + 3.5, barW, 2, slice.pct, slice.color)
@@ -835,7 +829,7 @@ function drawPage2(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean) {
       setCol(pdf, val > 0 ? TEXT_MUTED : TEXT_DIM)
       pdf.setFontSize(6.5)
       pdf.text(
-        val > 0 ? fmt(val) : '-',
+        val > 0 ? formatCurrency(val, false) : '-',
         mx + catColW + i * colW + colW / 2,
         y + 3.5,
         { align: 'center' },
@@ -918,7 +912,7 @@ function drawPage2(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean) {
     setCol(pdf, TEXT)
     pdf.setFontSize(7)
     pdf.setFont('helvetica', 'bold')
-    pdf.text(fmt(Math.abs(Number(tx.normalized_amount ?? tx.amount))), pw - mx - 3, y + 3.5, { align: 'right' })
+    pdf.text(formatCurrency(Math.abs(Number(tx.normalized_amount ?? tx.amount)), false), pw - mx - 3, y + 3.5, { align: 'right' })
 
     y += 8
   }
@@ -978,14 +972,14 @@ function drawPage3(pdf: jsPDF, input: PdfReportInput, insightInput: InsightInput
       setCol(pdf, TEXT_MUTED)
       pdf.setFontSize(6.5)
       pdf.setFont('helvetica', 'normal')
-      pdf.text(`${fmt(monthlyAvg)}/mo · ${row.txCount} txs`, mx + 55, y + 3.5)
+      pdf.text(`${formatCurrency(monthlyAvg, false)}/mo · ${row.txCount} txs`, mx + 55, y + 3.5)
 
       drawProgressBar(pdf, mx + contentW * 0.5, y + 2, contentW * 0.4, 3, barPct, PALETTE[i % PALETTE.length])
 
       setCol(pdf, TEXT)
       pdf.setFontSize(7)
       pdf.setFont('helvetica', 'bold')
-      pdf.text(fmt(row.amount), pw - mx - 4, y + 3.5, { align: 'right' })
+      pdf.text(formatCurrency(row.amount, false), pw - mx - 4, y + 3.5, { align: 'right' })
 
       y += 9
     }
@@ -1017,12 +1011,12 @@ function drawPage3(pdf: jsPDF, input: PdfReportInput, insightInput: InsightInput
     setCol(pdf, TEXT)
     pdf.setFontSize(8)
     pdf.setFont('helvetica', 'bold')
-    pdf.text(`Total funded: ${fmt(totalFunding)} across ${input.months.length} months`, mx + 4, y + 5)
+    pdf.text(`Total funded: ${formatCurrency(totalFunding, false)} across ${input.months.length} months`, mx + 4, y + 5)
 
     setCol(pdf, TEXT_MUTED)
     pdf.setFontSize(7)
     pdf.setFont('helvetica', 'normal')
-    const sourceText = fundingSources.slice(0, 3).map(s => `${s.label}: ${fmt(s.amount)}`).join(' · ')
+    const sourceText = fundingSources.slice(0, 3).map(s => `${s.label}: ${formatCurrency(s.amount, false)}`).join(' · ')
     pdf.text(sourceText, mx + 4, y + 11)
     y += 18
 
@@ -1050,7 +1044,7 @@ function drawPage3(pdf: jsPDF, input: PdfReportInput, insightInput: InsightInput
       setCol(pdf, TEXT)
       pdf.setFontSize(7.5)
       pdf.setFont('helvetica', 'normal')
-      pdf.text(`Configured household income: ${fmt(input.income)}/month`, mx + 4, iy)
+      pdf.text(`Configured household income: ${formatCurrency(input.income, false)}/month`, mx + 4, iy)
       iy += 5
     }
 
@@ -1059,14 +1053,14 @@ function drawPage3(pdf: jsPDF, input: PdfReportInput, insightInput: InsightInput
       const detectedMonthly = detectedTotal / Math.max(input.months.length, 1)
       setCol(pdf, TEXT_MUTED)
       pdf.setFontSize(7)
-      pdf.text(`Detected payroll (NOMINA): ${fmt(detectedMonthly)}/month average`, mx + 4, iy)
+      pdf.text(`Detected payroll (NOMINA): ${formatCurrency(detectedMonthly, false)}/month average`, mx + 4, iy)
       iy += 5
 
       if (input.income && input.income > 0) {
         const delta = detectedMonthly - input.income
         if (Math.abs(delta) > 100) {
           setCol(pdf, delta > 0 ? '#22c55e' : '#f59e0b')
-          pdf.text(`Delta: ${delta > 0 ? '+' : ''}${fmt(delta)} vs configured income`, mx + 4, iy)
+          pdf.text(`Delta: ${delta > 0 ? '+' : ''}${formatCurrency(delta, false)} vs configured income`, mx + 4, iy)
         }
       }
     }
@@ -1083,7 +1077,7 @@ function drawPage3(pdf: jsPDF, input: PdfReportInput, insightInput: InsightInput
     setCol(pdf, TEXT)
     pdf.setFontSize(8)
     pdf.setFont('helvetica', 'bold')
-    pdf.text(`${input.recurringCharges.length} recurring charges = ${fmt(recurringTotal)}/month (${fmt(recurringTotal * 12)}/year)`, mx + 4, y + 5)
+    pdf.text(`${input.recurringCharges.length} recurring charges = ${formatCurrency(recurringTotal, false)}/month (${formatCurrency(recurringTotal * 12, false)}/year)`, mx + 4, y + 5)
     y += 11
 
     const topRecurring = input.recurringCharges.slice(0, 8)
@@ -1104,7 +1098,7 @@ function drawPage3(pdf: jsPDF, input: PdfReportInput, insightInput: InsightInput
       setCol(pdf, TEXT)
       pdf.setFontSize(7)
       pdf.setFont('helvetica', 'bold')
-      pdf.text(fmt(r.avgAmount), pw - mx - 4, y + 3, { align: 'right' })
+      pdf.text(formatCurrency(r.avgAmount, false), pw - mx - 4, y + 3, { align: 'right' })
 
       y += 7
     }
@@ -1123,14 +1117,14 @@ function drawPage3(pdf: jsPDF, input: PdfReportInput, insightInput: InsightInput
       setCol(pdf, driver.delta >= 0 ? '#ef4444' : '#22c55e')
       pdf.setFontSize(8)
       pdf.setFont('helvetica', 'bold')
-      pdf.text(`${driver.label}: ${dir}${Math.round(driver.pct)}% (${dir}${fmt(driver.delta)})`, mx + 4, y + 5)
+      pdf.text(`${driver.label}: ${dir}${Math.round(driver.pct)}% (${dir}${formatCurrency(driver.delta, false)})`, mx + 4, y + 5)
 
       if (driver.topTransactions.length > 0) {
         setCol(pdf, TEXT_MUTED)
         pdf.setFontSize(6.5)
         pdf.setFont('helvetica', 'normal')
         const txList = driver.topTransactions
-          .map(t => `${t.merchant.substring(0, 20)} ${fmt(t.amount)}`)
+          .map(t => `${t.merchant.substring(0, 20)} ${formatCurrency(t.amount, false)}`)
           .join(' · ')
         pdf.text(txList, mx + 4, y + 10.5)
       }
@@ -1158,7 +1152,7 @@ function drawPage3(pdf: jsPDF, input: PdfReportInput, insightInput: InsightInput
       pdf.setFontSize(7.5)
       pdf.setFont('helvetica', 'normal')
       pdf.text(
-        `${microTxs.length} purchases under €15 totaling ${fmt(microTotal)} (${fmt(microMonthly)}/month).`,
+        `${microTxs.length} purchases under €15 totaling ${formatCurrency(microTotal, false)} (${formatCurrency(microMonthly, false)}/month).`,
         mx + 4, y + 5.5,
       )
       y += 14
@@ -1217,14 +1211,14 @@ function drawTopMerchantsPage(pdf: jsPDF, input: PdfReportInput, isLandscape: bo
     pdf.text(cat.label, mx + 4, y + 5.5)
     pdf.setFont('helvetica', 'normal')
     pdf.setTextColor(...hexToRgb(TEXT_MUTED))
-    pdf.text(fmt(cat.total / Math.max(months, 1)) + '/mo', mx + pw - 4, y + 5.5, { align: 'right' })
+    pdf.text(formatCurrency(cat.total / Math.max(months, 1), false) + '/mo', mx + pw - 4, y + 5.5, { align: 'right' })
 
     let my = y + 10
     for (const [merchant, amount] of cat.merchants) {
       pdf.setFontSize(8)
       pdf.setTextColor(...hexToRgb(TEXT_DIM))
       pdf.text(merchant.substring(0, 30), mx + 8, my + 3)
-      pdf.text(fmt(amount / Math.max(months, 1)) + '/mo', mx + pw - 8, my + 3, { align: 'right' })
+      pdf.text(formatCurrency(amount / Math.max(months, 1), false) + '/mo', mx + pw - 8, my + 3, { align: 'right' })
       my += 4
     }
 
@@ -1306,12 +1300,12 @@ function drawBudgetPage(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean)
     pdf.setFont('helvetica', 'normal')
     pdf.setTextColor(...hexToRgb(TEXT))
     pdf.text(row.label.substring(0, 22), mx + 4, y + 4)
-    pdf.text(fmt(row.actual), mx + pw * 0.5, y + 4, { align: 'right' })
-    pdf.text(fmt(row.target), mx + pw * 0.7, y + 4, { align: 'right' })
+    pdf.text(formatCurrency(row.actual, false), mx + pw * 0.5, y + 4, { align: 'right' })
+    pdf.text(formatCurrency(row.target, false), mx + pw * 0.7, y + 4, { align: 'right' })
 
     const deltaColor = row.delta > 0 ? '#ef4444' : '#10b981'
     pdf.setTextColor(...hexToRgb(deltaColor))
-    pdf.text((row.delta > 0 ? '+' : '') + fmt(row.delta), mx + pw - 4, y + 4, { align: 'right' })
+    pdf.text((row.delta > 0 ? '+' : '') + formatCurrency(row.delta, false), mx + pw - 4, y + 4, { align: 'right' })
 
     y += 6
   }
@@ -1326,11 +1320,11 @@ function drawBudgetPage(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean)
   pdf.setFont('helvetica', 'bold')
   pdf.setTextColor(...hexToRgb(TEXT))
   pdf.text('TOTAL', mx + 4, y + 5)
-  pdf.text(fmt(totalActual), mx + pw * 0.5, y + 5, { align: 'right' })
-  pdf.text(fmt(totalTarget), mx + pw * 0.7, y + 5, { align: 'right' })
+  pdf.text(formatCurrency(totalActual, false), mx + pw * 0.5, y + 5, { align: 'right' })
+  pdf.text(formatCurrency(totalTarget, false), mx + pw * 0.7, y + 5, { align: 'right' })
   const totalDelta = totalActual - totalTarget
   pdf.setTextColor(...hexToRgb(totalDelta > 0 ? '#ef4444' : '#10b981'))
-  pdf.text((totalDelta > 0 ? '+' : '') + fmt(totalDelta), mx + pw - 4, y + 5, { align: 'right' })
+  pdf.text((totalDelta > 0 ? '+' : '') + formatCurrency(totalDelta, false), mx + pw - 4, y + 5, { align: 'right' })
   y += 12
 
   if (input.income != null && input.income > 0) {
@@ -1338,10 +1332,10 @@ function drawBudgetPage(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean)
     pdf.setFontSize(9)
     pdf.setTextColor(...hexToRgb(TEXT_MUTED))
     pdf.setFont('helvetica', 'normal')
-    pdf.text(`Income: ${fmt(input.income)}/mo`, mx, y + 4)
+    pdf.text(`Income: ${formatCurrency(input.income, false)}/mo`, mx, y + 4)
     pdf.setTextColor(...hexToRgb(surplus >= 0 ? '#10b981' : '#ef4444'))
     pdf.setFont('helvetica', 'bold')
-    pdf.text(`Projected surplus: ${fmt(surplus)}/mo`, mx + pw / 2, y + 4)
+    pdf.text(`Projected surplus: ${formatCurrency(surplus, false)}/mo`, mx + pw / 2, y + 4)
     y += 10
 
     const goals = input.savingsGoals ?? []
@@ -1368,14 +1362,14 @@ function drawBudgetPage(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean)
         pdf.setTextColor(...hexToRgb(TEXT))
         pdf.text(goal.name, mx + 4, y + 5)
         pdf.setTextColor(...hexToRgb(TEXT_MUTED))
-        pdf.text(`${fmt(goal.target)} goal · ${fmt(monthlyNeeded)}/mo needed · ${monthsToGoal === Infinity ? '—' : monthsToGoal + 'mo'} to goal`, mx + pw - 4, y + 5, { align: 'right' })
+        pdf.text(`${formatCurrency(goal.target, false)} goal · ${formatCurrency(monthlyNeeded, false)}/mo needed · ${monthsToGoal === Infinity ? '—' : monthsToGoal + 'mo'} to goal`, mx + pw - 4, y + 5, { align: 'right' })
         y += 10
       }
 
       y += 4
       pdf.setFontSize(7)
       pdf.setTextColor(...hexToRgb(TEXT_DIM))
-      pdf.text(`Inflation-adjusted surplus: ${fmt(realSurplus)}/mo (at ${inflRate}% annual inflation)`, mx, y + 3)
+      pdf.text(`Inflation-adjusted surplus: ${formatCurrency(realSurplus, false)}/mo (at ${inflRate}% annual inflation)`, mx, y + 3)
     }
   }
 

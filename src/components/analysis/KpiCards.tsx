@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
 import { getSpendingPredictability, getBiggestMover } from '../../lib/advisorInsights'
+import { formatCurrency } from '../../lib/formatCurrency'
 import { ui } from '../../lib/uiClasses'
 
 interface Props {
@@ -9,9 +10,6 @@ interface Props {
   months: string[]
   categoryLookup: Record<string, { icon: string; label: string }>
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 function formatMonth(m: string): string {
   const [y, mo] = m.split('-')
@@ -51,9 +49,9 @@ export default function KpiCards({ data, months, categoryLookup }: Props) {
 
     result.push({
       title: 'Avg Monthly Spend',
-      value: fmt(avgMonthly),
-      context: `${fmt(totalSpent)} over ${sorted.length} months`,
-      insight: `Your family averages ${fmt(avgMonthly)}/month across this period.`,
+      value: formatCurrency(avgMonthly, false),
+      context: `${formatCurrency(totalSpent, false)} over ${sorted.length} months`,
+      insight: `Your family averages ${formatCurrency(avgMonthly, false)}/month across this period.`,
       color: 'text-ice',
     })
 
@@ -78,7 +76,7 @@ export default function KpiCards({ data, months, categoryLookup }: Props) {
       result.push({
         title: 'Biggest Mover',
         value: `${biggestMover.icon} ${biggestMover.label}`,
-        context: `${biggestMover.direction === 'up' ? '+' : ''}${Math.round(biggestMover.pct)}% (${biggestMover.direction === 'up' ? '+' : ''}${fmt(biggestMover.delta)})`,
+        context: `${biggestMover.direction === 'up' ? '+' : ''}${Math.round(biggestMover.pct)}% (${biggestMover.direction === 'up' ? '+' : ''}${formatCurrency(biggestMover.delta, false)})`,
         insight: biggestMover.direction === 'up'
           ? `${biggestMover.label} grew the most — this area has the most room to adjust.`
           : `${biggestMover.label} dropped the most — great progress here.`,

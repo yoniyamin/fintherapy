@@ -901,7 +901,7 @@ These are standard patterns that most users would expect but are currently absen
 | ~~**Upload not in tab bar**~~ | ✅ *Fixed v1.6.0* — Upload is now a 6th tab in the persistent tab bar. |
 | ~~**Home has no loading state**~~ | ✅ *Fixed v1.6.0* — Skeleton placeholder shown while household data loads. |
 | ~~**Analysis empty state has no upload link**~~ | ✅ *Fixed v1.6.0* — "Upload a statement" CTA added to the empty state. |
-| **No skeleton loaders anywhere** | Partially addressed in v1.6.0 (Home page). Other pages still use spinners. |
+| ~~**No skeleton loaders anywhere**~~ | ~~Partially addressed in v1.6.0 (Home page). Other pages still use spinners.~~ **Fixed in v2.0.0** — shared `Skeleton`/`SkeletonCard` component; applied to Home, Analysis, and Bets loading states. |
 
 **Visual & Interaction Feedback:**
 
@@ -916,7 +916,7 @@ These are standard patterns that most users would expect but are currently absen
 
 | Gap | Detail |
 |-----|--------|
-| **EUR hard-coded** | `currency: 'EUR'` is used everywhere for formatting. CSV parser strips symbols but always displays EUR. |
+| ~~**EUR hard-coded**~~ | ~~`currency: 'EUR'` is used everywhere for formatting.~~ **Partially fixed in v2.0.0** — centralized `formatCurrency()` utility replaces ~23 duplicated `Intl.NumberFormat` calls. Currency is still EUR but now has a single point of change. |
 | **English only** | All copy is English; no `i18n` framework or language selector. Upload column detection supports EN/ES/CA headers, but UI text is fixed. |
 | **No dark / light mode toggle** | Dark theme is permanent. |
 
@@ -987,7 +987,7 @@ Zero test files exist. No `vitest`, `jest`, or test scripts in `package.json`. H
 
 | Concern | Detail |
 |---------|--------|
-| **N+1 RPC fan-out** | `useMultiMonthReveal` fires 2N+5 parallel RPCs for N months. A batch RPC returning all months would reduce round-trips. |
+| ~~**N+1 RPC fan-out**~~ | ~~`useMultiMonthReveal` fires 2N+5 parallel RPCs for N months.~~ **Fixed in v2.0.0** — `get_multi_month_summary` and `get_multi_month_export` batch RPCs replace per-month fan-outs. Now 7 RPCs total regardless of month count. |
 | **Per-tx RPC in classify** | `runGroupRpc` loops one RPC per transaction in a stack. A batch classify RPC would improve large-stack performance. |
 | **Duplicate font load** | Inter loaded via both `@import` in `index.css` and `<link>` in `index.html`. |
 | **Heavy main bundle** | `framer-motion`, `recharts`, `animejs` all in main path. PDF/PPTX use dynamic `import()` (good). |
@@ -996,9 +996,9 @@ Zero test files exist. No `vitest`, `jest`, or test scripts in `package.json`. H
 
 | Issue | Detail |
 |-------|--------|
-| **Pinch-zoom blocked** | `index.html` sets `maximum-scale=1.0, user-scalable=no` — WCAG failure. |
-| **No `prefers-reduced-motion`** | Confetti, Framer Motion animations, blob CSS run unconditionally. |
-| **CategoryPicker portal** | Missing `role="dialog"`, `aria-modal`, focus trap. |
+| ~~**Pinch-zoom blocked**~~ | ~~`index.html` sets `maximum-scale=1.0, user-scalable=no` — WCAG failure.~~ **Fixed in v2.0.0** — removed `maximum-scale` and `user-scalable=no`. |
+| ~~**No `prefers-reduced-motion`**~~ | ~~Confetti, Framer Motion animations, blob CSS run unconditionally.~~ **Fixed in v2.0.0** — Confetti uses `useReducedMotion()` to skip entirely; blob CSS already uses `motion-safe:` prefix; tab bar icon glow is decorative (`aria-hidden`). |
+| ~~**CategoryPicker portal**~~ | ~~Missing `role="dialog"`, `aria-modal`, focus trap.~~ **Fixed in v2.0.0** — added `role="dialog"`, `aria-modal="true"`, `aria-label`, keyboard focus trap (Tab/Shift+Tab cycle), Escape to close, return-focus on dismiss. |
 | **Small touch targets** | Tab bar labels at `text-[10px]`. |
 | **Color-only status indicators** | Flame/gem/green indicators in several places without non-color cues. |
 
