@@ -102,8 +102,20 @@ export function useRevealData() {
   const noData = monthStats !== null && monthStats.total_count === 0
   const tooManyUnclassified = hasTransactions
     && (monthStats.pending_count / monthStats.total_count) > UNCLASSIFIED_BLOCK_THRESHOLD
-  const showCompletionScreen = allClassified && !completionDismissed
   const monthStatsLoading = statsLoadedMonth !== month
+
+  const celebrationStorageKey = profile?.household_id
+    ? `revealCelebrated:${profile.household_id}:${month}`
+    : null
+  const alreadyCelebrated = celebrationStorageKey
+    ? localStorage.getItem(celebrationStorageKey) === '1'
+    : false
+  const showCompletionScreen = allClassified && !completionDismissed && !alreadyCelebrated
+
+  const markCelebrated = useCallback(() => {
+    if (celebrationStorageKey) localStorage.setItem(celebrationStorageKey, '1')
+    setCompletionDismissed(true)
+  }, [celebrationStorageKey])
 
   const handleMonthChange = (value: string) => {
     setMonth(value)
@@ -447,7 +459,7 @@ export function useRevealData() {
     monthStats,
     monthStatsLoading,
     completionDismissed,
-    setCompletionDismissed,
+    markCelebrated,
     noData,
     hasTransactions,
     allClassified,

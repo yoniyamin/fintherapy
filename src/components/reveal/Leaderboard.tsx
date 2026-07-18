@@ -8,6 +8,7 @@ interface Props {
   entries: LeaderboardEntry[]
   /** Pass from Home (even `[]`) so expanded rows show today vs all-time; omit on Reveal. */
   dailyActivity?: DailyActivity[]
+  hideTitle?: boolean
   memberRecords?: MemberDailyRecord[]
 }
 
@@ -58,7 +59,7 @@ function pickHouseholdPeak(
   }
 }
 
-export default function Leaderboard({ entries, dailyActivity, memberRecords }: Props) {
+export default function Leaderboard({ entries, dailyActivity, hideTitle, memberRecords }: Props) {
   const [openUserId, setOpenUserId] = useState<string | null>(null)
   const todayByUser = useMemo(() => {
     const m = new Map<string, DailyActivity>()
@@ -91,7 +92,7 @@ export default function Leaderboard({ entries, dailyActivity, memberRecords }: P
 
   return (
     <div className="mt-6 space-y-2">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">Leaderboard</h2>
+      {!hideTitle && <h2 className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">Leaderboard</h2>}
 
       {homeMode && householdRecords.length > 0 && (
         <div className={`space-y-2 p-3 ${ui.glassFlat}`}>

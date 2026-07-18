@@ -22,7 +22,7 @@ export default function RevealPage() {
     exporting, showDeckPreview, setShowDeckPreview, previewTransactions,
     prevMonthSummary, loadingPreview, includeOwnTransfers, setIncludeOwnTransfers,
     showTransfersHelp, setShowTransfersHelp, monthStats, monthStatsLoading,
-    setCompletionDismissed, noData, tooManyUnclassified,
+    markCelebrated, noData, tooManyUnclassified,
     showCompletionScreen, totalSpent, spendingTxCount, incomeNum, freeIncome,
     savingsRate, categoryLookup, catConfig, navigate,
     handleIncomeSave, handleIncomeKeyDown, handleCategoryClick, handleReclassify,
@@ -315,7 +315,7 @@ export default function RevealPage() {
           >
             <button
               type="button"
-              onClick={() => setCompletionDismissed(true)}
+              onClick={markCelebrated}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-duo-green px-5 py-3.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] transition-all hover:brightness-110 active:translate-y-[1px]"
             >
               Reveal the numbers

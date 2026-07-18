@@ -1,14 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { AccountCardEditModal } from '../common/AccountCardEditModal'
-import SpendingChart from './SpendingChart'
-import MonthlyTrend from './MonthlyTrend'
-import Leaderboard from './Leaderboard'
 import CategoryDetail from './CategoryDetail'
+import MonthlyTrend from './MonthlyTrend'
+import SlideDeckPreview from './SlideDeckPreview'
+import SpendingChart from './SpendingChart'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
-import { ui } from '../../lib/uiClasses'
 import { formatAccountLabel } from '../../lib/accountDisplay'
 import { formatCurrency } from '../../lib/formatCurrency'
-import SlideDeckPreview from './SlideDeckPreview'
+import { ui } from '../../lib/uiClasses'
 import { useRevealData, formatMonthLabel } from './useRevealData'
 
 export default function RevealDesktopPage() {
@@ -21,7 +20,7 @@ export default function RevealDesktopPage() {
     exporting, showDeckPreview, setShowDeckPreview, previewTransactions,
     prevMonthSummary, loadingPreview, includeOwnTransfers, setIncludeOwnTransfers,
     showTransfersHelp, setShowTransfersHelp, monthStats, monthStatsLoading,
-    setCompletionDismissed, noData, tooManyUnclassified, showCompletionScreen,
+    markCelebrated, noData, tooManyUnclassified, showCompletionScreen,
     totalSpent, spendingTxCount, incomeNum, freeIncome, savingsRate,
     categoryLookup, catConfig, navigate,
     handleIncomeSave, handleIncomeKeyDown, handleCategoryClick, handleReclassify,
@@ -208,7 +207,7 @@ export default function RevealDesktopPage() {
           </div>
           <button
             type="button"
-            onClick={() => setCompletionDismissed(true)}
+            onClick={markCelebrated}
             className="flex items-center justify-center gap-2 rounded-xl bg-duo-green px-8 py-3.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] transition-all hover:brightness-110"
           >
             Reveal the numbers
@@ -219,9 +218,8 @@ export default function RevealDesktopPage() {
         </div>
       ) : (
         <>
-          {/* Dashboard -- adaptive grid */}
+          {/* Income + Spending summary -- full width */}
           <div className="mt-5 grid grid-cols-2 gap-5 items-start">
-            {/* Income + Spending summary */}
             <motion.div
               className={`${ui.glass} overflow-hidden`}
               initial={{ scale: 0.95, opacity: 0 }}
@@ -323,7 +321,7 @@ export default function RevealDesktopPage() {
               )}
             </motion.div>
 
-            {/* Spending chart */}
+            {/* Spending donut + category list */}
             <SpendingChart
               summary={summary}
               total={totalSpent}
@@ -333,7 +331,7 @@ export default function RevealDesktopPage() {
             />
           </div>
 
-          {/* Monthly trend full width */}
+          {/* Monthly trend -- full width below */}
           <div className="mt-5">
             <MonthlyTrend
               data={monthlyTotals}
@@ -345,10 +343,28 @@ export default function RevealDesktopPage() {
             />
           </div>
 
-          {/* Leaderboard full width */}
-          <div className="mt-5">
-            <Leaderboard entries={leaderboard} />
-          </div>
+          {/* Top classifier highlight */}
+          {leaderboard.length > 0 && (() => {
+            const topClassifier = [...leaderboard].sort((a, b) => b.total_xp - a.total_xp)[0]!
+            return (
+              <motion.div
+                className={`mt-5 flex items-center gap-3 px-4 py-3 ${ui.glassFlat}`}
+                initial={{ y: 8, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.15 }}
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gem/15 text-xs font-bold text-gem ring-2 ring-surface-900">
+                  {topClassifier.display_name.charAt(0).toUpperCase()}
+                </div>
+                <p className="text-sm text-surface-300">
+                  <span className="font-semibold text-surface-100">{topClassifier.display_name}</span>
+                  {' '}leads with{' '}
+                  <span className="font-bold tabular-nums text-gem">{topClassifier.total_xp.toLocaleString()} XP</span>
+                </p>
+                <span className="ml-auto text-lg">🏆</span>
+              </motion.div>
+            )
+          })()}
         </>
       )}
 

@@ -259,7 +259,7 @@ export default function CompactHomePanel() {
       </div>
 
       {/* --- Bottom: accordion sections --- */}
-      <div className="mt-auto shrink-0 border-t border-white/[0.06] pt-2" data-testid="accordion-sections">
+      <div className="mt-auto shrink-0 pt-2" data-testid="accordion-sections">
         {activityLines.length > 0 && (
           <div>
             <AccordionToggle label="Activity today" open={expanded === 'activity'} onToggle={() => toggle('activity')} />
@@ -304,7 +304,7 @@ export default function CompactHomePanel() {
                   className="overflow-hidden"
                 >
                   <div className="mx-1 mb-2">
-                    <Leaderboard entries={leaderboard} dailyActivity={dailyActivity} memberRecords={memberRecords} />
+                    <Leaderboard entries={leaderboard} dailyActivity={dailyActivity} hideTitle memberRecords={memberRecords} />
                   </div>
                 </motion.div>
               )}

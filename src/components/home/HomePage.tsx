@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
 import {
@@ -99,6 +99,33 @@ interface StatusRowProps {
   to: string
 }
 
+type AccordionKey = 'activity' | 'leaderboard' | 'invite' | null
+
+function AccordionToggle({ label, open, onToggle }: { label: string; open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex w-full items-center justify-between py-1.5 text-[11px] font-semibold uppercase tracking-wider text-surface-500 transition-colors hover:text-surface-300"
+    >
+      {label}
+      <svg
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={`transition-transform ${open ? 'rotate-180' : ''}`}
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+    </button>
+  )
+}
+
 /** Tappable row linking to a workflow that needs household attention. */
 function StatusRow({ badge, badgeTone = 'default', detail, label, to }: StatusRowProps) {
   return (
@@ -144,6 +171,9 @@ export default function HomePage() {
   const [householdInfo, setHouseholdInfo] = useState<{ name: string; invite_code: string } | null>(null)
   const [codeCopied, setCodeCopied] = useState(false)
   const [homeLoaded, setHomeLoaded] = useState(false)
+  const [expanded, setExpanded] = useState<AccordionKey>(null)
+
+  const toggle = (key: AccordionKey) => setExpanded(prev => (prev === key ? null : key))
 
   useEffect(() => {
     const householdId = profile?.household_id
@@ -252,20 +282,6 @@ export default function HomePage() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={copyInviteCode}
-              className="mt-3 flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-surface-950/50 px-3 py-2 text-left transition hover:bg-surface-900/60"
-            >
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500">Invite code</p>
-              <p className="flex-1 text-right font-mono text-xs font-bold tracking-[0.2em] text-surface-200">
-                {householdInfo.invite_code}
-              </p>
-              <span className="shrink-0 text-[11px] font-semibold text-duo-green">
-                {codeCopied ? 'Copied!' : 'Copy'}
-              </span>
-            </button>
-
             <Link to="/upload" className="mt-3 block">
               <motion.div
                 className="flex items-center justify-center gap-2 rounded-2xl border border-cyan-500/15 bg-surface-950/45 px-4 py-3 transition-all active:scale-[0.98] shadow-[0_18px_44px_-14px_rgba(28,176,246,0.45)] hover:shadow-[0_22px_50px_-12px_rgba(28,176,246,0.55)]"
@@ -313,36 +329,83 @@ export default function HomePage() {
       </motion.section>
 
       {activityLines.length > 0 && (
-        <motion.section
-          className="mt-4 space-y-2"
-          initial={{ y: 12, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.14 }}
-        >
-          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">Activity today</h2>
-          <div className={`space-y-2 p-3 ${ui.glassFlat}`}>
-            {activityLines.map((line) => (
-              <div key={line.userId} className="flex items-center gap-2.5">
-                <MemberAvatar name={line.displayName} size="sm" />
-                <p className="min-w-0 text-xs text-surface-300">
-                  <span className="font-semibold text-surface-100">{line.displayName}</span>{' '}
-                  {line.summary}
-                </p>
-              </div>
-            ))}
-          </div>
-        </motion.section>
+        <section className="mt-4">
+          <AccordionToggle label="Activity today" open={expanded === 'activity'} onToggle={() => toggle('activity')} />
+          <AnimatePresence initial={false}>
+            {expanded === 'activity' && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className={`mt-1 space-y-2 p-3 ${ui.glassFlat}`}>
+                  {activityLines.map((line) => (
+                    <div key={line.userId} className="flex items-center gap-2.5">
+                      <MemberAvatar name={line.displayName} size="sm" />
+                      <p className="min-w-0 text-xs text-surface-300">
+                        <span className="font-semibold text-surface-100">{line.displayName}</span>{' '}
+                        {line.summary}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
       )}
 
       {leaderboard.length > 1 && (
-        <motion.div
-          className="mt-4"
-          initial={{ y: 12, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.18 }}
-        >
-          <Leaderboard entries={leaderboard} dailyActivity={dailyActivity} memberRecords={memberRecords} />
-        </motion.div>
+        <section className="mt-3">
+          <AccordionToggle label="Leaderboard" open={expanded === 'leaderboard'} onToggle={() => toggle('leaderboard')} />
+          <AnimatePresence initial={false}>
+            {expanded === 'leaderboard' && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-1">
+                  <Leaderboard entries={leaderboard} dailyActivity={dailyActivity} hideTitle memberRecords={memberRecords} />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
+      )}
+
+      {householdInfo && (
+        <section className="mt-3">
+          <AccordionToggle label="Invite code" open={expanded === 'invite'} onToggle={() => toggle('invite')} />
+          <AnimatePresence initial={false}>
+            {expanded === 'invite' && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <button
+                  type="button"
+                  onClick={copyInviteCode}
+                  className="mt-1 flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-surface-950/50 px-3 py-2 text-left transition hover:bg-surface-900/60"
+                >
+                  <p className="flex-1 font-mono text-xs font-bold tracking-[0.2em] text-surface-200">
+                    {householdInfo.invite_code}
+                  </p>
+                  <span className="shrink-0 text-[11px] font-semibold text-duo-green">
+                    {codeCopied ? 'Copied!' : 'Copy'}
+                  </span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
       )}
 
       {profile && (

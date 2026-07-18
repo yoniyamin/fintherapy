@@ -1,3 +1,5 @@
+import type { FC } from 'react'
+
 export interface NavIconProps {
   size?: number
 }
