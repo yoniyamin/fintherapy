@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { DEFAULT_CATEGORIES, type CategoryDef } from '../../lib/constants'
 import { buildCategoryPickerLayout } from '../../lib/categoryPickerLayout'
 import CategoryIcon from '../common/CategoryIcon'
+import { useBottomSheetDrag } from '../../hooks/useBottomSheetDrag'
 
 interface CategoryPickerProps {
   open: boolean
@@ -76,6 +77,7 @@ function CategoryPickerInner({
   const selectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showScrollFade, setShowScrollFade] = useState(false)
   const [pressedId, setPressedId] = useState<string | null>(null)
+  const { sheetDragProps, handleZoneProps } = useBottomSheetDrag(onClose)
 
   const layout = useMemo(
     () =>
@@ -191,12 +193,15 @@ function CategoryPickerInner({
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        {...sheetDragProps}
       >
-        <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-white/20" />
+        <div {...handleZoneProps()}>
+          <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-white/20" />
 
-        <h3 id="category-picker-title" className="mb-2 shrink-0 text-center text-sm font-bold text-surface-50">
-          Pick a Category
-        </h3>
+          <h3 id="category-picker-title" className="mb-2 shrink-0 text-center text-sm font-bold text-surface-50">
+            Pick a Category
+          </h3>
+        </div>
 
         <div className="relative min-h-0 flex-1">
           <div

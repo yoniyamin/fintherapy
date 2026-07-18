@@ -64,6 +64,8 @@ export default function RevealPage() {
     getMonthStats,
   } = useTransactions(profile?.household_id)
   const [month, setMonth] = useState(getCurrentMonth())
+  const resolvedMonthHouseholdRef = useRef<string | null>(null)
+  const [monthResolutionTick, setMonthResolutionTick] = useState(0)
   /** null = all cards; non-null = filter to these last-4 values */
   const [accountFilter, setAccountFilter] = useState<string[] | null>(null)
   const [availableLast4s, setAvailableLast4s] = useState<string[]>([])
@@ -155,6 +157,31 @@ export default function RevealPage() {
   }, [showCompletionScreen])
 
   useEffect(() => {
+    const hid = profile?.household_id
+    if (!hid || resolvedMonthHouseholdRef.current === hid) return
+    let cancelled = false
+    void (async () => {
+      for (const opt of getMonthOptions()) {
+        const stats = await getMonthStats(opt.value)
+        if (cancelled) return
+        if (stats && Number(stats.classified_count) > 0) {
+          setMonth(opt.value)
+          break
+        }
+      }
+      if (!cancelled) {
+        resolvedMonthHouseholdRef.current = hid
+        setMonthResolutionTick((tick) => tick + 1)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.household_id, getMonthStats])
+
+  useEffect(() => {
+    const hid = profile?.household_id
+    if (hid != null && resolvedMonthHouseholdRef.current !== hid) return
     let cancelled = false
     fetchSummary(month, accountFilter?.length ? accountFilter : null, includeOwnTransfers)
     void getMonthStats(month).then((stats) => {
@@ -165,7 +192,7 @@ export default function RevealPage() {
     return () => {
       cancelled = true
     }
-  }, [month, fetchSummary, accountFilter, includeOwnTransfers, getMonthStats])
+  }, [month, monthResolutionTick, profile?.household_id, fetchSummary, accountFilter, includeOwnTransfers, getMonthStats])
 
   useEffect(() => {
     if (!profile?.household_id) return

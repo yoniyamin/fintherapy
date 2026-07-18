@@ -5,6 +5,7 @@ import type { Transaction } from '../../types/database'
 import type { CategoryDef } from '../../lib/constants'
 import { formatAccountLabel } from '../../lib/accountDisplay'
 import { formatCurrency } from '../../lib/formatCurrency'
+import { useBottomSheetDrag } from '../../hooks/useBottomSheetDrag'
 
 interface Props {
   category: string
@@ -38,6 +39,7 @@ export default function CategoryDetail({
   const [noteDraft, setNoteDraft] = useState('')
   const [reclassifying, setReclassifying] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
+  const { sheetDragProps, handleZoneProps } = useBottomSheetDrag(onClose)
 
   useEffect(() => {
     setLocalTxns(transactions)
@@ -97,8 +99,9 @@ export default function CategoryDetail({
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        {...sheetDragProps}
       >
-        <div className="shrink-0 px-4 pt-3">
+        <div {...handleZoneProps('shrink-0 px-4 pt-3')}>
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
 
           <div className="mb-4 flex items-center gap-3">

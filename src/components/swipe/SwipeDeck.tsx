@@ -32,8 +32,9 @@ import Confetti from '../common/Confetti'
 import EncouragementBurst from './EncouragementBurst'
 import ClassifyTutorial from './ClassifyTutorial'
 import DeckClearedScreen from './DeckClearedScreen'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
+import { useBottomSheetDrag, BOTTOM_SHEET_DISMISS_OFFSET_Y, BOTTOM_SHEET_DISMISS_VELOCITY_Y } from '../../hooks/useBottomSheetDrag'
 import { invalidateFlaggedCount } from '../../lib/flaggedCountInvalidate'
 import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import { XP_VALUES } from '../../lib/constants'
@@ -92,9 +93,6 @@ function defaultRecentHistoryRange(): { from: string; to: string } {
 }
 
 /** Pull-down dismiss thresholds for the Recent & revise bottom sheet (matches deck swipe feel). */
-const RECENT_SHEET_DISMISS_OFFSET_Y = 80
-const RECENT_SHEET_DISMISS_VELOCITY_Y = 480
-/** Cap rubber-band drag when pulling the sheet down from scroll-top inside the Recent list. */
 const RECENT_SHEET_MAX_SCROLL_PULL_PX = 440
 /** Require this much pull-from-top before a fast downward flick can dismiss (avoids fling-scroll false positives). */
 const RECENT_SHEET_VELOCITY_PULL_MIN = 28
@@ -386,6 +384,8 @@ export default function SwipeDeck() {
   const [accountTypes, setAccountTypes] = useState<Map<string, AccountType>>(new Map())
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [noteDraft, setNoteDraft] = useState('')
+  const closeNoteModal = useCallback(() => setNoteModalOpen(false), [])
+  const noteSheetDrag = useBottomSheetDrag(closeNoteModal)
   const [householdLast4List, setHouseholdLast4List] = useState<string[]>([])
   const [accountBreakdown, setAccountBreakdown] = useState<AccountClassifiedBreakdownRow[] | null>(null)
   const [breakdownLoading, setBreakdownLoading] = useState(false)
@@ -729,8 +729,8 @@ export default function SwipeDeck() {
 
       const pull = recentScrollPullRef.current
       if (
-        pull > RECENT_SHEET_DISMISS_OFFSET_Y ||
-        (pull >= RECENT_SHEET_VELOCITY_PULL_MIN && vx > RECENT_SHEET_DISMISS_VELOCITY_Y)
+        pull > BOTTOM_SHEET_DISMISS_OFFSET_Y ||
+        (pull >= RECENT_SHEET_VELOCITY_PULL_MIN && vx > BOTTOM_SHEET_DISMISS_VELOCITY_Y)
       ) {
         setRecentPanelOpen(false)
         applyPull(0)
@@ -1413,6 +1413,9 @@ export default function SwipeDeck() {
   }
 
   if (total === 0 && !showCardCaughtUp && !showMonthCaughtUp && !isDone) {
+    if (deckMode === 'pending' && !loading && flaggedQueueCount > 0) {
+      return <Navigate to="/classify/no-idea" replace />
+    }
     if (deckMode === 'no-idea') {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
@@ -1850,9 +1853,12 @@ export default function SwipeDeck() {
                   animate={{ y: 0 }}
                   exit={{ y: '100%' }}
                   transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                  {...noteSheetDrag.sheetDragProps}
                 >
-                  <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
-                  <h3 className="mb-3 text-center text-base font-bold text-surface-50">Note</h3>
+                  <div {...noteSheetDrag.handleZoneProps()}>
+                    <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+                    <h3 className="mb-3 text-center text-base font-bold text-surface-50">Note</h3>
+                  </div>
                   <p className="mb-2 text-center text-[11px] text-surface-500">
                     Saved on {store.activeGroup?.count === 1 ? 'this transaction' : 'all transactions in this stack'}.
                   </p>
@@ -1988,8 +1994,8 @@ export default function SwipeDeck() {
                   }}
                   onDragEnd={(_, info) => {
                     if (
-                      info.offset.y > RECENT_SHEET_DISMISS_OFFSET_Y ||
-                      info.velocity.y > RECENT_SHEET_DISMISS_VELOCITY_Y
+                      info.offset.y > BOTTOM_SHEET_DISMISS_OFFSET_Y ||
+                      info.velocity.y > BOTTOM_SHEET_DISMISS_VELOCITY_Y
                     ) {
                       setRecentPanelOpen(false)
                       return

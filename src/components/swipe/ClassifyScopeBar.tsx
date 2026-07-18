@@ -1,10 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion, useDragControls } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { formatAccountLabel } from '../../lib/accountDisplay'
 import { formatBillingMonthLabel } from '../../lib/classifyDeckScope'
-const SHEET_DISMISS_OFFSET_Y = 80
-const SHEET_DISMISS_VELOCITY_Y = 480
+import { useBottomSheetDrag } from '../../hooks/useBottomSheetDrag'
 
 export type ClassifyScopeBarProps = {
   accountAliases: Map<string, string>
@@ -107,7 +106,6 @@ export default function ClassifyScopeBar({
   stacksByMonth,
 }: ClassifyScopeBarProps) {
   const [sheetOpen, setSheetOpen] = useState(false)
-  const dragControls = useDragControls()
 
   const hasCardChoice = showAllCardsOption
   const hasMonthChoice = monthsInScope.length >= 2
@@ -120,6 +118,7 @@ export default function ClassifyScopeBar({
   const handleCloseSheet = useCallback(() => {
     setSheetOpen(false)
   }, [])
+  const { sheetDragProps, handleZoneProps } = useBottomSheetDrag(handleCloseSheet)
 
   const handlePickAccount = useCallback(
     (last4: string | null) => {
@@ -238,26 +237,9 @@ export default function ClassifyScopeBar({
                   animate={{ y: 0 }}
                   exit={{ y: '100%' }}
                   transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                  drag="y"
-                  dragControls={dragControls}
-                  dragListener={false}
-                  dragConstraints={{ top: 0, left: 0, right: 0, bottom: 0 }}
-                  dragElastic={0.22}
-                  dragMomentum={false}
-                  onDragEnd={(_, info) => {
-                    if (
-                      info.offset.y > SHEET_DISMISS_OFFSET_Y ||
-                      info.velocity.y > SHEET_DISMISS_VELOCITY_Y
-                    ) {
-                      handleCloseSheet()
-                    }
-                  }}
+                  {...sheetDragProps}
                 >
-                  <div
-                    className="mb-3 cursor-grab select-none active:cursor-grabbing"
-                    style={{ touchAction: 'none' }}
-                    onPointerDown={(e) => dragControls.start(e)}
-                  >
+                  <div {...handleZoneProps('mb-3')}>
                     <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" aria-hidden />
                     <h3
                       id="classify-scope-title"

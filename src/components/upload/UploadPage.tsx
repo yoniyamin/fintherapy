@@ -16,6 +16,7 @@ import {
 } from '../../lib/csvColumnMap'
 import Button from '../common/Button'
 import { ui } from '../../lib/uiClasses'
+import { useBottomSheetDrag } from '../../hooks/useBottomSheetDrag'
 
 /** Keep patterns aligned with supabase/migration_015_refund_detection_timing_and_positive_pairs.sql (pos_pairs). */
 const REFUND_DESCRIPTION_RE =
@@ -179,6 +180,8 @@ export default function UploadPage() {
   const [preview, setPreview] = useState<RawRow[]>([])
   const [forcedColumns, setForcedColumns] = useState<CsvColumnSelection | null>(null)
   const [columnMapOpen, setColumnMapOpen] = useState(false)
+  const closeColumnMap = useCallback(() => setColumnMapOpen(false), [])
+  const columnMapSheetDrag = useBottomSheetDrag(closeColumnMap)
   const [columnMapDraft, setColumnMapDraft] = useState<CsvColumnSelection>({
     merchant: '',
     amount: '',
@@ -797,19 +800,22 @@ export default function UploadPage() {
                   onClick={() => setColumnMapOpen(false)}
                 />
                 <motion.div
-                  className="fixed inset-x-0 bottom-0 z-[101] max-h-[85vh] overflow-y-auto rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 px-4 pt-3 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl pb-[max(2.5rem,env(safe-area-inset-bottom))]"
+                  className="fixed inset-x-0 bottom-0 z-[101] flex max-h-[85vh] flex-col rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
                   initial={{ y: '100%' }}
                   animate={{ y: 0 }}
                   exit={{ y: '100%' }}
                   transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                  onClick={(e) => e.stopPropagation()}
+                  {...columnMapSheetDrag.sheetDragProps}
                 >
-                  <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
-                  <h3 className="mb-1 text-center text-base font-bold text-surface-50">CSV columns</h3>
-                  <p className="mb-4 text-center text-[11px] text-surface-500">
-                    Pick which column is the description, the amount, and optionally the date. Works with
-                    English, Spanish, and Catalan bank exports.
-                  </p>
+                  <div {...columnMapSheetDrag.handleZoneProps('shrink-0 px-4 pt-3')}>
+                    <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+                    <h3 className="mb-1 text-center text-base font-bold text-surface-50">CSV columns</h3>
+                    <p className="mb-4 text-center text-[11px] text-surface-500">
+                      Pick which column is the description, the amount, and optionally the date. Works with
+                      English, Spanish, and Catalan bank exports.
+                    </p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-medium text-surface-400">Merchant / description</label>
@@ -893,6 +899,7 @@ export default function UploadPage() {
                     >
                       Apply mapping
                     </button>
+                  </div>
                   </div>
                 </motion.div>
               </>

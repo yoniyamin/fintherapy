@@ -7,6 +7,7 @@ import {
   cleanMerchantForSearch,
   type SearchResult,
 } from '../../lib/merchantSearch'
+import { useBottomSheetDrag } from '../../hooks/useBottomSheetDrag'
 
 interface MerchantSearchPanelProps {
   open: boolean
@@ -23,6 +24,7 @@ type SearchSnapshot = {
 
 export default function MerchantSearchPanel({ open, merchantRaw, onClose }: MerchantSearchPanelProps) {
   const [searchSnapshot, setSearchSnapshot] = useState<SearchSnapshot | null>(null)
+  const { sheetDragProps, handleZoneProps } = useBottomSheetDrag(onClose)
 
   useEffect(() => {
     if (!open || !merchantRaw) return
@@ -83,9 +85,10 @@ export default function MerchantSearchPanel({ open, merchantRaw, onClose }: Merc
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            {...sheetDragProps}
           >
             {/* Handle + close */}
-            <div className="flex items-center justify-between px-4 pt-3">
+            <div {...handleZoneProps('flex items-center justify-between px-4 pt-3')}>
               <div className="w-8" />
               <div className="mx-auto h-1 w-10 rounded-full bg-white/20" />
               <button

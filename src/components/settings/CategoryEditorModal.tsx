@@ -11,6 +11,7 @@ import {
 } from '../../lib/categoryIconAssets'
 import { formatCurrency } from '../../lib/formatCurrency'
 import CategoryIcon from '../common/CategoryIcon'
+import { useBottomSheetDrag } from '../../hooks/useBottomSheetDrag'
 import type { useCategoryConfig } from '../../hooks/useCategoryConfig'
 
 type CatConfig = ReturnType<typeof useCategoryConfig>
@@ -53,6 +54,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const { sheetDragProps, handleZoneProps } = useBottomSheetDrag(onClose)
 
   useEffect(() => {
     if (!open) {
@@ -187,8 +189,9 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            {...sheetDragProps}
           >
-            <div className="shrink-0 px-4 pt-3">
+            <div {...handleZoneProps('shrink-0 px-4 pt-3')}>
               <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-base font-bold text-surface-50">
