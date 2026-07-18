@@ -112,12 +112,14 @@ describe('RevealPage', () => {
     })
   })
 
-  it('fetches summary on mount', () => {
+  it('fetches summary on mount', async () => {
     // Arrange & Act
     renderReveal()
 
-    // Assert
-    expect(mockFetchSummary).toHaveBeenCalled()
+    // Assert — fetch waits until default month is resolved from classification stats
+    await waitFor(() => {
+      expect(mockFetchSummary).toHaveBeenCalled()
+    })
   })
 
   it('shows celebration screen when all transactions are classified', async () => {
