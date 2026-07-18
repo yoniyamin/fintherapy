@@ -33,6 +33,7 @@ function CalendarTooltip({ tooltip }: { tooltip: { date: string; amount: number;
 interface Props {
   dailyTotals: DailyTotal[]
   months: string[]
+  layout?: 'stacked' | 'inline'
 }
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -67,7 +68,7 @@ function getIntensityClass(amount: number, max: number): string {
   return 'bg-emerald-300/70'
 }
 
-export default function CalendarHeatmap({ dailyTotals, months }: Props) {
+export default function CalendarHeatmap({ dailyTotals, months, layout = 'stacked' }: Props) {
   const [tooltip, setTooltip] = useState<{ date: string; amount: number; count: number; left: number; top: number } | null>(null)
 
   const dailyMap = useMemo(() => {
@@ -98,6 +99,49 @@ export default function CalendarHeatmap({ dailyTotals, months }: Props) {
   const cellSize = 'h-[14px] w-[14px]'
   const cellGap = 'gap-[3px]'
 
+  const renderCell = (date: Date | null, di: number) => {
+    if (!date) return <div key={di} className={cellSize} />
+
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    const day = dailyMap.get(dateStr)
+    const amount = day?.amount ?? 0
+    const count = day?.count ?? 0
+
+    return (
+      <div
+        key={di}
+        className={`${cellSize} cursor-pointer rounded-[3px] transition-colors ${getIntensityClass(amount, maxAmount)}`}
+        onMouseEnter={(e) => {
+          const el = e.currentTarget as HTMLElement
+          const { left, top } = computeTooltipPos(el)
+          setTooltip({ date: dateStr, amount, count, left, top })
+        }}
+        onMouseLeave={() => setTooltip(null)}
+        title={`${dateStr}: ${formatCurrency(amount, false)} (${count} txns)`}
+      />
+    )
+  }
+
+  const legendRow = (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-surface-500">Less</span>
+      <div className="flex gap-[2px]">
+        {['bg-surface-800/40', 'bg-emerald-900/50', 'bg-emerald-700/50', 'bg-emerald-500/50', 'bg-emerald-400/60', 'bg-emerald-300/70'].map((cls, i) => (
+          <div key={i} className={`h-[10px] w-[10px] rounded-[2px] ${cls}`} />
+        ))}
+      </div>
+      <span className="text-[10px] text-surface-500">More</span>
+    </div>
+  )
+
+  const dayHeaderRow = (
+    <div className={`flex ${cellGap}`}>
+      {DAY_LABELS.map((d, i) => (
+        <span key={i} className={`${cellSize} text-center text-[9px] leading-[14px] text-surface-600`}>{d}</span>
+      ))}
+    </div>
+  )
+
   return (
     <motion.div
       className={ui.chartCard}
@@ -108,78 +152,67 @@ export default function CalendarHeatmap({ dailyTotals, months }: Props) {
         Spending Calendar
       </p>
 
-      <div className="mt-3 overflow-x-auto">
-        {/* Day header row */}
-        <div className="flex items-center">
-          <div className={`shrink-0 ${monthLabelW}`} />
-          <div className={`flex ${cellGap}`}>
-            {DAY_LABELS.map((d, i) => (
-              <span key={i} className={`${cellSize} text-center text-[9px] leading-[14px] text-surface-600`}>{d}</span>
-            ))}
-          </div>
-        </div>
-
-        {/* Month rows */}
-        <div className="mt-1.5 space-y-3">
-          {sortedMonths.map(({ year, month, key }) => {
-            const weeks = getWeeksForMonth(year, month)
-            return (
-              <div key={key} className="space-y-[3px]">
-                {weeks.map((week, wi) => (
-                  <div key={wi} className="flex items-center">
-                    {/* Month label on the first week row only */}
-                    <div className={`shrink-0 ${monthLabelW}`}>
-                      {wi === 0 && (
-                        <span className="text-[10px] font-medium text-surface-400">
-                          {formatMonthLabel(year, month)}
-                        </span>
-                      )}
-                    </div>
-                    <div className={`flex ${cellGap}`}>
-                      {week.map((date, di) => {
-                        if (!date) {
-                          return <div key={di} className={cellSize} />
-                        }
-
-                        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-                        const day = dailyMap.get(dateStr)
-                        const amount = day?.amount ?? 0
-                        const count = day?.count ?? 0
-
-                        return (
-                          <div
-                            key={di}
-                            className={`${cellSize} cursor-pointer rounded-[3px] transition-colors ${getIntensityClass(amount, maxAmount)}`}
-                          onMouseEnter={(e) => {
-                            const el = e.currentTarget as HTMLElement
-                            const { left, top } = computeTooltipPos(el)
-                            setTooltip({ date: dateStr, amount, count, left, top })
-                          }}
-                          onMouseLeave={() => setTooltip(null)}
-                            title={`${dateStr}: ${formatCurrency(amount, false)} (${count} txns)`}
-                          />
-                        )
-                      })}
-                    </div>
+      {layout === 'inline' ? (
+        <div className="mt-3">
+          <div className="flex flex-wrap gap-6">
+            {sortedMonths.map(({ year, month, key }) => {
+              const weeks = getWeeksForMonth(year, month)
+              return (
+                <div key={key} className="flex flex-col">
+                  <p className="mb-1.5 text-[10px] font-medium text-surface-400">
+                    {formatMonthLabel(year, month)}
+                  </p>
+                  {dayHeaderRow}
+                  <div className="mt-1 space-y-[3px]">
+                    {weeks.map((week, wi) => (
+                      <div key={wi} className={`flex ${cellGap}`}>
+                        {week.map(renderCell)}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Legend */}
-        <div className="mt-3 flex items-center gap-2">
-          <div className={`shrink-0 ${monthLabelW}`} />
-          <span className="text-[10px] text-surface-500">Less</span>
-          <div className="flex gap-[2px]">
-            {['bg-surface-800/40', 'bg-emerald-900/50', 'bg-emerald-700/50', 'bg-emerald-500/50', 'bg-emerald-400/60', 'bg-emerald-300/70'].map((cls, i) => (
-              <div key={i} className={`h-[10px] w-[10px] rounded-[2px] ${cls}`} />
-            ))}
+                </div>
+              )
+            })}
           </div>
-          <span className="text-[10px] text-surface-500">More</span>
+          <div className="mt-3">{legendRow}</div>
         </div>
-      </div>
+      ) : (
+        <div className="mt-3 overflow-x-auto">
+          <div className="flex items-center">
+            <div className={`shrink-0 ${monthLabelW}`} />
+            {dayHeaderRow}
+          </div>
+
+          <div className="mt-1.5 space-y-3">
+            {sortedMonths.map(({ year, month, key }) => {
+              const weeks = getWeeksForMonth(year, month)
+              return (
+                <div key={key} className="space-y-[3px]">
+                  {weeks.map((week, wi) => (
+                    <div key={wi} className="flex items-center">
+                      <div className={`shrink-0 ${monthLabelW}`}>
+                        {wi === 0 && (
+                          <span className="text-[10px] font-medium text-surface-400">
+                            {formatMonthLabel(year, month)}
+                          </span>
+                        )}
+                      </div>
+                      <div className={`flex ${cellGap}`}>
+                        {week.map(renderCell)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <div className={`shrink-0 ${monthLabelW}`} />
+            {legendRow}
+          </div>
+        </div>
+      )}
 
       {pattern && (
         <div className="mt-3 rounded-xl border border-white/[0.06] bg-surface-950/40 px-3 py-2.5">

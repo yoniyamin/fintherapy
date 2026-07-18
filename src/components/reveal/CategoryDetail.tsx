@@ -86,7 +86,7 @@ export default function CategoryDetail({
   return createPortal(
     <>
       <motion.div
-        className="fixed inset-0 z-[60] bg-black/55 backdrop-blur-sm"
+        className="fixed inset-0 left-[var(--shell-nav-offset)] z-[60] bg-black/55 backdrop-blur-sm"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -94,7 +94,7 @@ export default function CategoryDetail({
       />
 
       <motion.div
-        className="fixed inset-x-0 bottom-0 z-[70] flex max-h-[85vh] flex-col rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+        className="fixed inset-x-0 left-[var(--shell-nav-offset)] bottom-0 z-[70] flex max-h-[85vh] flex-col rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}

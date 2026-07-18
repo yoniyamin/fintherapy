@@ -24,4 +24,6 @@ export const ui = {
   dangerBanner: 'rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-medium text-danger',
   chartCard: 'rounded-[24px] border border-white/[0.07] bg-white/[0.04] p-4 backdrop-blur-md shadow-[0_16px_40px_-24px_rgba(0,0,0,0.4)]',
   sheet: 'border-t border-white/10 bg-surface-950/95 backdrop-blur-xl',
+  pageDesktop: 'mx-auto w-full max-w-7xl px-6 py-6',
+  gridAdaptive: 'grid grid-cols-[repeat(auto-fit,minmax(480px,1fr))] gap-5 items-start',
 } as const

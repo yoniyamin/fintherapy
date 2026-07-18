@@ -20,7 +20,7 @@ export function AccountCardEditModal({ draft, onChange, onClose, onSave }: Props
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 left-[var(--shell-nav-offset)] z-[10000] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="account-card-edit-title"

@@ -1,21 +1,21 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
-import AppShell from '../components/layout/AppShell'
+import AnalysisRoute from '../components/analysis/AnalysisRoute'
 import AuthGuard from '../components/auth/AuthGuard'
-import LoginPage from '../components/auth/LoginPage'
-import SignUpPage from '../components/auth/SignUpPage'
 import ForgotPasswordPage from '../components/auth/ForgotPasswordPage'
-import ResetPasswordPage from '../components/auth/ResetPasswordPage'
 import HouseholdSetupPage from '../components/auth/HouseholdSetupPage'
-import HomePage from '../components/home/HomePage'
-import UploadPage from '../components/upload/UploadPage'
-import SwipeDeck from '../components/swipe/SwipeDeck'
-import RevealPage from '../components/reveal/RevealPage'
-import BetsPage from '../components/bets/BetsPage'
-import AnalysisPage from '../components/analysis/AnalysisPage'
-import SettingsPage from '../components/settings/SettingsPage'
+import LoginPage from '../components/auth/LoginPage'
+import ResetPasswordPage from '../components/auth/ResetPasswordPage'
+import SignUpPage from '../components/auth/SignUpPage'
+import BetsRoute from '../components/bets/BetsRoute'
 import AnimationTestPage from '../components/dev/AnimationTestPage'
 import CategoryPickerTestPage from '../components/dev/CategoryPickerTestPage'
 import DevIndexPage from '../components/dev/DevIndexPage'
+import AppShell from '../components/layout/AppShell'
+import DesktopAwareHome from '../components/layout/DesktopAwareHome'
+import RevealRoute from '../components/reveal/RevealRoute'
+import SettingsPage from '../components/settings/SettingsPage'
+import SwipeDeck from '../components/swipe/SwipeDeck'
+import UploadPage from '../components/upload/UploadPage'
 
 export const router = createBrowserRouter([
   {
@@ -26,13 +26,13 @@ export const router = createBrowserRouter([
       </AuthGuard>
     ),
     children: [
-      { index: true, element: <HomePage /> },
+      { index: true, element: <DesktopAwareHome /> },
       { path: 'upload', element: <UploadPage /> },
       { path: 'classify/no-idea', element: <SwipeDeck /> },
       { path: 'classify', element: <SwipeDeck /> },
-      { path: 'reveal', element: <RevealPage /> },
-      { path: 'analysis', element: <AnalysisPage /> },
-      { path: 'bets', element: <BetsPage /> },
+      { path: 'reveal', element: <RevealRoute /> },
+      { path: 'analysis', element: <AnalysisRoute /> },
+      { path: 'bets', element: <BetsRoute /> },
       { path: 'settings', element: <SettingsPage /> },
       ...(import.meta.env.DEV
         ? [{ path: 'dev/category-picker', element: <CategoryPickerTestPage /> }]

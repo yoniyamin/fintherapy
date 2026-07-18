@@ -76,6 +76,13 @@ body {
 :root {
   --pwa-tab-safe-bottom: env(safe-area-inset-bottom, 0px);
   --shell-tab-clearance: calc(3.5rem + var(--pwa-tab-safe-bottom));
+  --shell-nav-offset: 0px;
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --shell-nav-offset: 392px;
+  }
 }
 
 @keyframes blob-drift {

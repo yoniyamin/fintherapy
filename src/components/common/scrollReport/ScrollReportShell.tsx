@@ -37,7 +37,7 @@ export default function ScrollReportShell({
 
   const shell = (
     <motion.div
-      className="fixed inset-0 z-[250] flex flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)]"
+      className="fixed inset-0 left-[var(--shell-nav-offset)] z-[250] flex flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)]"
       style={{ background: 'linear-gradient(145deg, #0a0f1a 0%, #0f172a 40%, #0c1220 100%)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

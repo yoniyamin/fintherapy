@@ -1,254 +1,19 @@
-import { useEffect, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import confetti from 'canvas-confetti'
-import { useAuth } from '../../hooks/useAuth'
-import { useBets } from '../../hooks/useBets'
-import { useReveal } from '../../hooks/useReveal'
-import { useTransactions, type MonthStats } from '../../hooks/useTransactions'
-import { OWN_TRANSFERS_CATEGORY_ID, type CategoryDef } from '../../lib/constants'
-import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import Button from '../common/Button'
 import { SkeletonCard } from '../common/Skeleton'
 import { ui } from '../../lib/uiClasses'
-
-function getCurrentMonth(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-function formatMonthLabel(value: string): string {
-  const [year, month] = value.split('-')
-  const date = new Date(Number(year), Number(month) - 1)
-  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-}
-
-function getMonthOptions(): { value: string; label: string }[] {
-  const options: { value: string; label: string }[] = []
-  const now = new Date()
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i)
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    options.push({ value, label: formatMonthLabel(value) })
-  }
-  return options
-}
-
-/**
- * Deterministic pseudo-random shuffle seeded by a string.
- * All household members get the same result for the same seed.
- */
-function seededShuffle<T>(arr: T[], seed: string): T[] {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) {
-    h = ((h << 5) - h + seed.charCodeAt(i)) | 0
-  }
-  const next = () => {
-    h = (h * 1664525 + 1013904223) | 0
-    return (h >>> 0) / 4294967296
-  }
-  const copy = [...arr]
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(next() * (i + 1))
-    ;[copy[i], copy[j]] = [copy[j], copy[i]]
-  }
-  return copy
-}
-
-const BET_CATEGORY_COUNT = 4
-
-function pickBetCategories(
-  categories: CategoryDef[],
-  householdId: string,
-  month: string,
-): CategoryDef[] {
-  const seed = `${householdId}:${month}`
-  const shuffled = seededShuffle(categories, seed)
-  return shuffled.slice(0, BET_CATEGORY_COUNT)
-}
-
-function fireConfetti() {
-  const duration = 1500
-  const end = Date.now() + duration
-
-  const frame = () => {
-    confetti({
-      particleCount: 3,
-      angle: 60,
-      spread: 55,
-      origin: { x: 0, y: 0.7 },
-      colors: ['#58cc02', '#1cb0f6', '#ff9600', '#ff4b4b', '#ce82ff'],
-    })
-    confetti({
-      particleCount: 3,
-      angle: 120,
-      spread: 55,
-      origin: { x: 1, y: 0.7 },
-      colors: ['#58cc02', '#1cb0f6', '#ff9600', '#ff4b4b', '#ce82ff'],
-    })
-    if (Date.now() < end) requestAnimationFrame(frame)
-  }
-
-  confetti({
-    particleCount: 80,
-    spread: 100,
-    origin: { y: 0.6 },
-    colors: ['#58cc02', '#1cb0f6', '#ff9600', '#ff4b4b', '#ce82ff'],
-  })
-  frame()
-}
-
-type Tab = 'predict' | 'results'
+import { BET_CATEGORY_COUNT, formatMonthLabel } from './betsHelpers'
+import { MultiMemberResult, SingleUserResult } from './betsResultComponents'
+import { useBetsData } from './useBetsData'
 
 export default function BetsPage() {
-  const { profile, user } = useAuth()
   const {
-    myBets, householdBets, householdBetStatus,
-    loading, fetchMyBets, fetchHouseholdBets, fetchHouseholdBetStatus, submitBets,
-  } = useBets(profile?.household_id)
-  const { summary, fetchSummary } = useReveal(profile?.household_id)
-  const { getMonthStats } = useTransactions(profile?.household_id)
-  const { categories: CATEGORIES } = useCategoryConfig(profile?.household_id)
-  const [month, setMonth] = useState(getCurrentMonth())
-  const [userTab, setUserTab] = useState<Tab>('predict')
-  const [draftAmounts, setDraftAmounts] = useState<Record<string, string>>({})
-  const [submitting, setSubmitting] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const [monthStats, setMonthStats] = useState<MonthStats | null>(null)
-  const [statsLoadedMonth, setStatsLoadedMonth] = useState<string | null>(null)
-  const monthOptions = getMonthOptions()
-
-  const bettableCategories = CATEGORIES.filter((c) => c.id !== OWN_TRANSFERS_CATEGORY_ID)
-  const allClassified = monthStats !== null && monthStats.total_count > 0 && monthStats.pending_count === 0
-  const statsLoading = statsLoadedMonth !== month
-  const tab = allClassified ? 'results' : userTab
-  const isMultiMember = householdBetStatus.length > 1
-
-  const persistedAmounts = useMemo(() => {
-    const existing: Record<string, string> = {}
-    myBets.forEach((b) => {
-      existing[b.category] = String(b.predicted_amount)
-    })
-    return existing
-  }, [myBets])
-
-  const amounts = useMemo(
-    () => ({ ...persistedAmounts, ...draftAmounts }),
-    [persistedAmounts, draftAmounts],
-  )
-
-  const selectedCategories = useMemo(() => {
-    if (!profile?.household_id || bettableCategories.length === 0) return []
-    return pickBetCategories(bettableCategories, profile.household_id, month)
-  }, [profile, bettableCategories, month])
-
-  const handleMonthChange = (value: string) => {
-    setMonth(value)
-    setDraftAmounts({})
-    setStatsLoadedMonth(null)
-  }
-
-  useEffect(() => {
-    let cancelled = false
-    fetchMyBets(month)
-    fetchSummary(month)
-    fetchHouseholdBetStatus(month)
-    void getMonthStats(month).then((stats) => {
-      if (cancelled) return
-      setMonthStats(stats)
-      setStatsLoadedMonth(month)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [month, fetchMyBets, fetchSummary, fetchHouseholdBetStatus, getMonthStats])
-
-  useEffect(() => {
-    if (allClassified) {
-      fetchHouseholdBets(month)
-    }
-  }, [allClassified, fetchHouseholdBets, month])
-
-  const handleSubmit = async () => {
-    setSubmitting(true)
-    setSuccess(false)
-    setSubmitError(null)
-    const bets = selectedCategories
-      .filter((cat) => amounts[cat.id] && Number(amounts[cat.id]) > 0)
-      .map((cat) => ({
-        category: cat.id,
-        predicted_amount: Number(amounts[cat.id]),
-      }))
-
-    const { error } = await submitBets(month, bets)
-    setSubmitting(false)
-    if (error) {
-      setSubmitError(error.message ?? 'Failed to place bets')
-      return
-    }
-    fetchHouseholdBetStatus(month)
-    setSuccess(true)
-    fireConfetti()
-    setTimeout(() => setSuccess(false), 3000)
-  }
-
-  const hasBets = myBets.length > 0
-  const actualLookup = Object.fromEntries(summary.map((s) => [s.category, Number(s.total_amount)]))
-
-  // Build per-user bet lookups for the results view
-  const householdBetsByUser = useMemo(() => {
-    const map = new Map<string, { displayName: string; bets: Map<string, number> }>()
-    for (const hb of householdBets) {
-      if (!map.has(hb.user_id)) {
-        map.set(hb.user_id, { displayName: hb.display_name, bets: new Map() })
-      }
-      map.get(hb.user_id)!.bets.set(hb.category, hb.predicted_amount)
-    }
-    return map
-  }, [householdBets])
-
-  const betUserIds = useMemo(() => [...householdBetsByUser.keys()], [householdBetsByUser])
-
-  const categoryWinners = useMemo(() => {
-    if (!allClassified || betUserIds.length < 2) return new Map<string, string>()
-    const winners = new Map<string, string>()
-    for (const cat of selectedCategories) {
-      const actual = actualLookup[cat.id] ?? 0
-      if (actual === 0) continue
-      let bestUserId = ''
-      let bestDiff = Infinity
-      for (const uid of betUserIds) {
-        const predicted = householdBetsByUser.get(uid)?.bets.get(cat.id)
-        if (predicted == null) continue
-        const diff = Math.abs(actual - predicted)
-        if (diff < bestDiff) {
-          bestDiff = diff
-          bestUserId = uid
-        }
-      }
-      if (bestUserId) winners.set(cat.id, bestUserId)
-    }
-    return winners
-  }, [allClassified, betUserIds, selectedCategories, actualLookup, householdBetsByUser])
-
-  const overallWinner = useMemo(() => {
-    if (categoryWinners.size === 0) return null
-    const counts = new Map<string, number>()
-    for (const uid of categoryWinners.values()) {
-      counts.set(uid, (counts.get(uid) ?? 0) + 1)
-    }
-    let bestUid = ''
-    let bestCount = 0
-    for (const [uid, count] of counts) {
-      if (count > bestCount) {
-        bestCount = count
-        bestUid = uid
-      }
-    }
-    return bestUid ? { userId: bestUid, displayName: householdBetsByUser.get(bestUid)?.displayName ?? '', wins: bestCount } : null
-  }, [categoryWinners, householdBetsByUser])
-
-  const isCurrentUser = (uid: string) => uid === user?.id
+    month, handleMonthChange, monthOptions, loading, statsLoading, allClassified,
+    tab, setUserTab, isMultiMember, householdBetStatus, selectedCategories,
+    amounts, setDraftAmounts, submitting, success, submitError, hasBets,
+    handleSubmit, actualLookup, householdBetsByUser, betUserIds, categoryWinners,
+    overallWinner, isCurrentUser,
+  } = useBetsData()
 
   return (
     <div className={`${ui.screen} ${ui.pageNoBottomPad}`}>
@@ -275,7 +40,7 @@ export default function BetsPage() {
         </select>
       </div>
 
-      {/* Household bet status — who has placed bets (before reveal) */}
+      {/* Household bet status */}
       {isMultiMember && !allClassified && !loading && !statsLoading && (
         <motion.div
           className={`${ui.glassFlat} mt-4 px-4 py-3`}
@@ -336,7 +101,7 @@ export default function BetsPage() {
 
       {/* Tabs */}
       <div className={`${ui.tabShell} mt-4`}>
-        {(['predict', 'results'] as Tab[]).map((t) => (
+        {(['predict', 'results'] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -356,7 +121,6 @@ export default function BetsPage() {
           <SkeletonCard rows={3} />
         </div>
       ) : tab === 'predict' && !allClassified ? (
-        /* Bet amounts for the 4 randomly chosen categories */
         <div className="mt-6 space-y-2">
           <motion.div
             className={`${ui.glassFlat} px-3.5 py-3`}
@@ -422,9 +186,7 @@ export default function BetsPage() {
           </Button>
         </div>
       ) : (
-        /* Results tab */
         <div className="mt-6 space-y-3">
-          {/* Overall winner banner (multi-member only) */}
           <AnimatePresence>
             {allClassified && isMultiMember && overallWinner && betUserIds.length > 1 && (
               <motion.div
@@ -487,106 +249,6 @@ export default function BetsPage() {
           })}
         </div>
       )}
-    </div>
-  )
-}
-
-function SingleUserResult({ predicted, actual }: { predicted: number; actual: number }) {
-  const diff = actual - predicted
-  const hasPrediction = predicted > 0
-  return (
-    <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
-      <div>
-        <p className="text-[10px] text-surface-500">Predicted</p>
-        <p className="mt-0.5 text-sm font-bold tabular-nums text-gem">
-          {hasPrediction ? `€${predicted.toFixed(0)}` : '—'}
-        </p>
-      </div>
-      <div>
-        <p className="text-[10px] text-surface-500">Actual</p>
-        <p className="mt-0.5 text-sm font-bold tabular-nums text-ice">
-          {actual > 0 ? `€${actual.toFixed(0)}` : '—'}
-        </p>
-      </div>
-      <div>
-        <p className="text-[10px] text-surface-500">Diff</p>
-        <p className={`mt-0.5 text-sm font-bold tabular-nums ${
-          !hasPrediction || actual === 0 ? 'text-surface-500'
-            : Math.abs(diff) < predicted * 0.1 ? 'text-duo-green'
-            : diff > 0 ? 'text-danger' : 'text-flame'
-        }`}>
-          {hasPrediction && actual > 0
-            ? `${diff > 0 ? '+' : ''}€${diff.toFixed(0)}`
-            : '—'}
-        </p>
-      </div>
-    </div>
-  )
-}
-
-function MultiMemberResult({
-  betUserIds,
-  householdBetsByUser,
-  categoryId,
-  actual,
-  winnerId,
-  isCurrentUser,
-}: {
-  betUserIds: string[]
-  householdBetsByUser: Map<string, { displayName: string; bets: Map<string, number> }>
-  categoryId: string
-  actual: number
-  winnerId: string | undefined
-  isCurrentUser: (uid: string) => boolean
-}) {
-  return (
-    <div className="mt-2.5 space-y-1.5">
-      <div className="flex items-center justify-between rounded-lg bg-surface-900/50 px-2.5 py-1.5">
-        <span className="text-[11px] font-semibold text-surface-400">Actual</span>
-        <span className="text-sm font-bold tabular-nums text-ice">
-          {actual > 0 ? `€${actual.toFixed(0)}` : '—'}
-        </span>
-      </div>
-
-      {betUserIds.map((uid) => {
-        const userData = householdBetsByUser.get(uid)
-        if (!userData) return null
-        const predicted = userData.bets.get(categoryId)
-        const hasPrediction = predicted != null && predicted > 0
-        const diff = hasPrediction && actual > 0 ? actual - predicted : null
-        const isWinner = winnerId === uid
-
-        return (
-          <div
-            key={uid}
-            className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${
-              isWinner ? 'bg-duo-green/8 ring-1 ring-duo-green/20' : 'bg-white/[0.02]'
-            }`}
-          >
-            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-800 text-[10px] font-bold text-surface-300">
-              {userData.displayName.charAt(0).toUpperCase()}
-            </div>
-            <span className="flex-1 text-[11px] text-surface-300">
-              {userData.displayName}
-              {isCurrentUser(uid) && (
-                <span className="ml-1 text-[9px] text-surface-500">(you)</span>
-              )}
-            </span>
-            <span className={`text-xs font-semibold tabular-nums ${hasPrediction ? 'text-gem' : 'text-surface-600'}`}>
-              {hasPrediction ? `€${predicted.toFixed(0)}` : '—'}
-            </span>
-            {diff !== null && predicted != null && (
-              <span className={`min-w-[3.5rem] text-right text-[11px] font-semibold tabular-nums ${
-                Math.abs(diff) < predicted * 0.1 ? 'text-duo-green'
-                  : diff > 0 ? 'text-danger' : 'text-flame'
-              }`}>
-                {diff > 0 ? '+' : ''}€{diff.toFixed(0)}
-              </span>
-            )}
-            {isWinner && <span className="text-xs">🏆</span>}
-          </div>
-        )
-      })}
     </div>
   )
 }

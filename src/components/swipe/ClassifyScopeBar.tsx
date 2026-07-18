@@ -222,7 +222,7 @@ export default function ClassifyScopeBar({
             {sheetOpen && (
               <>
                 <motion.div
-                  className="fixed inset-0 z-[105] bg-black/55 backdrop-blur-sm"
+                  className="fixed inset-0 left-[var(--shell-nav-offset)] z-[105] bg-black/55 backdrop-blur-sm"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -232,7 +232,7 @@ export default function ClassifyScopeBar({
                   role="dialog"
                   aria-modal="true"
                   aria-labelledby="classify-scope-title"
-                  className="fixed inset-x-0 bottom-0 z-[106] max-h-[70vh] overflow-y-auto rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+                  className="fixed inset-x-0 left-[var(--shell-nav-offset)] bottom-0 z-[106] max-h-[70vh] overflow-y-auto rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
                   initial={{ y: '100%' }}
                   animate={{ y: 0 }}
                   exit={{ y: '100%' }}

@@ -1,15 +1,11 @@
 import { useEffect, useRef, useState, type FC } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
-import OrganicBackdrop from './OrganicBackdrop'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useIsDesktop } from '../../hooks/useIsDesktop'
+import CompactHomePanel from './CompactHomePanel'
 import InstallPrompt from './InstallPrompt'
-
-const navItems = [
-  { to: '/', label: 'Home', icon: HomeIcon, activeIcon: HomeIconFilled },
-  { to: '/classify', label: 'Classify', icon: SwipeIcon, activeIcon: SwipeIconFilled },
-  { to: '/reveal', label: 'Reveal', icon: RevealIcon, activeIcon: RevealIconFilled },
-  { to: '/analysis', label: 'Analysis', icon: AnalysisIcon, activeIcon: AnalysisIconFilled },
-  { to: '/bets', label: 'Bets', icon: BetsIcon, activeIcon: BetsIconFilled },
-]
+import { allNavItems } from './navItems'
+import NavRail from './NavRail'
+import OrganicBackdrop from './OrganicBackdrop'
 
 function TabBar() {
   return (
@@ -18,11 +14,11 @@ function TabBar() {
       style={{ paddingBottom: 'var(--pwa-tab-safe-bottom)' }}
     >
       <nav className="flex" aria-label="Main navigation">
-        {navItems.map((item) => (
+        {allNavItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
-            end={item.to === '/classify' ? false : undefined}
+            end={item.end ?? undefined}
             className={({ isActive }) =>
               `flex flex-1 flex-col items-center px-0.5 pb-1 pt-2.5 text-[10px] font-semibold leading-tight transition-colors ${
                 isActive ? 'text-duo-green' : 'text-surface-500 hover:text-surface-300'
@@ -110,113 +106,50 @@ const DebugOverlay: FC = () => {
   )
 }
 
+function DesktopContentArea() {
+  const { pathname } = useLocation()
+  const scrollRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo?.(0, 0)
+  }, [pathname])
+
+  return (
+    <main
+      ref={scrollRef}
+      className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4"
+    >
+      <Outlet />
+    </main>
+  )
+}
+
 export default function AppShell() {
+  const isDesktop = useIsDesktop()
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-surface-900 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
       <OrganicBackdrop />
       <InstallPrompt />
       {SHOW_DEBUG_OVERLAY && <DebugOverlay />}
-      <main className="relative z-10 min-h-0 flex-1 overflow-y-auto pb-4">
-        <Outlet />
-      </main>
-      <TabBar />
+
+      {isDesktop ? (
+        <div className="relative z-10 flex min-h-0 flex-1">
+          <aside className="w-[320px] shrink-0 overflow-y-auto overscroll-contain border-r border-white/[0.06]">
+            <CompactHomePanel />
+          </aside>
+          <NavRail />
+          <DesktopContentArea />
+        </div>
+      ) : (
+        <>
+          <main className="relative z-10 min-h-0 flex-1 overflow-y-auto pb-4">
+            <Outlet />
+          </main>
+          <TabBar />
+        </>
+      )}
     </div>
   )
 }
 
-function HomeIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  )
-}
-
-function HomeIconFilled() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-    </svg>
-  )
-}
-
-function SwipeIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2" />
-      <path d="M8 21h8" />
-      <path d="M12 17v4" />
-    </svg>
-  )
-}
-
-function SwipeIconFilled() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2" />
-      <path d="M8 21h8" fill="none" />
-      <path d="M12 17v4" />
-    </svg>
-  )
-}
-
-function RevealIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 20V10" />
-      <path d="M12 20V4" />
-      <path d="M6 20v-6" />
-    </svg>
-  )
-}
-
-function RevealIconFilled() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 20V10" />
-      <path d="M12 20V4" />
-      <path d="M6 20v-6" />
-    </svg>
-  )
-}
-
-function AnalysisIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 21H4a1 1 0 0 1-1-1V3" />
-      <path d="M7 17l4-4 4 4 6-6" />
-    </svg>
-  )
-}
-
-function AnalysisIconFilled() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 21H4a1 1 0 0 1-1-1V3" />
-      <path d="M7 17l4-4 4 4 6-6" />
-      <circle cx="7" cy="17" r="1.5" fill="currentColor" />
-      <circle cx="11" cy="13" r="1.5" fill="currentColor" />
-      <circle cx="15" cy="17" r="1.5" fill="currentColor" />
-      <circle cx="21" cy="11" r="1.5" fill="currentColor" />
-    </svg>
-  )
-}
-
-function BetsIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 6v6l4 2" />
-    </svg>
-  )
-}
-
-function BetsIconFilled() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 6v6l4 2" stroke="var(--color-surface-900)" fill="none" />
-    </svg>
-  )
-}

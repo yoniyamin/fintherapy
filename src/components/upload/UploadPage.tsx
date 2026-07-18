@@ -736,7 +736,7 @@ export default function UploadPage() {
       {pendingTypePrompt &&
         createPortal(
           <div
-            className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+            className="fixed inset-0 left-[var(--shell-nav-offset)] z-[10000] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
             role="dialog"
             aria-modal="true"
             onClick={() => setPendingTypePrompt(null)}
@@ -793,14 +793,14 @@ export default function UploadPage() {
             {columnMapOpen && previewSample && (
               <>
                 <motion.div
-                  className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm"
+                  className="fixed inset-0 left-[var(--shell-nav-offset)] z-[100] bg-black/55 backdrop-blur-sm"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setColumnMapOpen(false)}
                 />
                 <motion.div
-                  className="fixed inset-x-0 bottom-0 z-[101] flex max-h-[85vh] flex-col rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+                  className="fixed inset-x-0 left-[var(--shell-nav-offset)] bottom-0 z-[101] flex max-h-[85vh] flex-col rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
                   initial={{ y: '100%' }}
                   animate={{ y: 0 }}
                   exit={{ y: '100%' }}

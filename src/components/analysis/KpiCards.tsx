@@ -9,6 +9,7 @@ interface Props {
   data: MultiMonthData
   months: string[]
   categoryLookup: Record<string, { icon: string; label: string }>
+  columns?: 2 | 4
 }
 
 function formatMonth(m: string): string {
@@ -16,7 +17,7 @@ function formatMonth(m: string): string {
   return new Date(Number(y), Number(mo) - 1).toLocaleDateString('en-US', { month: 'short' })
 }
 
-export default function KpiCards({ data, months, categoryLookup }: Props) {
+export default function KpiCards({ data, months, categoryLookup, columns = 2 }: Props) {
   const sorted = useMemo(() => [...months].sort(), [months])
   const totals = useMemo(() => data.monthlyTotals.map(t => Number(t.total_amount)), [data.monthlyTotals])
   const totalSpent = useMemo(() => totals.reduce((s, v) => s + v, 0), [totals])
@@ -98,7 +99,7 @@ export default function KpiCards({ data, months, categoryLookup }: Props) {
   }, [avgMonthly, totalSpent, sorted.length, savingsRateData, biggestMover, predictability])
 
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className={`grid gap-3 ${columns === 4 ? 'grid-cols-2 xl:grid-cols-4' : 'grid-cols-2'}`}>
       {cards.map((card, i) => (
         <motion.div
           key={card.title}
