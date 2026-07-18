@@ -16,6 +16,7 @@ export interface MonthStats {
   transfer_count: number
   offset_count: number
   flagged_count: number
+  last_classified_at: string | null
 }
 
 export interface DailyCount {

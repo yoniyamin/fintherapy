@@ -110,7 +110,11 @@ export function useRevealData() {
   const alreadyCelebrated = celebrationStorageKey
     ? localStorage.getItem(celebrationStorageKey) === '1'
     : false
-  const showCompletionScreen = allClassified && !completionDismissed && !alreadyCelebrated
+  const classifiedToday = monthStats?.last_classified_at
+    ? new Date(monthStats.last_classified_at).toDateString() === new Date().toDateString()
+    : false
+  const showCompletionScreen = allClassified && classifiedToday
+    && !completionDismissed && !alreadyCelebrated
 
   const markCelebrated = useCallback(() => {
     if (celebrationStorageKey) localStorage.setItem(celebrationStorageKey, '1')

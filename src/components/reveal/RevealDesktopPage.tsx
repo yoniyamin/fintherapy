@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { AccountCardEditModal } from '../common/AccountCardEditModal'
 import CategoryDetail from './CategoryDetail'
+import Leaderboard from './Leaderboard'
 import MonthlyTrend from './MonthlyTrend'
 import SlideDeckPreview from './SlideDeckPreview'
 import SpendingChart from './SpendingChart'
@@ -151,7 +152,7 @@ export default function RevealDesktopPage() {
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
         </div>
       ) : noData ? (
-        <div className="mx-auto mt-8 max-w-md flex flex-col items-center gap-4 px-4 py-8">
+        <div className="mx-auto mt-8 max-w-lg flex flex-col items-center gap-4 px-4 py-8">
           <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-surface-600/30 bg-surface-900/50">
             <span className="text-4xl">📭</span>
           </div>
@@ -172,7 +173,7 @@ export default function RevealDesktopPage() {
           </button>
         </div>
       ) : tooManyUnclassified ? (
-        <div className="mx-auto mt-8 max-w-md flex flex-col items-center gap-4 px-4 py-8">
+        <div className="mx-auto mt-8 max-w-lg flex flex-col items-center gap-4 px-4 py-8">
           <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-flame/30 bg-flame/10">
             <span className="text-4xl">🚧</span>
           </div>
@@ -194,7 +195,7 @@ export default function RevealDesktopPage() {
           </div>
         </div>
       ) : showCompletionScreen ? (
-        <div className="mx-auto mt-8 max-w-md flex flex-col items-center gap-5 px-4 py-6">
+        <div className="mx-auto mt-8 max-w-lg flex flex-col items-center gap-5 px-4 py-6">
           <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-duo-green/40 bg-duo-green/10">
             <span className="text-5xl">🎉</span>
           </div>
@@ -219,7 +220,7 @@ export default function RevealDesktopPage() {
       ) : (
         <>
           {/* Income + Spending summary -- full width */}
-          <div className="mt-5 grid grid-cols-2 gap-5 items-start">
+          <div className="mt-5 grid grid-cols-[2fr_3fr] gap-5 items-start">
             <motion.div
               className={`${ui.glass} overflow-hidden`}
               initial={{ scale: 0.95, opacity: 0 }}
@@ -343,28 +344,7 @@ export default function RevealDesktopPage() {
             />
           </div>
 
-          {/* Top classifier highlight */}
-          {leaderboard.length > 0 && (() => {
-            const topClassifier = [...leaderboard].sort((a, b) => b.total_xp - a.total_xp)[0]!
-            return (
-              <motion.div
-                className={`mt-5 flex items-center gap-3 px-4 py-3 ${ui.glassFlat}`}
-                initial={{ y: 8, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.15 }}
-              >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gem/15 text-xs font-bold text-gem ring-2 ring-surface-900">
-                  {topClassifier.display_name.charAt(0).toUpperCase()}
-                </div>
-                <p className="text-sm text-surface-300">
-                  <span className="font-semibold text-surface-100">{topClassifier.display_name}</span>
-                  {' '}leads with{' '}
-                  <span className="font-bold tabular-nums text-gem">{topClassifier.total_xp.toLocaleString()} XP</span>
-                </p>
-                <span className="ml-auto text-lg">🏆</span>
-              </motion.div>
-            )
-          })()}
+          <Leaderboard entries={leaderboard} />
         </>
       )}
 
