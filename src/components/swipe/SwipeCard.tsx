@@ -3,6 +3,7 @@ import { motion, useAnimation, useMotionValue, useMotionValueEvent, useTransform
 import type { MerchantGroup } from '../../stores/classificationStore'
 import type { CategoryDef } from '../../lib/constants'
 import { formatAccountLabel } from '../../lib/accountDisplay'
+import CategoryIcon from '../common/CategoryIcon'
 import MerchantSearchPanel from './MerchantSearchPanel'
 import type { AccountType } from '../../types/database'
 
@@ -363,7 +364,7 @@ export default function SwipeCard({
               transition={{ type: 'spring', delay: 0.05, damping: 18 }}
             >
               <span className="text-[11px] uppercase tracking-wider text-duo-green/80">Predicted</span>
-              <span className="text-sm">{predicted.icon}</span>
+              <CategoryIcon categoryId={predicted.id} emoji={predicted.icon} size="sm" />
               <span className="text-xs font-semibold text-duo-green">{predicted.label}</span>
             </motion.div>
           )}

@@ -2,7 +2,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { COLOR_PALETTE, OWN_TRANSFERS_CATEGORY_ID, type CategoryDef } from '../../lib/constants'
+import {
+  categoryHasBuiltInIcon,
+  CATEGORY_GIF_OPTIONS,
+  gifIconKey,
+  isGifIconToken,
+  toGifIconToken,
+} from '../../lib/categoryIconAssets'
 import { formatCurrency } from '../../lib/formatCurrency'
+import CategoryIcon from '../common/CategoryIcon'
 import type { useCategoryConfig } from '../../hooks/useCategoryConfig'
 
 type CatConfig = ReturnType<typeof useCategoryConfig>
@@ -152,6 +160,15 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
 
   if (typeof document === 'undefined') return null
 
+  const editingCategoryId = editing
+    ? editing.isNew
+      ? slugify(editing.label)
+      : (editing.originalId ?? editing.id)
+    : ''
+  const editingHasBuiltInIcon =
+    !!editingCategoryId && categoryHasBuiltInIcon(editingCategoryId)
+  const selectedGifKey = editing ? gifIconKey(editing.icon) : null
+
   return createPortal(
     <AnimatePresence>
       {open && (
@@ -215,7 +232,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                           onClick={() => handleEdit(cat)}
                           className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 transition-all active:scale-95 ${cat.color}`}
                         >
-                          <span className="text-2xl">{cat.icon}</span>
+                          <CategoryIcon categoryId={cat.id} emoji={cat.icon} size="xl" />
                           <span className="text-[11px] font-semibold leading-tight text-surface-200 text-center">{cat.label}</span>
                         </button>
                       ))}
@@ -263,22 +280,69 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                       <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-surface-500">
                         Icon
                       </label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {ICON_SUGGESTIONS.map((icon) => (
-                          <button
-                            key={icon}
-                            type="button"
-                            onClick={() => setEditing({ ...editing, icon })}
-                            className={`flex h-10 w-10 items-center justify-center rounded-lg border text-xl transition-all ${
-                              editing.icon === icon
-                                ? 'border-duo-green/60 bg-duo-green/15 scale-110'
-                                : 'border-white/[0.06] bg-surface-900/50 hover:bg-surface-800/80'
-                            }`}
-                          >
-                            {icon}
-                          </button>
-                        ))}
-                      </div>
+                      {editingHasBuiltInIcon ? (
+                        <div className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-surface-900/50 px-3 py-3">
+                          <CategoryIcon
+                            categoryId={editingCategoryId}
+                            emoji={editing.icon}
+                            size="xl"
+                          />
+                          <p className="text-xs leading-snug text-surface-400">
+                            Built-in animated icon for this category. Emoji picks apply only to custom categories.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div>
+                            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-surface-500">
+                              Animated
+                            </p>
+                            <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
+                              {CATEGORY_GIF_OPTIONS.map((option) => (
+                                <button
+                                  key={option.key}
+                                  type="button"
+                                  onClick={() => setEditing({ ...editing, icon: toGifIconToken(option.key) })}
+                                  title={option.label}
+                                  className={`flex h-12 flex-col items-center justify-center gap-0.5 rounded-lg border px-1 transition-all ${
+                                    selectedGifKey === option.key
+                                      ? 'border-duo-green/60 bg-duo-green/15 scale-105'
+                                      : 'border-white/[0.06] bg-surface-900/50 hover:bg-surface-800/80'
+                                  }`}
+                                >
+                                  <img
+                                    src={option.src}
+                                    alt=""
+                                    aria-hidden
+                                    className="h-7 w-7 object-contain"
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-surface-500">
+                              Emoji
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {ICON_SUGGESTIONS.map((icon) => (
+                                <button
+                                  key={icon}
+                                  type="button"
+                                  onClick={() => setEditing({ ...editing, icon })}
+                                  className={`flex h-10 w-10 items-center justify-center rounded-lg border text-xl transition-all ${
+                                    !isGifIconToken(editing.icon) && editing.icon === icon
+                                      ? 'border-duo-green/60 bg-duo-green/15 scale-110'
+                                      : 'border-white/[0.06] bg-surface-900/50 hover:bg-surface-800/80'
+                                  }`}
+                                >
+                                  {icon}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Color */}
@@ -309,7 +373,11 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                         Preview
                       </label>
                       <div className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 ${editing.color}`}>
-                        <span className="text-2xl">{editing.icon}</span>
+                        <CategoryIcon
+                          categoryId={editingCategoryId || 'preview'}
+                          emoji={editing.icon}
+                          size="xl"
+                        />
                         <span className="text-sm font-semibold text-surface-200">
                           {editing.label || 'Untitled'}
                         </span>

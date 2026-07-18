@@ -13,6 +13,7 @@ export const DEFAULT_CATEGORIES = [
   { id: 'connectivity', label: 'Connectivity', icon: '📡', color: 'bg-indigo-500/20 border-indigo-500/40', expenseType: 'fixed' as ExpenseType },
   { id: 'clothing_footwear', label: 'Clothing', icon: '👟', color: 'bg-pink-500/20 border-pink-500/40', expenseType: 'discretionary' as ExpenseType },
   { id: 'kids_toys', label: 'Kids & Toys', icon: '🧸', color: 'bg-yellow-500/20 border-yellow-500/40', expenseType: 'fixed' as ExpenseType },
+  { id: 'school_extras', label: 'School & Extras', icon: '🎓', color: 'bg-violet-500/20 border-violet-500/40', expenseType: 'fixed' as ExpenseType },
   { id: 'home_maintenance', label: 'Home', icon: '🏠', color: 'bg-amber-500/20 border-amber-500/40', expenseType: 'fixed' as ExpenseType },
   { id: 'miscellaneous', label: 'Misc', icon: '📦', color: 'bg-slate-500/20 border-slate-500/40', expenseType: 'discretionary' as ExpenseType },
   { id: 'own_transfers', label: 'Own transfers', icon: '🔁', color: 'bg-slate-600/25 border-slate-500/35', expenseType: 'fixed' as ExpenseType },

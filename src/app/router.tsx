@@ -14,6 +14,7 @@ import BetsPage from '../components/bets/BetsPage'
 import AnalysisPage from '../components/analysis/AnalysisPage'
 import SettingsPage from '../components/settings/SettingsPage'
 import AnimationTestPage from '../components/dev/AnimationTestPage'
+import CategoryPickerTestPage from '../components/dev/CategoryPickerTestPage'
 
 export const router = createBrowserRouter([
   {
@@ -32,6 +33,9 @@ export const router = createBrowserRouter([
       { path: 'analysis', element: <AnalysisPage /> },
       { path: 'bets', element: <BetsPage /> },
       { path: 'settings', element: <SettingsPage /> },
+      ...(import.meta.env.DEV
+        ? [{ path: 'dev/category-picker', element: <CategoryPickerTestPage /> }]
+        : []),
     ],
   },
   {

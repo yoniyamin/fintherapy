@@ -450,6 +450,35 @@ export default function SwipeDeck() {
     origin: 'session' | 'history'
   } | null>(null)
 
+  const categoryPickerContext = useMemo(() => {
+    if (recentReclassifyTarget) {
+      const action = recentReclassifyTarget.action
+      return {
+        merchantRaw: action.merchantRaw,
+        merchantClean: action.merchantClean,
+        predictedCategory: null,
+        currentCategory: action.category,
+      }
+    }
+
+    const group = store.activeGroup
+    if (!group) {
+      return {
+        merchantRaw: null,
+        merchantClean: null,
+        predictedCategory: null,
+        currentCategory: null,
+      }
+    }
+
+    return {
+      merchantRaw: group.merchantRaw,
+      merchantClean: group.merchantClean,
+      predictedCategory: group.predictedCategory,
+      currentCategory: null,
+    }
+  }, [recentReclassifyTarget, store.activeGroup])
+
   /** All deck candidates: pending classify queue + already auto-classified items
    *  surfaced as confirmable "Predicted" cards. No-idea deck only uses `fetched`. */
   const allDeckTxns = useMemo(() => {
@@ -1797,6 +1826,10 @@ export default function SwipeDeck() {
         onSelect={handleCategorySelect}
         onClose={handlePickerCancel}
         categories={resolvedCategories}
+        predictedCategory={categoryPickerContext.predictedCategory}
+        currentCategory={categoryPickerContext.currentCategory}
+        merchantRaw={categoryPickerContext.merchantRaw}
+        merchantClean={categoryPickerContext.merchantClean}
       />
 
       {typeof document !== 'undefined' &&
