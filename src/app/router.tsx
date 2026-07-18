@@ -15,6 +15,7 @@ import AnalysisPage from '../components/analysis/AnalysisPage'
 import SettingsPage from '../components/settings/SettingsPage'
 import AnimationTestPage from '../components/dev/AnimationTestPage'
 import CategoryPickerTestPage from '../components/dev/CategoryPickerTestPage'
+import DevIndexPage from '../components/dev/DevIndexPage'
 
 export const router = createBrowserRouter([
   {
@@ -52,6 +53,13 @@ export const router = createBrowserRouter([
   { path: '/reset-password', element: <ResetPasswordPage /> },
   ...(import.meta.env.DEV
     ? [{
+        path: '/dev',
+        element: (
+          <AuthGuard requireHousehold={false}>
+            <DevIndexPage />
+          </AuthGuard>
+        ),
+      }, {
         path: '/dev/animations',
         element: (
           <AuthGuard requireHousehold={false}>
