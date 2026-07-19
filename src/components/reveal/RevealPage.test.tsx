@@ -157,6 +157,7 @@ describe('RevealPage', () => {
       transfer_count: 0,
       offset_count: 0,
       flagged_count: 0,
+      last_classified_at: new Date().toISOString(),
     })
 
     // Act
@@ -178,6 +179,7 @@ describe('RevealPage', () => {
       transfer_count: 0,
       offset_count: 0,
       flagged_count: 0,
+      last_classified_at: null,
     })
 
     // Act

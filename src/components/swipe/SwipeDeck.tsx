@@ -50,6 +50,7 @@ function aggregateMonthStats(parts: MonthStats[]): MonthStats {
     transfer_count: 0,
     offset_count: 0,
     flagged_count: 0,
+    last_classified_at: null,
   }
   return parts.reduce((acc, s) => ({
     total_count: acc.total_count + Number(s.total_count),
@@ -58,6 +59,8 @@ function aggregateMonthStats(parts: MonthStats[]): MonthStats {
     transfer_count: acc.transfer_count + Number(s.transfer_count),
     offset_count: acc.offset_count + Number(s.offset_count),
     flagged_count: acc.flagged_count + Number(s.flagged_count),
+    last_classified_at: s.last_classified_at && (!acc.last_classified_at || s.last_classified_at > acc.last_classified_at)
+      ? s.last_classified_at : acc.last_classified_at,
   }), empty)
 }
 
