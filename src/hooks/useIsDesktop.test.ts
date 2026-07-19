@@ -28,7 +28,7 @@ describe('useIsDesktop', () => {
     vi.restoreAllMocks()
   })
 
-  it('returns false when viewport is below 1280px', () => {
+  it('returns false when viewport is below 1024px', () => {
     // Arrange
     mockMatchMedia(false)
 
@@ -39,7 +39,7 @@ describe('useIsDesktop', () => {
     expect(result.current).toBe(false)
   })
 
-  it('returns true when viewport is at least 1280px', () => {
+  it('returns true when viewport is at least 1024px', () => {
     // Arrange
     mockMatchMedia(true)
 

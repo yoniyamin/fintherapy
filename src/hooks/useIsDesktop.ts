@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-const DESKTOP_QUERY = '(min-width: 1280px)'
+const DESKTOP_QUERY = '(min-width: 1024px)'
 
 function subscribe(onStoreChange: () => void) {
   const mql = window.matchMedia(DESKTOP_QUERY)
@@ -17,7 +17,7 @@ function getServerSnapshot() {
 }
 
 /**
- * Returns `true` when the viewport is at least 1280px wide (Tailwind `xl:` breakpoint).
+ * Returns `true` when the viewport is at least 1024px wide (Tailwind `lg:` breakpoint).
  * Listens for resize/orientation changes via `matchMedia`.
  */
 export function useIsDesktop(): boolean {

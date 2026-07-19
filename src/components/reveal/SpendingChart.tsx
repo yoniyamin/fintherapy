@@ -12,6 +12,8 @@ interface Props {
   onCategoryClick?: (categoryId: string) => void
   /** Categories omitted from the donut (still listed below for drill-down). */
   excludeFromPieIds?: readonly string[]
+  /** Render the category list in a multi-column grid (desktop). Defaults to 1 (stacked). */
+  categoryColumns?: number
 }
 
 const PIE_COLORS = [
@@ -26,6 +28,7 @@ export default function SpendingChart({
   categoryLookup,
   onCategoryClick,
   excludeFromPieIds = [OWN_TRANSFERS_CATEGORY_ID],
+  categoryColumns = 1,
 }: Props) {
   const exclude = new Set(excludeFromPieIds)
   /** Pie arcs only for positive net spend; refunds netting to ≤0 stay in the list below. */
@@ -142,7 +145,7 @@ export default function SpendingChart({
         </div>
       </motion.div>
 
-      <div className="space-y-1">
+      <div className={categoryColumns > 1 ? 'grid grid-cols-2 gap-x-4 gap-y-1' : 'space-y-1'}>
         {summary.map((item, i) => {
           const cat = categoryLookup[item.category]
           const value = Number(item.total_amount)

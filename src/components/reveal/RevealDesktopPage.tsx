@@ -220,117 +220,116 @@ export default function RevealDesktopPage() {
       ) : (
         <>
           {/* Income + Spending summary -- full width */}
-          <div className="mt-5 grid grid-cols-[2fr_3fr] gap-5 items-start">
-            <motion.div
-              className={`${ui.glass} overflow-hidden`}
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-            >
-              <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
-                <span className="text-sm text-surface-400">Household Income</span>
-                {editingIncome ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-surface-500">EUR</span>
-                    <input
-                      ref={incomeRef}
-                      type="number"
-                      min="0"
-                      step="100"
-                      value={incomeInput}
-                      onChange={(e) => setIncomeDraft(e.target.value)}
-                      onBlur={handleIncomeSave}
-                      onKeyDown={handleIncomeKeyDown}
-                      autoFocus
-                      className={`w-28 px-3 py-1.5 text-right text-sm font-bold tabular-nums ${ui.input}`}
-                    />
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setEditingIncome(true)
-                      setTimeout(() => incomeRef.current?.focus(), 50)
-                    }}
-                    className="flex items-center gap-1.5 rounded-lg px-2 py-1 transition-colors hover:bg-surface-700/50"
-                  >
-                    <span className="text-sm font-bold tabular-nums text-duo-green">
-                      {incomeNum > 0 ? formatCurrency(incomeNum) : 'Set income'}
-                    </span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-surface-500">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
-                <span className="text-sm text-surface-400">Total spent</span>
-                <span className="text-sm font-bold tabular-nums text-primary-400">{formatCurrency(totalSpent)}</span>
-              </div>
-              <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm text-surface-300">Hide internal transfers</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowTransfersHelp((v) => !v)}
-                    className="flex h-4 w-4 items-center justify-center rounded-full border border-surface-600 text-[10px] font-bold text-surface-400 transition-colors hover:border-surface-400 hover:text-surface-200"
-                    aria-label="What does this do?"
-                  >
-                    ?
-                  </button>
+          <motion.div
+            className={`${ui.glass} mt-5 overflow-hidden`}
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+          >
+            <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
+              <span className="text-sm text-surface-400">Household Income</span>
+              {editingIncome ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-surface-500">EUR</span>
+                  <input
+                    ref={incomeRef}
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={incomeInput}
+                    onChange={(e) => setIncomeDraft(e.target.value)}
+                    onBlur={handleIncomeSave}
+                    onKeyDown={handleIncomeKeyDown}
+                    autoFocus
+                    className={`w-28 px-3 py-1.5 text-right text-sm font-bold tabular-nums ${ui.input}`}
+                  />
                 </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setEditingIncome(true)
+                    setTimeout(() => incomeRef.current?.focus(), 50)
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg px-2 py-1 transition-colors hover:bg-surface-700/50"
+                >
+                  <span className="text-sm font-bold tabular-nums text-duo-green">
+                    {incomeNum > 0 ? formatCurrency(incomeNum) : 'Set income'}
+                  </span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-surface-500">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
+              <span className="text-sm text-surface-400">Total spent</span>
+              <span className="text-sm font-bold tabular-nums text-primary-400">{formatCurrency(totalSpent)}</span>
+            </div>
+            <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm text-surface-300">Hide internal transfers</span>
                 <button
                   type="button"
-                  onClick={() => setIncludeOwnTransfers((v) => !v)}
-                  role="switch"
-                  aria-checked={!includeOwnTransfers}
-                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${!includeOwnTransfers ? 'bg-duo-green' : 'bg-surface-700'}`}
+                  onClick={() => setShowTransfersHelp((v) => !v)}
+                  className="flex h-4 w-4 items-center justify-center rounded-full border border-surface-600 text-[10px] font-bold text-surface-400 transition-colors hover:border-surface-400 hover:text-surface-200"
+                  aria-label="What does this do?"
                 >
-                  <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${!includeOwnTransfers ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  ?
                 </button>
               </div>
-              {showTransfersHelp && (
-                <p className="border-b border-white/[0.06] bg-surface-950/40 px-4 py-2 text-[11px] leading-snug text-surface-400">
-                  {includeOwnTransfers
-                    ? 'Own-account transfers are counted in totals, the donut, and monthly bars.'
-                    : 'Own-account transfers are excluded from totals and the donut so spending isn\'t double-counted.'}
-                </p>
-              )}
-              <div className="flex items-center justify-between px-4 py-1 text-xs text-surface-500/90">
-                <span />
-                <span>{spendingTxCount} spending tx</span>
-              </div>
-              {incomeNum > 0 && (
-                <div className="border-t border-dashed border-white/[0.08] px-4 py-3.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-surface-400">Free Income</span>
-                    <span className={`text-xl font-extrabold tabular-nums ${freeIncome >= 0 ? 'text-duo-green' : 'text-danger'}`}>
-                      {formatCurrency(freeIncome)}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-950/80 ring-1 ring-white/[0.06]">
-                      <div
-                        className={`h-full rounded-full transition-all ${freeIncome >= 0 ? 'bg-duo-green' : 'bg-danger'}`}
-                        style={{ width: `${Math.min(Math.max((totalSpent / incomeNum) * 100, 0), 100)}%` }}
-                      />
-                    </div>
-                    <span className={`text-xs font-semibold tabular-nums ${freeIncome >= 0 ? 'text-duo-green' : 'text-danger'}`}>
-                      {savingsRate >= 0 ? `${savingsRate.toFixed(0)}% saved` : `${Math.abs(savingsRate).toFixed(0)}% over`}
-                    </span>
-                  </div>
+              <button
+                type="button"
+                onClick={() => setIncludeOwnTransfers((v) => !v)}
+                role="switch"
+                aria-checked={!includeOwnTransfers}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${!includeOwnTransfers ? 'bg-duo-green' : 'bg-surface-700'}`}
+              >
+                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${!includeOwnTransfers ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+            {showTransfersHelp && (
+              <p className="border-b border-white/[0.06] bg-surface-950/40 px-4 py-2 text-[11px] leading-snug text-surface-400">
+                {includeOwnTransfers
+                  ? 'Own-account transfers are counted in totals, the donut, and monthly bars.'
+                  : 'Own-account transfers are excluded from totals and the donut so spending isn\'t double-counted.'}
+              </p>
+            )}
+            <div className="flex items-center justify-between px-4 py-1 text-xs text-surface-500/90">
+              <span />
+              <span>{spendingTxCount} spending tx</span>
+            </div>
+            {incomeNum > 0 && (
+              <div className="border-t border-dashed border-white/[0.08] px-4 py-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-surface-400">Free Income</span>
+                  <span className={`text-xl font-extrabold tabular-nums ${freeIncome >= 0 ? 'text-duo-green' : 'text-danger'}`}>
+                    {formatCurrency(freeIncome)}
+                  </span>
                 </div>
-              )}
-            </motion.div>
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-950/80 ring-1 ring-white/[0.06]">
+                    <div
+                      className={`h-full rounded-full transition-all ${freeIncome >= 0 ? 'bg-duo-green' : 'bg-danger'}`}
+                      style={{ width: `${Math.min(Math.max((totalSpent / incomeNum) * 100, 0), 100)}%` }}
+                    />
+                  </div>
+                  <span className={`text-xs font-semibold tabular-nums ${freeIncome >= 0 ? 'text-duo-green' : 'text-danger'}`}>
+                    {savingsRate >= 0 ? `${savingsRate.toFixed(0)}% saved` : `${Math.abs(savingsRate).toFixed(0)}% over`}
+                  </span>
+                </div>
+              </div>
+            )}
+          </motion.div>
 
-            {/* Spending donut + category list */}
-            <SpendingChart
-              summary={summary}
-              total={totalSpent}
-              categoryLookup={categoryLookup}
-              onCategoryClick={handleCategoryClick}
-              excludeFromPieIds={includeOwnTransfers ? [] : [OWN_TRANSFERS_CATEGORY_ID]}
-            />
-          </div>
+          {/* Spending donut + category list (categories side by side on desktop) */}
+          <SpendingChart
+            summary={summary}
+            total={totalSpent}
+            categoryLookup={categoryLookup}
+            onCategoryClick={handleCategoryClick}
+            excludeFromPieIds={includeOwnTransfers ? [] : [OWN_TRANSFERS_CATEGORY_ID]}
+            categoryColumns={2}
+          />
 
           {/* Monthly trend -- full width below */}
           <div className="mt-5">
