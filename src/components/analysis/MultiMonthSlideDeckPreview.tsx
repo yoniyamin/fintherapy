@@ -74,6 +74,7 @@ export default function MultiMonthSlideDeckPreview({
   const categories: CategoryDef[] = useMemo(() =>
     Object.entries(categoryLookup).map(([id, info]) => ({
       id, ...info,
+      color: '',
       expenseType: (info.expenseType ?? 'discretionary') as CategoryDef['expenseType'],
       spendingFrequency: (info.spendingFrequency ?? 'monthly') as CategoryDef['spendingFrequency'],
       parentCategoryId: info.parentCategoryId,

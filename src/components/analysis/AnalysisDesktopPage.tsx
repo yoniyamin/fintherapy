@@ -93,7 +93,7 @@ export default function AnalysisDesktopPage() {
   } = useAnalysisData()
 
   const [activeSection, setActiveSection] = useState('overview')
-  const navigateRef = useRef<(id: string) => void>()
+  const navigateRef = useRef<(id: string) => void>(undefined)
 
   const rc = useMemo(() => prefs.analysisReportConfig ?? {}, [prefs.analysisReportConfig])
   const visibleSections = useMemo(
