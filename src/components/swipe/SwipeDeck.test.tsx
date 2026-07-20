@@ -92,6 +92,10 @@ vi.mock('../../hooks/useFlaggedCount', () => ({
   useFlaggedCount: () => 0,
 }))
 
+vi.mock('../../hooks/useFlaggedSuggestions', () => ({
+  useFlaggedSuggestions: () => ({ suggestions: [], suggestionCount: 0, loading: false, removeSuggestion: vi.fn() }),
+}))
+
 vi.mock('../../hooks/useCategoryConfig', () => ({
   useCategoryConfig: () => ({ categories: mockCategories, loading: false }),
 }))

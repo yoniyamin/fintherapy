@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
+import { useFlaggedSuggestions } from '../../hooks/useFlaggedSuggestions'
 import {
   useTransactions,
   type DailyActivity,
@@ -97,6 +98,7 @@ export default function CompactHomePanel() {
   } = useTransactions(profile?.household_id)
   const classifyQueueCount = pending.length + autoClassified.length
   const noIdeaCount = useFlaggedCount(profile?.household_id)
+  const { suggestionCount: noIdeaSuggestionCount } = useFlaggedSuggestions(profile?.household_id)
 
   const [householdInfo, setHouseholdInfo] = useState<{ name: string; invite_code: string } | null>(null)
   const [leaderboard, setLeaderboard] = useState<HomeLeaderboardEntry[]>([])
@@ -237,9 +239,13 @@ export default function CompactHomePanel() {
             >
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-surface-100">No idea queue</p>
-                <p className="text-[11px] text-surface-500">Flagged for partner review</p>
+                <p className="text-[11px] text-surface-500">
+                  {noIdeaSuggestionCount > 0
+                    ? `${noIdeaSuggestionCount} may now be resolvable`
+                    : 'Flagged for partner review'}
+                </p>
               </div>
-              <span className="shrink-0 rounded-full bg-flame px-2 py-0.5 text-[10px] font-bold tabular-nums text-white">
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums text-white ${noIdeaSuggestionCount > 0 ? 'bg-duo-green' : 'bg-flame'}`}>
                 {noIdeaCount}
               </span>
               <span className="shrink-0 text-surface-500" aria-hidden>›</span>

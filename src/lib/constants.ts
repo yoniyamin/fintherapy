@@ -1,6 +1,9 @@
 /** Internal transfers between your own accounts (excluded from spending pie by default). */
 export const OWN_TRANSFERS_CATEGORY_ID = 'own_transfers' as const
 
+/** Flagged transactions the user couldn't classify (included in reports as-is). */
+export const NO_IDEA_CATEGORY_ID = 'no_idea' as const
+
 export type ExpenseType = 'fixed' | 'discretionary'
 
 export const DEFAULT_CATEGORIES = [
@@ -16,6 +19,7 @@ export const DEFAULT_CATEGORIES = [
   { id: 'school_extras', label: 'School & Extras', icon: '🎓', color: 'bg-violet-500/20 border-violet-500/40', expenseType: 'fixed' as ExpenseType },
   { id: 'home_maintenance', label: 'Home', icon: '🏠', color: 'bg-amber-500/20 border-amber-500/40', expenseType: 'fixed' as ExpenseType },
   { id: 'miscellaneous', label: 'Misc', icon: '📦', color: 'bg-slate-500/20 border-slate-500/40', expenseType: 'discretionary' as ExpenseType },
+  { id: 'no_idea', label: 'No idea', icon: '❓', color: 'bg-gray-500/20 border-gray-500/40', expenseType: 'discretionary' as ExpenseType },
   { id: 'own_transfers', label: 'Own transfers', icon: '🔁', color: 'bg-slate-600/25 border-slate-500/35', expenseType: 'fixed' as ExpenseType },
 ] as const
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { COLOR_PALETTE, OWN_TRANSFERS_CATEGORY_ID, type CategoryDef } from '../../lib/constants'
+import { COLOR_PALETTE, NO_IDEA_CATEGORY_ID, OWN_TRANSFERS_CATEGORY_ID, type CategoryDef } from '../../lib/constants'
 import {
   categoryHasBuiltInIcon,
   CATEGORY_GIF_OPTIONS,
@@ -407,7 +407,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                     </div>
 
                     {/* Usage & delete zone */}
-                    {!editing.isNew && editing.originalId !== OWN_TRANSFERS_CATEGORY_ID && (
+                    {!editing.isNew && editing.originalId !== OWN_TRANSFERS_CATEGORY_ID && editing.originalId !== NO_IDEA_CATEGORY_ID && (
                       <div className="border-t border-white/[0.06] pt-4">
                         <p className="mb-1 text-[11px] text-surface-500">
                           {txCount === null

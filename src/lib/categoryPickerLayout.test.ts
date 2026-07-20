@@ -121,6 +121,6 @@ describe('buildCategoryPickerLayout', () => {
 
     // Assert
     expect(layout.grid[0]?.id).toBe('streaming_subs')
-    expect(layout.grid.at(-1)?.id).toBe('own_transfers')
+    expect(layout.grid.at(-1)?.id).toBe('no_idea')
   })
 })

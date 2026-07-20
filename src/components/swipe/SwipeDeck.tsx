@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useDragControls } from 'framer-motion'
 import { useClassificationStore, type MerchantGroup, type SessionAction, type SessionActionKind } from '../../stores/classificationStore'
 import { useClassifyEncouragement } from '../../hooks/useClassifyEncouragement'
 import { useTransactions, type MonthStats, type AccountClassifiedBreakdownRow } from '../../hooks/useTransactions'
-import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { NO_IDEA_CATEGORY_ID, OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
 import {
   classifyAccountStorageKey,
   classifyMonthStorageKey,
@@ -34,6 +34,8 @@ import ClassifyTutorial from './ClassifyTutorial'
 import DeckClearedScreen from './DeckClearedScreen'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
+import { useFlaggedSuggestions } from '../../hooks/useFlaggedSuggestions'
+import FlaggedSuggestionsBanner from './FlaggedSuggestionsBanner'
 import { useBottomSheetDrag, BOTTOM_SHEET_DISMISS_OFFSET_Y, BOTTOM_SHEET_DISMISS_VELOCITY_Y } from '../../hooks/useBottomSheetDrag'
 import { invalidateFlaggedCount } from '../../lib/flaggedCountInvalidate'
 import { useCategoryConfig } from '../../hooks/useCategoryConfig'
@@ -355,9 +357,16 @@ export default function SwipeDeck() {
     getTransactionsClassifiedInDateRange,
   } = useTransactions(profile?.household_id, deckMode)
   const { learnMerchant, confirmAutoClassifiedBatch, rejectAutoClassified } = useMerchantKnowledge(profile?.household_id)
+  const { suggestions: flaggedSuggestions, removeSuggestion: removeFlaggedSuggestion } = useFlaggedSuggestions(
+    deckMode === 'no-idea' ? profile?.household_id : undefined,
+  )
   const { onlineUsers } = usePresence(profile?.household_id, user?.id, profile?.display_name)
   const catConfig = useCategoryConfig(profile?.household_id)
   const resolvedCategories = catConfig.categories
+  const pickerCategories = useMemo(
+    () => resolvedCategories.filter((c) => c.id !== NO_IDEA_CATEGORY_ID),
+    [resolvedCategories],
+  )
   const [catEditorOpen, setCatEditorOpen] = useState(false)
   const store = useClassificationStore()
   const { burst: encouragementBurst, dismissBurst, onClassifySuccess } = useClassifyEncouragement({
@@ -1685,6 +1694,20 @@ export default function SwipeDeck() {
             Swipe right to pick a category. Swipe left to skip for now (this card moves to the back).
           </p>
         )}
+        {deckMode === 'no-idea' && flaggedSuggestions.length > 0 && (
+          <FlaggedSuggestionsBanner
+            suggestions={flaggedSuggestions}
+            categoryLookup={catConfig.categoryLookup}
+            onAccept={async (txId, category, merchantRaw) => {
+              await reclassifyTransactionsBatch([txId], category)
+              learnMerchant(merchantRaw, category)
+              removeFlaggedSuggestion(txId)
+              removeTransactions([txId])
+              invalidateFlaggedCount()
+            }}
+            onDismiss={(txId) => removeFlaggedSuggestion(txId)}
+          />
+        )}
       </div>
 
       <div className="relative flex-1 px-4 py-3">
@@ -1797,7 +1820,7 @@ export default function SwipeDeck() {
                       showAccountPerLine={accountFilter == null}
                       notePreview={notePreviewForGroup(group.transactions)}
                       onOpenNote={i === 0 ? openNoteModal : undefined}
-                      categories={resolvedCategories}
+                      categories={pickerCategories}
                       pickerCancelTick={i === 0 ? pickerCancelTick : undefined}
                       billingMonthLabel={
                         group.transactions[0]?.billing_month
@@ -1831,7 +1854,7 @@ export default function SwipeDeck() {
         open={store.showCategoryPicker}
         onSelect={handleCategorySelect}
         onClose={handlePickerCancel}
-        categories={resolvedCategories}
+        categories={pickerCategories}
         predictedCategory={categoryPickerContext.predictedCategory}
         currentCategory={categoryPickerContext.currentCategory}
         merchantRaw={categoryPickerContext.merchantRaw}

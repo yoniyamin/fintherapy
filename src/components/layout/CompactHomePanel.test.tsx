@@ -37,6 +37,10 @@ vi.mock('../../hooks/useFlaggedCount', () => ({
   useFlaggedCount: () => 3,
 }))
 
+vi.mock('../../hooks/useFlaggedSuggestions', () => ({
+  useFlaggedSuggestions: () => ({ suggestions: [], suggestionCount: 0, loading: false, removeSuggestion: vi.fn() }),
+}))
+
 function renderPanel() {
   return render(
     <MemoryRouter>

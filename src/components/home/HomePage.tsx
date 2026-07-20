@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
+import { useFlaggedSuggestions } from '../../hooks/useFlaggedSuggestions'
 import {
   useTransactions,
   type DailyActivity,
@@ -165,6 +166,7 @@ export default function HomePage() {
   } = useTransactions(profile?.household_id)
   const classifyQueueCount = pending.length + autoClassified.length
   const noIdeaCount = useFlaggedCount(profile?.household_id)
+  const { suggestionCount: noIdeaSuggestionCount } = useFlaggedSuggestions(profile?.household_id)
   const [dailyActivity, setDailyActivity] = useState<DailyActivity[]>([])
   const [leaderboard, setLeaderboard] = useState<HomeLeaderboardEntry[]>([])
   const [memberRecords, setMemberRecords] = useState<MemberDailyRecord[]>([])
@@ -319,8 +321,12 @@ export default function HomePage() {
         {noIdeaCount > 0 && (
           <StatusRow
             badge={String(noIdeaCount)}
-            badgeTone="warning"
-            detail="Flagged for partner review"
+            badgeTone={noIdeaSuggestionCount > 0 ? 'default' : 'warning'}
+            detail={
+              noIdeaSuggestionCount > 0
+                ? `${noIdeaSuggestionCount} may now be resolvable`
+                : 'Flagged for partner review'
+            }
             label="No idea queue"
             to="/classify/no-idea"
           />
