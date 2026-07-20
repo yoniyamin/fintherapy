@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { type UpsertBudgetParams } from '../../hooks/useCategoryBudgets'
@@ -26,8 +26,43 @@ import RecurringPanel from './RecurringPanel'
 import ReportConfigModal from './ReportConfigModal'
 import SavingsProjectionPanel from './SavingsProjectionPanel'
 import TopVendorsPanel from './TopVendorsPanel'
+import AnalysisIcon from './AnalysisIcons'
+import { SECTION_ICON_NAMES } from './analysisIconPaths'
 import { useAnalysisData } from './useAnalysisData'
 import VelocityGauge from './VelocityGauge'
+
+interface SectionDef {
+  id: string
+  label: string
+}
+
+const REPORT_SECTIONS: SectionDef[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'trends', label: 'Trends' },
+  { id: 'breakdown', label: 'Breakdown' },
+  { id: 'calendar', label: 'Calendar' },
+  { id: 'details', label: 'Details' },
+  { id: 'recurring', label: 'Recurring & Budget' },
+  { id: 'projections', label: 'Projections' },
+  { id: 'advisor', label: 'Advisor' },
+]
+
+function showSection(rc: import('../../types/database').AnalysisReportConfig, key: keyof typeof rc, minMonths: number, monthCount: number) {
+  return (rc[key] ?? true) && monthCount >= minMonths
+}
+
+function getVisibleSections(rc: import('../../types/database').AnalysisReportConfig, monthCount: number) {
+  const visible = new Set<string>()
+  if (showSection(rc, 'headline', 1, monthCount) || showSection(rc, 'kpiCards', 1, monthCount) || showSection(rc, 'fixedDiscretionary', 1, monthCount)) visible.add('overview')
+  if (showSection(rc, 'categoryTrend', 2, monthCount)) visible.add('trends')
+  if (showSection(rc, 'deltaDrivers', 2, monthCount) || showSection(rc, 'memberSpending', 1, monthCount) || showSection(rc, 'comparisonTable', 2, monthCount)) visible.add('breakdown')
+  if (showSection(rc, 'calendarHeatmap', 2, monthCount)) visible.add('calendar')
+  if (showSection(rc, 'topVendors', 3, monthCount) || showSection(rc, 'cardCategorySplit', 3, monthCount)) visible.add('details')
+  if (showSection(rc, 'recurring', 1, monthCount) || showSection(rc, 'budgetVsActual', 3, monthCount)) visible.add('recurring')
+  if (showSection(rc, 'savingsProjection', 3, monthCount) || showSection(rc, 'velocityGauge', 1, monthCount)) visible.add('projections')
+  if (showSection(rc, 'advisorNotes', 1, monthCount)) visible.add('advisor')
+  return visible
+}
 
 export default function AnalysisDesktopPage() {
   const {
@@ -57,11 +92,22 @@ export default function AnalysisDesktopPage() {
     handleExportPdf,
   } = useAnalysisData()
 
+  const [activeSection, setActiveSection] = useState('overview')
+  const navigateRef = useRef<(id: string) => void>()
+
+  const rc = useMemo(() => prefs.analysisReportConfig ?? {}, [prefs.analysisReportConfig])
+  const visibleSections = useMemo(
+    () => getVisibleSections(rc, selection.months.length),
+    [selection.months.length, rc],
+  )
+
+  const hasReport = !!data && !noData
+
   return (
-    <div className={ui.pageDesktop} data-testid="analysis-desktop-page">
-      {/* Sticky toolbar */}
-      <div className="sticky top-0 z-20 -mx-6 bg-surface-900/90 px-6 pb-3 pt-6 backdrop-blur-md">
-        <div className="flex items-center justify-between gap-4">
+    <div className="mx-auto w-full max-w-7xl px-6 pb-6" data-testid="analysis-desktop-page">
+      {/* Sticky header: title + section nav */}
+      <div className="sticky top-0 z-20 -mx-6 bg-surface-900/95 backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-4 px-6 pb-2 pt-5">
           <div>
             <h1 className={ui.heroTitle}>Financial Health Check</h1>
             <p className={ui.heroSub}>Here's how your household is doing</p>
@@ -73,7 +119,7 @@ export default function AnalysisDesktopPage() {
               monthsWithData={monthsWithData}
               allowSingle={true}
             />
-            {data && !noData && (
+            {hasReport && (
               <>
                 <button
                   type="button"
@@ -135,6 +181,28 @@ export default function AnalysisDesktopPage() {
             )}
           </div>
         </div>
+
+        {hasReport && (
+          <div className="flex items-center gap-1 overflow-x-auto border-t border-white/[0.04] px-6 py-1.5 scrollbar-hide">
+            {REPORT_SECTIONS.filter(s => visibleSections.has(s.id)).map((section) => (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => navigateRef.current?.(section.id)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                  activeSection === section.id
+                    ? 'bg-white/[0.1] text-surface-50 shadow-sm'
+                    : 'text-surface-500 hover:bg-white/[0.04] hover:text-surface-300'
+                }`}
+              >
+                {SECTION_ICON_NAMES[section.id] && <AnalysisIcon name={SECTION_ICON_NAMES[section.id]} width={14} height={14} />}
+                {section.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
       </div>
 
       {analysisError && (
@@ -182,7 +250,10 @@ export default function AnalysisDesktopPage() {
           budgets={budgetHook.budgets}
           inflationRate={prefs.assumedInflationRate ?? 3}
           savingsGoals={prefs.savingsGoals ?? []}
-          reportConfig={prefs.analysisReportConfig ?? {}}
+          reportConfig={rc}
+          visibleSections={visibleSections}
+          onActiveSectionChange={setActiveSection}
+          navigateRef={navigateRef}
           onSaveBudgets={async (params) => { for (const p of params) await budgetHook.upsert(p) }}
           onDataChange={handleRefreshData}
         />
@@ -204,7 +275,7 @@ export default function AnalysisDesktopPage() {
       <ReportConfigModal
         open={showReportConfig}
         onClose={() => setShowReportConfig(false)}
-        config={prefs.analysisReportConfig ?? {}}
+        config={rc}
         inflationRate={prefs.assumedInflationRate ?? 3}
         savingsGoals={prefs.savingsGoals ?? []}
         monthCount={selection.months.length}
@@ -216,7 +287,7 @@ export default function AnalysisDesktopPage() {
   )
 }
 
-function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, categories, budgets, inflationRate, savingsGoals, reportConfig, onSaveBudgets, onDataChange }: {
+function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, categories, budgets, inflationRate, savingsGoals, reportConfig, visibleSections, onActiveSectionChange, navigateRef, onSaveBudgets, onDataChange }: {
   data: MultiMonthData
   months: string[]
   categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
@@ -226,12 +297,67 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
   inflationRate: number
   savingsGoals: import('../../types/database').SavingsGoal[]
   reportConfig: import('../../types/database').AnalysisReportConfig
+  visibleSections: Set<string>
+  onActiveSectionChange: (id: string) => void
+  navigateRef: React.MutableRefObject<((id: string) => void) | undefined>
   onSaveBudgets: (params: UpsertBudgetParams[]) => Promise<void>
   onDataChange: () => void
 }) {
   const [showBudgetEditor, setShowBudgetEditor] = useState(false)
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const isScrollingToRef = useRef(false)
+
   const rc = reportConfig
   const show = (key: keyof typeof rc, minMonths: number) => (rc[key] ?? true) && months.length >= minMonths
+
+  const handleNavigate = useCallback((sectionId: string) => {
+    const el = sectionRefs.current[sectionId]
+    if (!el) return
+    isScrollingToRef.current = true
+    const scrollContainer = el.closest('[class*="overflow-y-auto"]') as HTMLElement | null
+    const stickyOffset = 120
+    if (scrollContainer) {
+      const elTop = el.offsetTop - scrollContainer.offsetTop
+      scrollContainer.scrollTo({ top: elTop - stickyOffset, behavior: 'smooth' })
+    } else {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    onActiveSectionChange(sectionId)
+    setTimeout(() => { isScrollingToRef.current = false }, 800)
+  }, [onActiveSectionChange])
+
+  useEffect(() => {
+    navigateRef.current = handleNavigate
+  }, [handleNavigate, navigateRef])
+
+  useEffect(() => {
+    const scrollContainer = sectionRefs.current['overview']?.closest('[class*="overflow-y-auto"]') as HTMLElement | null
+    if (!scrollContainer) return
+
+    const handleScroll = () => {
+      if (isScrollingToRef.current) return
+      const stickyOffset = 140
+      const sections = REPORT_SECTIONS.filter(s => visibleSections.has(s.id))
+      let current = sections[0]?.id ?? 'overview'
+      for (const section of sections) {
+        const el = sectionRefs.current[section.id]
+        if (!el) continue
+        const elTop = el.offsetTop - scrollContainer.offsetTop
+        if (scrollContainer.scrollTop >= elTop - stickyOffset) {
+          current = section.id
+        }
+      }
+      onActiveSectionChange(current)
+    }
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
+    return () => scrollContainer.removeEventListener('scroll', handleScroll)
+  }, [visibleSections, onActiveSectionChange])
+
+  const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
+    sectionRefs.current[id] = el
+  }, [])
+
   const recurringCharges = useMemo(
     () => detectRecurring(data.allTransactions, months),
     [data.allTransactions, months],
@@ -277,73 +403,108 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
   )
 
   return (
-    <div className="mt-4 space-y-5">
-      {show('headline', 1) && <HeadlineBanner headline={headline} verdict={healthSummary.verdict} />}
+    <>
+      <div className="mt-4 space-y-5">
+        {visibleSections.has('overview') && (
+          <div ref={setSectionRef('overview')}>
+            {show('headline', 1) && <HeadlineBanner headline={headline} verdict={healthSummary.verdict} />}
+            {show('kpiCards', 1) && <div className="mt-5"><KpiCards data={data} months={months} categoryLookup={categoryLookup} columns={4} /></div>}
+            {show('fixedDiscretionary', 1) && (
+              <div className="mt-5">
+                <FixedDiscretionarySplit
+                  fixedTotal={fixedTotal}
+                  discretionaryTotal={discretionaryTotal}
+                  months={months.length}
+                  income={data.householdIncome}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
-      {show('kpiCards', 1) && <KpiCards data={data} months={months} categoryLookup={categoryLookup} columns={4} />}
+        {visibleSections.has('trends') && (
+          <div ref={setSectionRef('trends')}>
+            {show('categoryTrend', 2) && <CategoryTrendChart data={data} months={months} categoryLookup={categoryLookup} />}
+          </div>
+        )}
 
-      {show('fixedDiscretionary', 1) && (
-        <FixedDiscretionarySplit
-          fixedTotal={fixedTotal}
-          discretionaryTotal={discretionaryTotal}
-          months={months.length}
-          income={data.householdIncome}
-        />
-      )}
+        {visibleSections.has('breakdown') && (
+          <div ref={setSectionRef('breakdown')}>
+            <div className="grid grid-cols-2 gap-5 items-start">
+              {show('deltaDrivers', 2) && <DeltaDrivers drivers={deltaDrivers} />}
+              {show('memberSpending', 1) && <MemberSpendingPanel spendingByAccount={data.spendingByAccount} months={months.length} />}
+            </div>
+            {show('comparisonTable', 2) && (
+              <div className="mt-5">
+                <ComparisonTable
+                  data={data}
+                  months={months}
+                  categoryLookup={categoryLookup}
+                  accountAliases={accountAliases}
+                  categories={categories}
+                  onDataChange={onDataChange}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
-      {show('categoryTrend', 2) && <CategoryTrendChart data={data} months={months} categoryLookup={categoryLookup} />}
+        {visibleSections.has('calendar') && (
+          <div ref={setSectionRef('calendar')}>
+            {show('calendarHeatmap', 2) && <CalendarHeatmap dailyTotals={data.dailyTotals} months={months} layout="inline" />}
+          </div>
+        )}
 
-      <div className="grid grid-cols-2 gap-5 items-start">
-        {show('deltaDrivers', 2) && <DeltaDrivers drivers={deltaDrivers} />}
-        {show('memberSpending', 1) && <MemberSpendingPanel spendingByAccount={data.spendingByAccount} months={months.length} />}
-      </div>
+        {visibleSections.has('details') && (
+          <div ref={setSectionRef('details')}>
+            <div className="grid grid-cols-2 gap-5 items-start">
+              {show('topVendors', 3) && <TopVendorsPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />}
+              {show('cardCategorySplit', 3) && <CardCategorySplitPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />}
+            </div>
+          </div>
+        )}
 
-      {show('comparisonTable', 2) && (
-        <ComparisonTable
-          data={data}
-          months={months}
-          categoryLookup={categoryLookup}
-          accountAliases={accountAliases}
-          categories={categories}
-          onDataChange={onDataChange}
-        />
-      )}
+        {visibleSections.has('recurring') && (
+          <div ref={setSectionRef('recurring')}>
+            <div className="grid grid-cols-2 gap-5 items-start">
+              {show('recurring', 1) && <RecurringPanel charges={recurringCharges} months={months.length} />}
+              {show('budgetVsActual', 3) && (
+                <BudgetVsActualPanel
+                  budgets={budgets}
+                  summaryByMonth={data.summaryByMonth}
+                  months={months}
+                  income={data.householdIncome}
+                  categoryLookup={categoryLookup}
+                  onEditBudgets={() => setShowBudgetEditor(true)}
+                />
+              )}
+            </div>
+          </div>
+        )}
 
-      {show('calendarHeatmap', 2) && <CalendarHeatmap dailyTotals={data.dailyTotals} months={months} layout="inline" />}
+        {visibleSections.has('projections') && (
+          <div ref={setSectionRef('projections')}>
+            <div className="grid grid-cols-2 gap-5 items-start">
+              {show('savingsProjection', 3) && (
+                <SavingsProjectionPanel
+                  income={data.householdIncome}
+                  budgets={budgets}
+                  inflationRate={inflationRate}
+                  savingsGoals={savingsGoals}
+                  months={months.length}
+                />
+              )}
+              {show('velocityGauge', 1) && <VelocityGauge velocity={velocity} />}
+            </div>
+          </div>
+        )}
 
-      <div className="grid grid-cols-2 gap-5 items-start">
-        {show('topVendors', 3) && <TopVendorsPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />}
-        {show('cardCategorySplit', 3) && <CardCategorySplitPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />}
-      </div>
-
-      <div className="grid grid-cols-2 gap-5 items-start">
-        {show('recurring', 1) && <RecurringPanel charges={recurringCharges} months={months.length} />}
-        {show('budgetVsActual', 3) && (
-          <BudgetVsActualPanel
-            budgets={budgets}
-            summaryByMonth={data.summaryByMonth}
-            months={months}
-            income={data.householdIncome}
-            categoryLookup={categoryLookup}
-            onEditBudgets={() => setShowBudgetEditor(true)}
-          />
+        {visibleSections.has('advisor') && (
+          <div ref={setSectionRef('advisor')}>
+            {show('advisorNotes', 1) && <AdvisorNotes data={data} months={months} categoryLookup={categoryLookup} />}
+          </div>
         )}
       </div>
-
-      <div className="grid grid-cols-2 gap-5 items-start">
-        {show('savingsProjection', 3) && (
-          <SavingsProjectionPanel
-            income={data.householdIncome}
-            budgets={budgets}
-            inflationRate={inflationRate}
-            savingsGoals={savingsGoals}
-            months={months.length}
-          />
-        )}
-        {show('velocityGauge', 1) && <VelocityGauge velocity={velocity} />}
-      </div>
-
-      {show('advisorNotes', 1) && <AdvisorNotes data={data} months={months} categoryLookup={categoryLookup} />}
 
       <BudgetEditorModal
         open={showBudgetEditor}
@@ -355,6 +516,6 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
         categoryLookup={categoryLookup}
         onSave={onSaveBudgets}
       />
-    </div>
+    </>
   )
 }

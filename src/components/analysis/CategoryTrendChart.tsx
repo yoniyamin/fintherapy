@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts'
 import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
+import type { SpendingFrequency } from '../../lib/constants'
 import { formatCurrency } from '../../lib/formatCurrency'
 import { ui } from '../../lib/uiClasses'
 
 interface Props {
   data: MultiMonthData
   months: string[]
-  categoryLookup: Record<string, { icon: string; label: string }>
+  categoryLookup: Record<string, { icon: string; label: string; spendingFrequency?: SpendingFrequency }>
 }
 
 const PALETTE = [
@@ -30,10 +31,16 @@ function pctChange(from: number, to: number): number {
 export default function CategoryTrendChart({ data, months, categoryLookup }: Props) {
   const sorted = useMemo(() => [...months].sort(), [months])
   const [highlighted, setHighlighted] = useState<string | null>(null)
+  const [view, setView] = useState<'analysis' | 'cashflow'>('analysis')
 
   const top5Categories = useMemo(() => {
     return data.aggregatedSummary.slice(0, 5).map(c => c.category)
   }, [data.aggregatedSummary])
+
+  const hasAnnual = useMemo(
+    () => top5Categories.some(c => categoryLookup[c]?.spendingFrequency === 'annual'),
+    [top5Categories, categoryLookup],
+  )
 
   const chartData = useMemo(() => {
     const byMonth = new Map<string, Record<string, number>>()
@@ -44,7 +51,8 @@ export default function CategoryTrendChart({ data, months, categoryLookup }: Pro
       const row = byMonth.get(point.month)
       if (row) {
         const label = categoryLookup[point.category]?.label ?? point.category
-        row[label] = point.amount
+        const freq = categoryLookup[point.category]?.spendingFrequency
+        row[label] = view === 'analysis' && freq === 'annual' ? point.amount / 12 : point.amount
       }
     }
 
@@ -52,7 +60,7 @@ export default function CategoryTrendChart({ data, months, categoryLookup }: Pro
       month: formatMonth(m),
       ...byMonth.get(m),
     }))
-  }, [data.categoryTrend, sorted, top5Categories, categoryLookup])
+  }, [data.categoryTrend, sorted, top5Categories, categoryLookup, view])
 
   const categoryLabels = useMemo(
     () => top5Categories.map(c => categoryLookup[c]?.label ?? c),
@@ -88,9 +96,25 @@ export default function CategoryTrendChart({ data, months, categoryLookup }: Pro
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
     >
-      <p className="text-xs font-semibold uppercase tracking-wider text-surface-500">
-        Category Spending Trend
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wider text-surface-500">
+          Category Spending Trend
+        </p>
+        {hasAnnual && (
+          <div className="flex gap-1">
+            {(['analysis', 'cashflow'] as const).map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                className={`rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${view === v ? 'bg-indigo-500/20 text-indigo-300' : 'text-surface-500 hover:text-surface-300'}`}
+              >
+                {v === 'analysis' ? 'Analysis' : 'Cash flow'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="mt-3" style={{ height: 208, minWidth: 0 }}>
         <ResponsiveContainer width="100%" height={208}>
@@ -132,6 +156,12 @@ export default function CategoryTrendChart({ data, months, categoryLookup }: Pro
           </LineChart>
         </ResponsiveContainer>
       </div>
+
+      {view === 'analysis' && hasAnnual && (
+        <p className="mt-2 text-center text-[9px] italic text-surface-500">
+          Includes smoothed annual costs. Switch to Cash flow view for actual outflows.
+        </p>
+      )}
 
       {advisorCallout && (
         <div className="mt-3 rounded-xl border border-white/[0.06] bg-surface-950/40 px-3 py-2.5">

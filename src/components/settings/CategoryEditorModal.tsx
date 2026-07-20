@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { COLOR_PALETTE, NO_IDEA_CATEGORY_ID, OWN_TRANSFERS_CATEGORY_ID, type CategoryDef } from '../../lib/constants'
+import { COLOR_PALETTE, NO_IDEA_CATEGORY_ID, OWN_TRANSFERS_CATEGORY_ID, type CategoryDef, type SpendingFrequency } from '../../lib/constants'
 import {
   categoryHasBuiltInIcon,
   CATEGORY_GIF_OPTIONS,
@@ -54,6 +54,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [subcatBannerDismissed, setSubcatBannerDismissed] = useState(false)
   const { sheetDragProps, handleZoneProps } = useBottomSheetDrag(onClose)
 
   useEffect(() => {
@@ -90,6 +91,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
       icon: '📦',
       color: COLOR_PALETTE[0].value,
       expenseType: 'discretionary',
+      spendingFrequency: 'monthly',
       isNew: true,
     })
     setTxCount(0)
@@ -125,19 +127,25 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
           icon: editing.icon,
           color: editing.color,
           expenseType: editing.expenseType,
+          spendingFrequency: editing.spendingFrequency,
+          parentCategoryId: editing.parentCategoryId,
         })
       } else if (editing.originalId && editing.originalId !== newId) {
-        // Real rename (id changed)
         const res = await renameCategory(
           editing.originalId, newId, label, editing.icon, editing.color,
         )
         if (res.error) { setError(res.error); setSaving(false); return }
+        await upsertCategory({
+          id: newId, label, icon: editing.icon, color: editing.color,
+          expenseType: editing.expenseType, spendingFrequency: editing.spendingFrequency,
+          parentCategoryId: editing.parentCategoryId,
+        })
       } else {
-        // Same id, just update metadata
-        const res = await renameCategory(
-          editing.originalId!, editing.originalId!, label, editing.icon, editing.color,
-        )
-        if (res.error) { setError(res.error); setSaving(false); return }
+        await upsertCategory({
+          id: editing.originalId!, label, icon: editing.icon, color: editing.color,
+          expenseType: editing.expenseType, spendingFrequency: editing.spendingFrequency,
+          parentCategoryId: editing.parentCategoryId,
+        })
       }
       setEditing(null)
     } catch (e: unknown) {
@@ -240,6 +248,26 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                         </button>
                       ))}
                     </div>
+
+                    {!subcatBannerDismissed && !categories.some(c => c.parentCategoryId) && (
+                      <div className="mt-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-[11px] font-semibold text-cyan-300">Subcategories available</p>
+                            <p className="mt-0.5 text-[10px] text-surface-400">
+                              You can now nest categories (e.g. Kids &rarr; Activities, Clothing). Edit any category and pick a parent.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSubcatBannerDismissed(true)}
+                            className="shrink-0 text-[10px] text-surface-500 hover:text-surface-300"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     <button
                       type="button"
@@ -368,6 +396,67 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                           />
                         ))}
                       </div>
+                    </div>
+
+                    {/* Spending Frequency */}
+                    <div>
+                      <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-surface-500">
+                        Spending Frequency
+                      </label>
+                      <div className="flex gap-1.5">
+                        {([
+                          { value: 'monthly' as SpendingFrequency, label: 'Monthly' },
+                          { value: 'annual' as SpendingFrequency, label: 'Annual' },
+                          { value: 'one_off' as SpendingFrequency, label: 'One-off' },
+                        ]).map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setEditing({ ...editing, spendingFrequency: opt.value })}
+                            className={`flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
+                              editing.spendingFrequency === opt.value
+                                ? 'border-duo-green/60 bg-duo-green/15 text-duo-green'
+                                : 'border-white/[0.08] bg-surface-900/80 text-surface-400 hover:bg-surface-800'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-[10px] text-surface-500">
+                        {editing.spendingFrequency === 'annual'
+                          ? 'Costs spread across 12 months in reports (e.g. insurance, holidays).'
+                          : editing.spendingFrequency === 'one_off'
+                            ? 'Excluded from monthly averages and trend analysis.'
+                            : 'Included in monthly averages and trend analysis.'}
+                      </p>
+                    </div>
+
+                    {/* Parent Category */}
+                    <div>
+                      <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-surface-500">
+                        Parent Category
+                      </label>
+                      <select
+                        value={editing.parentCategoryId ?? ''}
+                        onChange={(e) => setEditing({ ...editing, parentCategoryId: e.target.value || undefined })}
+                        className="w-full rounded-xl border border-white/[0.08] bg-surface-900/80 px-3 py-2.5 text-sm text-surface-100 focus:border-duo-green/40 focus:outline-none focus:ring-1 focus:ring-duo-green/30"
+                      >
+                        <option value="">None (top-level)</option>
+                        {categories
+                          .filter((c) =>
+                            c.id !== (editing.originalId ?? editing.id) &&
+                            !c.parentCategoryId &&
+                            c.id !== OWN_TRANSFERS_CATEGORY_ID &&
+                            c.id !== NO_IDEA_CATEGORY_ID
+                          )
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
+                          ))}
+                      </select>
+                      <p className="mt-1 text-[10px] text-surface-500">
+                        Make this a subcategory of another category for grouped reports.
+                      </p>
                     </div>
 
                     {/* Preview */}

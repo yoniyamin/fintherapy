@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { motion, useInView } from 'framer-motion'
 import ScrollReportShell from '../common/scrollReport/ScrollReportShell'
 import {
@@ -16,7 +16,8 @@ import {
 import type { MultiMonthData, CategoryTrendPoint } from '../../hooks/useMultiMonthReveal'
 import type { CategorySummary } from '../../hooks/useReveal'
 import type { ExportRow } from '../../hooks/useTransactions'
-import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { OWN_TRANSFERS_CATEGORY_ID, type CategoryDef, type SpendingFrequency } from '../../lib/constants'
+import { rollUpAmounts } from '../../lib/categoryHierarchy'
 import { exportSpendMagnitude, topSpendingTransactions } from '../../lib/exportSpend'
 import { formatCurrency } from '../../lib/formatCurrency'
 import {
@@ -26,14 +27,17 @@ import {
   type AdvisorInsight,
   type HealthSummary,
 } from '../../lib/advisorInsights'
+import AnalysisIcon from './AnalysisIcons'
+import { getInsightIconName } from './analysisIconPaths'
 
 interface Props {
   data: MultiMonthData
   months: string[]
-  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string; spendingFrequency?: SpendingFrequency; parentCategoryId?: string }>
   onClose: () => void
   onDownload: () => void
   downloading: boolean
+  subcategoryDisplay?: 'grouped' | 'detailed'
 }
 
 const COLORS = ['#34D399', '#60A5FA', '#F59E0B', '#F472B6', '#A78BFA', '#FB923C']
@@ -63,13 +67,45 @@ function pctChange(from: number, to: number): number {
 
 export default function MultiMonthSlideDeckPreview({
   data, months, categoryLookup, onClose, onDownload, downloading,
+  subcategoryDisplay = 'grouped',
 }: Props) {
   const sorted = useMemo(() => [...months].sort(), [months])
 
-  const filteredSummary = useMemo(
-    () => data.aggregatedSummary.filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID),
-    [data.aggregatedSummary],
+  const categories: CategoryDef[] = useMemo(() =>
+    Object.entries(categoryLookup).map(([id, info]) => ({
+      id, ...info,
+      expenseType: (info.expenseType ?? 'discretionary') as CategoryDef['expenseType'],
+      spendingFrequency: (info.spendingFrequency ?? 'monthly') as CategoryDef['spendingFrequency'],
+      parentCategoryId: info.parentCategoryId,
+    })),
+    [categoryLookup],
   )
+
+  const filteredSummary = useMemo(() => {
+    const base = data.aggregatedSummary.filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID)
+    if (subcategoryDisplay !== 'grouped') return base
+
+    const amountMap: Record<string, number> = {}
+    for (const s of base) amountMap[s.category] = Number(s.total_amount)
+    const rolled = rollUpAmounts(categories, amountMap)
+
+    const seen = new Set<string>()
+    const result: CategorySummary[] = []
+    for (const s of base) {
+      const parentId = categoryLookup[s.category]?.parentCategoryId
+      const effectiveId = parentId && rolled[parentId] !== undefined ? parentId : s.category
+      if (seen.has(effectiveId)) continue
+      seen.add(effectiveId)
+      result.push({ ...s, category: effectiveId, total_amount: rolled[effectiveId] ?? Number(s.total_amount) })
+    }
+    return result.sort((a, b) => Number(b.total_amount) - Number(a.total_amount))
+  }, [data.aggregatedSummary, subcategoryDisplay, categories, categoryLookup])
+
+  const oneOffTotal = useMemo(() => {
+    return data.aggregatedSummary
+      .filter(c => categoryLookup[c.category]?.spendingFrequency === 'one_off')
+      .reduce((s, c) => s + Number(c.total_amount), 0)
+  }, [data.aggregatedSummary, categoryLookup])
 
   const filteredTransactions = useMemo(
     () => data.allTransactions.filter(tx =>
@@ -96,6 +132,17 @@ export default function MultiMonthSlideDeckPreview({
 
   const health = useMemo(() => getHealthSummary(insightInput), [insightInput])
   const insights = useMemo(() => generateInsights(insightInput), [insightInput])
+
+  const annualCategorySpend = useMemo(() => {
+    return data.aggregatedSummary
+      .filter(c => categoryLookup[c.category]?.spendingFrequency === 'annual')
+      .reduce((s, c) => s + Number(c.total_amount), 0)
+  }, [data.aggregatedSummary, categoryLookup])
+
+  const trueMonthlyBaseline = useMemo(() => {
+    if (sorted.length === 0) return 0
+    return (totalSpent - annualCategorySpend - oneOffTotal) / sorted.length
+  }, [totalSpent, annualCategorySpend, oneOffTotal, sorted.length])
 
   const sections = useMemo(() => [
     { id: 'title', label: 'Financial Health Check' },
@@ -127,7 +174,7 @@ export default function MultiMonthSlideDeckPreview({
           />
           <ScrollReportDivider />
           <ScrollReportSection id="big-picture" title="The Big Picture">
-            <BigPictureSlide totalSpent={totalSpent} avgMonthly={avgMonthly} monthCount={sorted.length} income={data.householdIncome} health={health} />
+            <BigPictureSlide totalSpent={totalSpent} avgMonthly={avgMonthly} trueMonthlyBaseline={trueMonthlyBaseline} monthCount={sorted.length} income={data.householdIncome} health={health} oneOffTotal={oneOffTotal} annualMonthlySetAside={annualCategorySpend / 12} />
           </ScrollReportSection>
           <ScrollReportDivider />
           <ScrollReportSection id="trajectory" title="Spending Trajectory">
@@ -168,6 +215,14 @@ export default function MultiMonthSlideDeckPreview({
 }
 
 /* ─────────────────── SLIDE COMPONENTS ─────────────────── */
+
+function SlideDeckInsightIcon({ id }: { id: string }) {
+  return (
+    <span className="mt-0.5 shrink-0 text-surface-400">
+      <AnalysisIcon name={getInsightIconName(id)} width={16} height={16} />
+    </span>
+  )
+}
 
 function TitleSlide({
   months, totalSpent, txCount, onScrollToTop,
@@ -229,9 +284,21 @@ function TitleSlide({
   )
 }
 
-function BigPictureSlide({ totalSpent, avgMonthly, monthCount, income, health }: { totalSpent: number; avgMonthly: number; monthCount: number; income: number | null; health: HealthSummary }) {
+function BigPictureSlide({ totalSpent, avgMonthly, trueMonthlyBaseline, monthCount, income, health, oneOffTotal, annualMonthlySetAside }: {
+  totalSpent: number; avgMonthly: number; trueMonthlyBaseline: number; monthCount: number; income: number | null; health: HealthSummary; oneOffTotal: number; annualMonthlySetAside: number
+}) {
   const savingsRate = income != null && income > 0 ? ((income - avgMonthly) / income) * 100 : null
   const verdictColor = health.verdict === 'green' ? 'text-emerald-400' : health.verdict === 'amber' ? 'text-amber-400' : 'text-red-400'
+  const hasFrequencyData = trueMonthlyBaseline !== avgMonthly
+
+  const kpis = [
+    { label: 'Total Spent', value: formatCurrency(totalSpent, false) },
+    { label: 'Avg Monthly', value: formatCurrency(avgMonthly, false) },
+    ...(hasFrequencyData ? [{ label: 'True Monthly Baseline', value: formatCurrency(trueMonthlyBaseline, false) }] : []),
+    { label: 'Months', value: String(monthCount) },
+    ...(savingsRate != null ? [{ label: 'Savings Rate', value: `${Math.round(savingsRate)}%` }] : []),
+    ...(annualMonthlySetAside > 0 ? [{ label: 'Annual Set-Aside', value: `${formatCurrency(annualMonthlySetAside, false)}/mo` }] : []),
+  ]
 
   return (
     <div className="space-y-4">
@@ -245,12 +312,7 @@ function BigPictureSlide({ totalSpent, avgMonthly, monthCount, income, health }:
         <p className={`text-xs font-medium ${verdictColor}`}>{health.message}</p>
       </motion.div>
       <RevealStagger className="grid grid-cols-2 gap-2">
-        {[
-          { label: 'Total Spent', value: formatCurrency(totalSpent, false) },
-          { label: 'Avg Monthly', value: formatCurrency(avgMonthly, false) },
-          { label: 'Months', value: String(monthCount) },
-          ...(savingsRate != null ? [{ label: 'Savings Rate', value: `${Math.round(savingsRate)}%` }] : []),
-        ].map((m) => (
+        {kpis.map((m) => (
           <RevealItem key={m.label}>
             <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3 text-center">
               <p className="text-sm font-bold tabular-nums text-surface-200">{m.value}</p>
@@ -259,6 +321,16 @@ function BigPictureSlide({ totalSpent, avgMonthly, monthCount, income, health }:
           </RevealItem>
         ))}
       </RevealStagger>
+      {oneOffTotal > 0 && (
+        <p className="text-center text-[10px] text-surface-400">
+          One-off expenses this period: {formatCurrency(oneOffTotal, false)} (excluded from baseline).
+        </p>
+      )}
+      {monthCount < 12 && (
+        <p className="text-center text-[9px] italic text-surface-500">
+          Based on {monthCount} months of data. Annual expenses may not all appear in this window.
+        </p>
+      )}
     </div>
   )
 }
@@ -352,40 +424,68 @@ function WhereMoneyGoesSlide({ summary, total, categoryLookup }: { summary: Cate
   )
 }
 
-function HowChangingSlide({ trend, months, aggregated, categoryLookup }: { trend: CategoryTrendPoint[]; months: string[]; aggregated: CategorySummary[]; categoryLookup: Record<string, { icon: string; label: string }> }) {
+function HowChangingSlide({ trend, months, aggregated, categoryLookup }: {
+  trend: CategoryTrendPoint[]; months: string[]; aggregated: CategorySummary[];
+  categoryLookup: Record<string, { icon: string; label: string; spendingFrequency?: SpendingFrequency }>
+}) {
+  const [view, setView] = useState<'analysis' | 'cashflow'>('analysis')
   const top5 = aggregated.filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID).slice(0, 5).map(c => c.category)
   const labels = top5.map(c => categoryLookup[c]?.label ?? c)
+  const hasAnnual = top5.some(c => categoryLookup[c]?.spendingFrequency === 'annual')
 
   const chartData = months.map(m => {
     const row: Record<string, number | string> = { month: shortMonth(m) }
     for (const cat of top5) {
       const label = categoryLookup[cat]?.label ?? cat
       const point = trend.find(p => p.month === m && p.category === cat)
-      row[label] = point?.amount ?? 0
+      const rawAmount = point?.amount ?? 0
+      const freq = categoryLookup[cat]?.spendingFrequency
+      row[label] = view === 'analysis' && freq === 'annual' ? rawAmount / 12 : rawAmount
     }
     return row
   })
 
   return (
-    <motion.div
-      className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4"
-      initial={{ opacity: 0, scale: 0.98 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      viewport={{ once: true, amount: 0.35 }}
-      transition={{ duration: 0.45, ease: REPORT_EASE }}
-    >
-      <div className="h-44">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
-            <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
-            <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11 }} formatter={(value) => [formatCurrency(Number(value ?? 0), false), '']} />
-            <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconType="circle" iconSize={6} />
-            {labels.map((label, i) => <Line key={label} type="monotone" dataKey={label} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 2 }} />)}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </motion.div>
+    <div className="space-y-2">
+      {hasAnnual && (
+        <div className="flex items-center justify-end gap-1">
+          {(['analysis', 'cashflow'] as const).map(v => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${view === v ? 'bg-indigo-500/20 text-indigo-300' : 'text-surface-500 hover:text-surface-300'}`}
+            >
+              {v === 'analysis' ? 'Analysis' : 'Cash flow'}
+            </button>
+          ))}
+        </div>
+      )}
+      <motion.div
+        className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4"
+        initial={{ opacity: 0, scale: 0.98 }}
+        whileInView={{ opacity: 1, scale: 1 }}
+        viewport={{ once: true, amount: 0.35 }}
+        transition={{ duration: 0.45, ease: REPORT_EASE }}
+      >
+        <div className="h-44">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+              <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+              <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11 }} formatter={(value) => [formatCurrency(Number(value ?? 0), false), '']} />
+              <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconType="circle" iconSize={6} />
+              {labels.map((label, i) => <Line key={label} type="monotone" dataKey={label} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 2 }} />)}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </motion.div>
+      {view === 'analysis' && hasAnnual && (
+        <p className="text-center text-[9px] italic text-surface-500">
+          Includes smoothed annual costs. Switch to Cash flow view for actual outflows.
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -577,10 +677,13 @@ function AdvisorSummarySlide({ insights, income, avgMonthly }: { insights: Advis
         {insights.map((insight) => (
           <RevealItem key={insight.id}>
             <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
-              <p className="text-xs leading-relaxed text-surface-200">
-                <span className="mr-1.5">{insight.emoji}</span>
-                {insight.text}
-              </p>
+              <div className="flex gap-2.5">
+                <SlideDeckInsightIcon id={insight.id} />
+                <div className="min-w-0">
+                  <p className="text-xs leading-relaxed text-surface-200">{insight.text}</p>
+                  <p className="mt-1 text-[10px] leading-snug text-surface-500">{insight.rationale}</p>
+                </div>
+              </div>
             </div>
           </RevealItem>
         ))}

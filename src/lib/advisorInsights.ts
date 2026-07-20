@@ -4,15 +4,20 @@ import type { ExportRow } from '../hooks/useTransactions'
 import type { RecurringCharge } from './recurringDetector'
 import { detectRecurring } from './recurringDetector'
 import { OWN_TRANSFERS_CATEGORY_ID } from './constants'
+import type { SpendingFrequency } from './constants'
 import { formatCurrency } from './formatCurrency'
 
 export type InsightSeverity = 'positive' | 'neutral' | 'warning' | 'concern'
+export type InsightPriority = 'critical' | 'actionable' | 'informational'
 
 export interface AdvisorInsight {
   id: string
   emoji: string
   text: string
+  /** Short explanation of why this insight matters to the user. */
+  rationale: string
   severity: InsightSeverity
+  priority: InsightPriority
 }
 
 export type HealthVerdict = 'green' | 'amber' | 'red'
@@ -38,12 +43,13 @@ export interface InsightInput {
   categoryTrend: CategoryTrendPoint[]
   dailyTotals: DailyTotal[]
   income: number | null
-  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string; spendingFrequency?: SpendingFrequency; parentCategoryId?: string }>
   transactions: ExportRow[]
   recurringCharges: RecurringCharge[]
   spendingByAccount: AccountSpending[]
   fixedTotal: number
   discretionaryTotal: number
+  budgets?: { category_id: string; monthly_target: number }[]
 }
 
 /** Builds a complete insight payload from multi-month analysis data. */
@@ -55,9 +61,10 @@ export function buildInsightInput(params: {
   categoryTrend: CategoryTrendPoint[]
   dailyTotals: DailyTotal[]
   income: number | null
-  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string; spendingFrequency?: SpendingFrequency; parentCategoryId?: string }>
   transactions: ExportRow[]
   spendingByAccount?: AccountSpending[]
+  budgets?: { category_id: string; monthly_target: number }[]
 }): InsightInput {
   const recurringCharges = detectRecurring(params.transactions, params.months)
   const fixedTotal = params.aggregatedSummary
@@ -80,6 +87,7 @@ export function buildInsightInput(params: {
     spendingByAccount: params.spendingByAccount ?? [],
     fixedTotal,
     discretionaryTotal,
+    budgets: params.budgets,
   }
 }
 
@@ -250,6 +258,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
     months, aggregatedSummary, summaryByMonth, monthlyTotals,
     dailyTotals, income, categoryLookup, transactions,
     recurringCharges, spendingByAccount, fixedTotal, discretionaryTotal,
+    budgets,
   } = input
 
   const sortedMonths = [...months].sort()
@@ -270,14 +279,18 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         id: 'fixed-discretionary-split',
         emoji: '🔒',
         text: `${formatCurrency(fixedAvg, false)} is committed to fixed costs monthly. You have ${formatCurrency(discretionaryBudget, false)} for choices — but spent ${formatCurrency(discretionaryAvg, false)} on discretionary items (${formatCurrency(discretionaryAvg - discretionaryBudget, false)} over).`,
+        rationale: 'Fixed costs reduce the money available for choices. Knowing the gap helps set realistic limits.',
         severity: 'warning',
+        priority: 'actionable',
       })
     } else if (fixedAvg > 0) {
       insights.push({
         id: 'fixed-discretionary-split',
         emoji: '🔒',
         text: `${formatCurrency(fixedAvg, false)}/month is committed (fixed). You had ${formatCurrency(discretionaryBudget, false)} for choices and spent ${formatCurrency(discretionaryAvg, false)} — within budget.`,
+        rationale: 'Your discretionary spending stayed within the room left after fixed costs.',
         severity: 'positive',
+        priority: 'informational',
       })
     }
   }
@@ -290,7 +303,9 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
       id: 'recurring-total',
       emoji: '🔄',
       text: `${recurringCharges.length} recurring charges total ${formatCurrency(recurringTotal, false)}/month (${formatCurrency(recurringTotal * 12, false)}/year). Top: ${topNames}.`,
+      rationale: 'Subscriptions and recurring fees are easy to forget. Reviewing them annually often uncovers unused services.',
       severity: recurringTotal > avgMonthly * 0.15 ? 'warning' : 'neutral',
+      priority: 'actionable',
     })
   }
 
@@ -306,11 +321,14 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
   if (avgMicroPerMonth > 30) {
     const microTotal = microTxs.reduce((s, tx) => s + Math.abs(Number(tx.normalized_amount ?? tx.amount)), 0)
     const microMonthly = microTotal / Math.max(months.length, 1)
+    const microPct = avgMonthly > 0 ? Math.round((microMonthly / avgMonthly) * 100) : 0
     insights.push({
       id: 'micro-spend',
       emoji: '🪙',
       text: `${Math.round(avgMicroPerMonth)} small purchases (under ${formatCurrency(microThreshold, false)}) per month totaling ${formatCurrency(microMonthly, false)}.`,
+      rationale: `Small charges are ${microPct}% of your monthly spend. They fly under the radar individually but compound fast.`,
       severity: microMonthly > avgMonthly * 0.05 ? 'warning' : 'neutral',
+      priority: 'informational',
     })
   }
 
@@ -336,7 +354,9 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         id: 'member-breakdown',
         emoji: '👥',
         text: `Spending by card: ${parts}`,
+        rationale: 'Knowing which card carries the load helps spot imbalances and optimize rewards or cash flow.',
         severity: 'neutral',
+        priority: 'informational',
       })
     }
   }
@@ -351,14 +371,18 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         id: 'overspending',
         emoji: '🔴',
         text: `Spending exceeds income by ${formatCurrency(avgMonthly - income, false)}/month.${names ? ` Watch ${names}.` : ''}`,
+        rationale: 'Spending more than you earn depletes savings or grows debt. This is the single most important signal to address.',
         severity: 'concern',
+        priority: 'critical',
       })
     } else if (savingsRate >= 20) {
       insights.push({
         id: 'strong-saver',
         emoji: '💚',
         text: `Saving ${Math.round(savingsRate)}% of income — excellent household discipline.`,
+        rationale: 'A 20%+ savings rate puts you ahead of most households and builds a strong financial cushion.',
         severity: 'positive',
+        priority: 'informational',
       })
     }
   }
@@ -394,7 +418,9 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         id: 'delta-driver',
         emoji: '📈',
         text: `${catLabel(biggestRise.cat)} grew ${Math.round(biggestRise.pct)}% (+${formatCurrency(biggestRise.delta, false)})${driverHint}.`,
+        rationale: 'A sharp increase in one category often signals a new habit or one-off event worth investigating.',
         severity: 'warning',
+        priority: 'actionable',
       })
     }
   }
@@ -409,22 +435,41 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
           id: 'dominant-category',
           emoji: '📊',
           text: `${catLabel(top.category)} is ${Math.round(share)}% of all spending. Does that align with priorities?`,
+          rationale: 'When one category dominates, small changes there have outsized impact on the total.',
           severity: 'neutral',
+          priority: 'actionable',
         })
       }
     }
   }
 
-  // 8. Spending predictability
-  if (totals.length >= 3) {
-    const cv = coefficientOfVariation(totals)
-    if (cv > 0.3) {
-      insights.push({
-        id: 'variable-spending',
-        emoji: '🎢',
-        text: `Monthly spending varies significantly. A target budget could help smooth things out.`,
-        severity: 'warning',
-      })
+  // 8. D3: Experiment framing (replaces old variable-spending rule)
+  for (const cs of aggregatedSummary) {
+    if (cs.category === OWN_TRANSFERS_CATEGORY_ID) continue
+    const freq = categoryLookup[cs.category]?.spendingFrequency ?? 'monthly'
+    if (freq !== 'monthly') continue
+
+    const catMonthlyAmounts = sortedMonths.map(m => {
+      const monthCats = summaryByMonth.get(m)
+      const match = monthCats?.find(c => c.category === cs.category)
+      return match ? Number(match.total_amount) : 0
+    }).filter(v => v > 0)
+
+    if (catMonthlyAmounts.length >= 3) {
+      const cv = coefficientOfVariation(catMonthlyAmounts)
+      if (cv > 0.25) {
+        const min = Math.min(...catMonthlyAmounts)
+        const max = Math.max(...catMonthlyAmounts)
+        insights.push({
+          id: `experiment-framing-${cs.category}`,
+          emoji: '🧪',
+          text: `${catLabel(cs.category)} varied between ${formatCurrency(min, false)} and ${formatCurrency(max, false)} over ${catMonthlyAmounts.length} months. Consider tracking a specific change for 3 months and measuring actual savings.`,
+          rationale: 'High variance means this category is responsive to behavior changes — a good place to experiment.',
+          severity: 'neutral',
+          priority: 'actionable',
+        })
+        break
+      }
     }
   }
 
@@ -453,7 +498,9 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         id: 'weekend-spending',
         emoji: '🗓️',
         text: `Weekend spending is ${pct}% higher than weekdays. Planning ahead for weekends could help.`,
+        rationale: 'Weekend spending spikes often come from unplanned dining, activities, or impulse purchases.',
         severity: 'neutral',
+        priority: 'informational',
       })
     }
   }
@@ -470,12 +517,139 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         id: 'best-worst-month',
         emoji: '📅',
         text: `Lightest month: ${formatMonth(bestMonth.billing_month)} (${formatCurrency(Number(bestMonth.total_amount), false)}). Heaviest: ${formatMonth(worstMonth.billing_month)} (${formatCurrency(Number(worstMonth.total_amount), false)}).`,
+        rationale: 'Understanding your best and worst months helps anticipate cash flow peaks.',
         severity: 'neutral',
+        priority: 'informational',
       })
     }
   }
 
-  return insights.slice(0, 8)
+  // D1. Average Trap Warning — fires when annual category raw avg >= 2x annualized allocation
+  const annualCatSpend = aggregatedSummary
+    .filter(c => categoryLookup[c.category]?.spendingFrequency === 'annual' && Number(c.total_amount) > 0)
+  const oneOffSpend = aggregatedSummary
+    .filter(c => categoryLookup[c.category]?.spendingFrequency === 'one_off')
+    .reduce((s, c) => s + Number(c.total_amount), 0)
+
+  if (annualCatSpend.length > 0 && months.length > 0 && months.length < 12) {
+    const annualTotal = annualCatSpend.reduce((s, c) => s + Number(c.total_amount), 0)
+    const rawMonthlyAvg = annualTotal / months.length
+    const annualizedAllocation = annualTotal / 12
+    if (rawMonthlyAvg >= annualizedAllocation * 2) {
+      const baseline = (totalSpent - annualTotal - oneOffSpend) / months.length
+      const annualNames = annualCatSpend.map(c => catLabel(c.category)).join(', ')
+      insights.push({
+        id: 'average-trap',
+        emoji: '⚠️',
+        text: `${annualNames} look${annualCatSpend.length === 1 ? 's' : ''} like ${formatCurrency(rawMonthlyAvg, false)}/month but include${annualCatSpend.length === 1 ? 's' : ''} costs that occur a few times per year. Your true monthly baseline without these is ${formatCurrency(baseline, false)}.`,
+        rationale: 'Averaging annual costs into monthly figures inflates your baseline and can lead to cutting the wrong things.',
+        severity: 'warning',
+        priority: 'critical',
+      })
+    }
+  }
+
+  // D2. Annualized Impact Framing — show annual impact for top category savings
+  if (income != null && income > 0) {
+    const topCat = aggregatedSummary
+      .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID && categoryLookup[c.category]?.spendingFrequency !== 'one_off')
+      .sort((a, b) => Number(b.total_amount) - Number(a.total_amount))[0]
+    if (topCat) {
+      const monthlyAvg = Number(topCat.total_amount) / Math.max(months.length, 1)
+      if (monthlyAvg > avgMonthly * 0.1) {
+        const tenPctSaving = monthlyAvg * 0.1
+        insights.push({
+          id: 'annualized-impact',
+          emoji: '📐',
+          text: `Reducing ${catLabel(topCat.category)} by just 10% (${formatCurrency(tenPctSaving, false)}/month) saves ${formatCurrency(tenPctSaving * 12, false)}/year.`,
+          rationale: 'Small monthly reductions in your biggest category compound into meaningful annual savings.',
+          severity: 'neutral',
+          priority: 'informational',
+        })
+      }
+    }
+  }
+
+  // D4. Sustainability Check — budget exceeded 15%+ for 3+ consecutive months
+  if (budgets && budgets.length > 0 && sortedMonths.length >= 3) {
+    for (const budget of budgets) {
+      let consecutive = 0
+      for (const m of sortedMonths) {
+        const monthCats = summaryByMonth.get(m)
+        const actual = monthCats?.find(c => c.category === budget.category_id)
+        const spent = actual ? Math.abs(Number(actual.total_amount)) : 0
+        if (spent > budget.monthly_target * 1.15) {
+          consecutive++
+        } else {
+          consecutive = 0
+        }
+      }
+      if (consecutive >= 3) {
+        insights.push({
+          id: `sustainability-${budget.category_id}`,
+          emoji: '🔥',
+          text: `${catLabel(budget.category_id)} has exceeded its budget by 15%+ for ${consecutive} consecutive months. The target of ${formatCurrency(budget.monthly_target, false)}/month may not be sustainable — consider adjusting to a level you can maintain.`,
+          rationale: 'Consistently blown budgets cause guilt without results. A realistic target you can hit is more effective.',
+          severity: 'concern',
+          priority: 'critical',
+        })
+        break
+      }
+    }
+  }
+
+  // D5. Category Depth Prompt — suggest subcategories for large unsplit categories
+  const topCategories = aggregatedSummary
+    .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID)
+    .sort((a, b) => Number(b.total_amount) - Number(a.total_amount))
+    .slice(0, 3)
+
+  for (const tc of topCategories) {
+    const info = categoryLookup[tc.category]
+    if (!info) continue
+    const hasChildren = Object.values(categoryLookup).some(c => c.parentCategoryId === tc.category)
+    if (hasChildren) continue
+    if (info.parentCategoryId) continue
+
+    const catAvg = Number(tc.total_amount) / Math.max(months.length, 1)
+    if (catAvg > avgMonthly * 0.12) {
+      insights.push({
+        id: `depth-prompt-${tc.category}`,
+        emoji: '🔍',
+        text: `${catLabel(tc.category)} averages ${formatCurrency(catAvg, false)}/month. Breaking it into subcategories (e.g., activities, items, services) would reveal where the spending concentrates.`,
+        rationale: 'Broad categories hide the actionable detail. You can only optimize what you can see.',
+        severity: 'neutral',
+        priority: 'actionable',
+      })
+      break
+    }
+  }
+
+  return selectInsightsByPriority(insights)
+}
+
+/**
+ * Selects insights using priority tiers:
+ * - Critical: uncapped, always shown
+ * - Actionable: up to 4 after critical
+ * - Informational: up to 2 after actionable
+ * - Hard ceiling: 10 total
+ */
+function selectInsightsByPriority(insights: AdvisorInsight[]): AdvisorInsight[] {
+  const critical = insights.filter(i => i.priority === 'critical')
+  const actionable = insights.filter(i => i.priority === 'actionable')
+  const informational = insights.filter(i => i.priority === 'informational')
+
+  const result: AdvisorInsight[] = [...critical]
+  const remaining = 10 - result.length
+
+  const actionableSlots = Math.min(actionable.length, Math.min(4, remaining))
+  result.push(...actionable.slice(0, actionableSlots))
+
+  const infoSlots = Math.min(informational.length, Math.min(2, 10 - result.length))
+  result.push(...informational.slice(0, infoSlots))
+
+  return result.slice(0, 10)
 }
 
 // ---------------------------------------------------------------------------

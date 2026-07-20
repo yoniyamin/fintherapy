@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { DEFAULT_CATEGORIES, type CategoryDef, type ExpenseType } from '../lib/constants'
+import { DEFAULT_CATEGORIES, type CategoryDef, type ExpenseType, type SpendingFrequency } from '../lib/constants'
 
 export interface CategoryOverride {
   id: string
@@ -10,6 +10,8 @@ export interface CategoryOverride {
   previous_ids: string[]
   sort_order: number
   expense_type?: string
+  spending_frequency?: string
+  parent_category_id?: string | null
 }
 
 /**
@@ -51,14 +53,23 @@ export function useCategoryConfig(householdId: string | null | undefined) {
 
     const overrideMap = new Map(overrides.map((o) => [o.id, o]))
 
+    const resolveFields = (o: CategoryOverride, fallback: { expenseType: ExpenseType; spendingFrequency: SpendingFrequency }) => {
+      const expenseType = (o.expense_type === 'fixed' || o.expense_type === 'discretionary'
+        ? o.expense_type
+        : fallback.expenseType) as ExpenseType
+      const spendingFrequency = (o.spending_frequency === 'monthly' || o.spending_frequency === 'annual' || o.spending_frequency === 'one_off'
+        ? o.spending_frequency
+        : fallback.spendingFrequency) as SpendingFrequency
+      const parentCategoryId = o.parent_category_id ?? undefined
+      return { expenseType, spendingFrequency, parentCategoryId }
+    }
+
     const merged: CategoryDef[] = DEFAULT_CATEGORIES.map((d) => {
       const o = overrideMap.get(d.id)
       if (o) {
         overrideMap.delete(d.id)
-        const expenseType = (o.expense_type === 'fixed' || o.expense_type === 'discretionary'
-          ? o.expense_type
-          : d.expenseType) as ExpenseType
-        return { id: o.id, label: o.label, icon: o.icon, color: o.color, expenseType }
+        const { expenseType, spendingFrequency, parentCategoryId } = resolveFields(o, d)
+        return { id: o.id, label: o.label, icon: o.icon, color: o.color, expenseType, spendingFrequency, parentCategoryId }
       }
       return { ...d }
     })
@@ -67,13 +78,11 @@ export function useCategoryConfig(householdId: string | null | undefined) {
       const prevIdx = merged.findIndex((m) =>
         o.previous_ids.includes(m.id),
       )
-      const expenseType = (o.expense_type === 'fixed' || o.expense_type === 'discretionary'
-        ? o.expense_type
-        : 'discretionary') as ExpenseType
+      const { expenseType, spendingFrequency, parentCategoryId } = resolveFields(o, { expenseType: 'discretionary', spendingFrequency: 'monthly' })
       if (prevIdx >= 0) {
-        merged[prevIdx] = { id: o.id, label: o.label, icon: o.icon, color: o.color, expenseType }
+        merged[prevIdx] = { id: o.id, label: o.label, icon: o.icon, color: o.color, expenseType, spendingFrequency, parentCategoryId }
       } else {
-        merged.push({ id: o.id, label: o.label, icon: o.icon, color: o.color, expenseType })
+        merged.push({ id: o.id, label: o.label, icon: o.icon, color: o.color, expenseType, spendingFrequency, parentCategoryId })
       }
     }
 
@@ -94,6 +103,9 @@ export function useCategoryConfig(householdId: string | null | undefined) {
       p_icon: cat.icon,
       p_color: cat.color,
       p_sort_order: sortOrder,
+      p_expense_type: cat.expenseType,
+      p_spending_frequency: cat.spendingFrequency,
+      p_parent_category_id: cat.parentCategoryId ?? null,
     })
     await fetchOverrides()
   }, [householdId, fetchOverrides])

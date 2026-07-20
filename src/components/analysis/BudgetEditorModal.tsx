@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { CategoryBudget, UpsertBudgetParams } from '../../hooks/useCategoryBudgets'
 import type { CategorySummary } from '../../hooks/useReveal'
-import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import { NO_IDEA_CATEGORY_ID, OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
+import type { SpendingFrequency } from '../../lib/constants'
 import { formatCurrency } from '../../lib/formatCurrency'
 
 interface Props {
@@ -13,7 +14,7 @@ interface Props {
   summaryByMonth: Map<string, CategorySummary[]>
   months: string[]
   income: number | null
-  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string; spendingFrequency?: SpendingFrequency }>
   onSave: (params: UpsertBudgetParams[]) => Promise<void>
 }
 
@@ -26,6 +27,7 @@ interface DraftRow {
   is_discretionary: boolean
   subject_to_inflation: boolean
   notes: string
+  spendingFrequency: SpendingFrequency
 }
 
 function median(values: number[]): number {
@@ -38,7 +40,7 @@ function median(values: number[]): number {
 function buildDraftRows(
   summaryByMonth: Map<string, CategorySummary[]>,
   months: string[],
-  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>,
+  categoryLookup: Record<string, { icon: string; label: string; expenseType?: string; spendingFrequency?: SpendingFrequency }>,
   budgets: CategoryBudget[],
 ): DraftRow[] {
   const budgetMap = new Map(budgets.map(b => [b.category_id, b]))
@@ -46,7 +48,7 @@ function buildDraftRows(
 
   for (const [, summaries] of summaryByMonth) {
     for (const s of summaries) {
-      if (s.category !== OWN_TRANSFERS_CATEGORY_ID) catIds.add(s.category)
+      if (s.category !== OWN_TRANSFERS_CATEGORY_ID && s.category !== NO_IDEA_CATEGORY_ID) catIds.add(s.category)
     }
   }
 
@@ -55,6 +57,8 @@ function buildDraftRows(
   for (const catId of catIds) {
     const info = categoryLookup[catId]
     if (!info) continue
+    const freq: SpendingFrequency = info.spendingFrequency ?? 'monthly'
+    if (freq === 'one_off') continue
 
     const monthlyAmounts = months.map(m => {
       const summary = summaryByMonth.get(m)
@@ -74,6 +78,7 @@ function buildDraftRows(
       is_discretionary: existing?.is_discretionary ?? true,
       subject_to_inflation: existing?.subject_to_inflation ?? true,
       notes: existing?.notes ?? '',
+      spendingFrequency: freq,
     })
   }
 
@@ -261,15 +266,37 @@ export default function BudgetEditorModal({ open, onClose, budgets, summaryByMon
 
             {/* Category rows */}
             <div className="space-y-2">
-              {visibleRows.map(row => (
+              {visibleRows.map(row => {
+                const isAnnual = row.spendingFrequency === 'annual'
+                const annualDisplay = isAnnual && row.target ? Number(row.target) * 12 : 0
+                return (
                 <div key={row.category_id} className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-sm">{row.icon}</span>
                     <span className="flex-1 truncate text-xs font-medium text-surface-200">{row.label}</span>
+                    {isAnnual && <span className="shrink-0 rounded bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-300">Annual</span>}
                     <span className="text-[10px] text-surface-500">Median: {formatCurrency(row.medianActual, false)}</span>
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {isAnnual ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={annualDisplay || ''}
+                          onChange={e => {
+                            const annual = Number(e.target.value) || 0
+                            updateRow(row.category_id, 'target', String(Math.round(annual / 12)))
+                          }}
+                          placeholder={String(Math.round(row.medianActual * 12))}
+                          className="w-20 rounded-lg border border-white/[0.08] bg-surface-950/55 px-2 py-1.5 text-xs tabular-nums text-surface-50 outline-none placeholder:text-surface-600"
+                        />
+                        <span className="text-[10px] text-surface-500">/yr</span>
+                        {row.target && Number(row.target) > 0 && (
+                          <span className="text-[10px] text-surface-500">({formatCurrency(Number(row.target), false)}/mo)</span>
+                        )}
+                      </div>
+                    ) : (
                     <input
                       type="number"
                       value={row.target}
@@ -277,6 +304,7 @@ export default function BudgetEditorModal({ open, onClose, budgets, summaryByMon
                       placeholder={String(Math.round(row.medianActual))}
                       className="w-20 rounded-lg border border-white/[0.08] bg-surface-950/55 px-2 py-1.5 text-xs tabular-nums text-surface-50 outline-none placeholder:text-surface-600"
                     />
+                    )}
 
                     <button
                       type="button"
@@ -301,7 +329,8 @@ export default function BudgetEditorModal({ open, onClose, budgets, summaryByMon
                     </button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 

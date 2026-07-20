@@ -52,6 +52,8 @@ export interface AnalysisReportConfig {
   advisorNotes?: boolean
   velocityGauge?: boolean
   savingsProjection?: boolean
+  /** 'grouped' (default) rolls subcategories up to parent; 'detailed' shows all separately. */
+  subcategoryDisplay?: 'grouped' | 'detailed'
 }
 
 export interface UiPrefs {

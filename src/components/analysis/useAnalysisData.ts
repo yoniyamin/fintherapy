@@ -44,7 +44,10 @@ export function useAnalysisData() {
   const { prefs, updatePrefs } = useUiPrefs()
 
   const categoryLookup = useMemo(() =>
-    Object.fromEntries(catConfig.categories.map(c => [c.id, { icon: c.icon, label: c.label, expenseType: c.expenseType }])),
+    Object.fromEntries(catConfig.categories.map(c => [c.id, {
+      icon: c.icon, label: c.label, expenseType: c.expenseType,
+      spendingFrequency: c.spendingFrequency, parentCategoryId: c.parentCategoryId,
+    }])),
     [catConfig.categories],
   )
 
