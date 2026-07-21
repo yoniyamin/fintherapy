@@ -338,7 +338,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         rows: recurringCharges.slice(0, 8).map(r => ({
           label: r.merchantClean,
           value: `${formatCurrency(r.monthlyEstimate, false)}/mo`,
-          detail: `${r.monthsPresent}/${months.length} months`,
+          detail: `${r.months.length}/${months.length} months`,
         })),
       }],
     })
