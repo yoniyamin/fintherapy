@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import CategoryIcon from '../common/CategoryIcon'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ExportRow } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
@@ -149,7 +150,7 @@ export default function TopVendorsPanel({ transactions, months, categoryLookup, 
                 className="flex w-full items-center justify-between rounded-lg bg-slate-700/30 px-3 py-2 text-left transition-colors hover:bg-slate-700/50"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm">{cat.icon}</span>
+                  <CategoryIcon categoryId={cat.category} emoji={cat.icon} size="sm" />
                   <span className="truncate text-xs font-medium text-slate-200">{cat.label}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

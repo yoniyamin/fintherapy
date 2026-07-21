@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import CategoryIcon from '../common/CategoryIcon'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ExportRow } from '../../hooks/useTransactions'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
@@ -120,7 +121,7 @@ export default function CardCategorySplitPanel({ transactions, months, categoryL
                 onClick={() => toggle(cat.category)}
                 className="flex w-full items-center gap-2 rounded-lg bg-slate-700/30 px-3 py-2 text-left transition-colors hover:bg-slate-700/50"
               >
-                <span className="text-sm shrink-0">{cat.icon}</span>
+                <CategoryIcon categoryId={cat.category} emoji={cat.icon} size="sm" />
                 <span className="truncate text-xs font-medium text-slate-200 flex-1">{cat.label}</span>
                 <span className="text-xs tabular-nums text-slate-300 shrink-0">{formatCurrency(cat.total / Math.max(months, 1), false)}/mo</span>
                 <svg

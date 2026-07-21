@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import CategoryIcon from '../common/CategoryIcon'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { FlaggedSuggestion } from '../../hooks/useFlaggedSuggestions'
 import type { CategoryDef } from '../../lib/constants'
@@ -69,9 +70,15 @@ export default function FlaggedSuggestionsBanner({ suggestions, categoryLookup, 
                       <p className="truncate text-xs font-medium text-surface-200">
                         {s.merchant_raw}
                       </p>
-                      <p className="text-[10px] text-surface-500">
+                      <p className="flex items-center gap-1 text-[10px] text-surface-500">
                         {formatCurrency(Math.abs(s.amount), false)}
-                        {cat ? ` → ${cat.icon} ${cat.label}` : ''}
+                        {cat && (
+                          <>
+                            <span> →</span>
+                            <CategoryIcon categoryId={s.suggested_category} emoji={cat.icon} size="sm" />
+                            <span>{cat.label}</span>
+                          </>
+                        )}
                       </p>
                     </div>
                     <button

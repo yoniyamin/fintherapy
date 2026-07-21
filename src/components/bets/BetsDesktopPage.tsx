@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import Button from '../common/Button'
+import CategoryIcon from '../common/CategoryIcon'
 import { SkeletonCard } from '../common/Skeleton'
 import { ui } from '../../lib/uiClasses'
 import { BET_CATEGORY_COUNT, formatMonthLabel } from './betsHelpers'
@@ -106,7 +107,7 @@ export default function BetsDesktopPage() {
                 key={cat.id}
                 className={`flex items-center gap-3 px-4 py-3.5 ${ui.glassFlat}`}
               >
-                <span className="text-xl">{cat.icon}</span>
+                <CategoryIcon categoryId={cat.id} emoji={cat.icon} size="md" />
                 <span className="flex-1 text-sm font-medium text-surface-200">{cat.label}</span>
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-surface-500">€</span>
@@ -187,7 +188,7 @@ export default function BetsDesktopPage() {
                   className={`p-4 ${ui.glassFlat}`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <span className="text-xl">{cat.icon}</span>
+                    <CategoryIcon categoryId={cat.id} emoji={cat.icon} size="md" />
                     <span className="flex-1 text-sm font-medium text-surface-200">{cat.label}</span>
                     {showMultiMember && winnerId && (
                       <span className="text-[10px] font-semibold text-gem">
