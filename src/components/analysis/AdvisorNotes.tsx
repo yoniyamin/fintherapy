@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
-import { motion } from 'framer-motion'
+import { useCallback, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
-import { generateInsights, type AdvisorInsight, type InsightInput, type InsightPriority } from '../../lib/advisorInsights'
+import { generateInsights, type AdvisorInsight, type EvidenceGroup, type InsightInput, type InsightPriority } from '../../lib/advisorInsights'
 import { detectRecurring } from '../../lib/recurringDetector'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
 import type { SpendingFrequency } from '../../lib/constants'
@@ -40,6 +40,111 @@ const SEVERITY_ICON_COLOR: Record<string, string> = {
   warning: 'text-amber-400',
   concern: 'text-red-400',
   neutral: 'text-surface-400',
+}
+
+function EvidencePanel({ groups }: { groups: EvidenceGroup[] }) {
+  return (
+    <motion.div
+      initial={{ height: 0, opacity: 0 }}
+      animate={{ height: 'auto', opacity: 1 }}
+      exit={{ height: 0, opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="overflow-hidden"
+    >
+      <div className="mt-2.5 space-y-2.5 border-t border-white/[0.06] pt-2.5">
+        {groups.map((group) => (
+          <div key={group.title}>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-surface-500">{group.title}</p>
+            <div className="space-y-0.5">
+              {group.rows.map((row, i) => (
+                <div key={i} className="flex items-baseline justify-between gap-2 py-0.5">
+                  <span className="min-w-0 truncate text-[11px] text-surface-300">{row.label}</span>
+                  <div className="flex shrink-0 items-baseline gap-2">
+                    <span className="text-[11px] font-medium tabular-nums text-surface-200">{row.value}</span>
+                    {row.detail && <span className="text-[10px] text-surface-500">{row.detail}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  )
+}
+
+function InsightCard({ insight, index, expanded, onToggle }: {
+  insight: AdvisorInsight; index: number; expanded: boolean; onToggle: () => void
+}) {
+  const hasEvidence = insight.evidence && insight.evidence.length > 0
+
+  return (
+    <motion.div
+      className={`rounded-xl border px-3.5 py-3 ${SEVERITY_STYLES[insight.severity] ?? SEVERITY_STYLES.neutral} ${PRIORITY_ACCENT[insight.priority]} ${hasEvidence ? 'cursor-pointer' : ''}`}
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.06 }}
+      onClick={hasEvidence ? onToggle : undefined}
+    >
+      <div className="flex gap-2.5">
+        <span className={`mt-0.5 shrink-0 ${SEVERITY_ICON_COLOR[insight.severity] ?? SEVERITY_ICON_COLOR.neutral}`}>
+          <AnalysisIcon name={getInsightIconName(insight.id)} width={16} height={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-xs leading-relaxed text-surface-200">{insight.text}</p>
+            {hasEvidence && (
+              <svg
+                width={12}
+                height={12}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`mt-1 shrink-0 text-surface-500 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            )}
+          </div>
+          <p className="mt-1 text-[10px] leading-snug text-surface-500">{insight.rationale}</p>
+          <AnimatePresence>
+            {expanded && insight.evidence && <EvidencePanel groups={insight.evidence} />}
+          </AnimatePresence>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function InsightList({ grouped }: { grouped: { priority: InsightPriority; items: AdvisorInsight[] }[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const toggle = useCallback((id: string) => {
+    setExpandedId(prev => prev === id ? null : id)
+  }, [])
+
+  return (
+    <div className="mt-3 space-y-4">
+      {grouped.map(({ priority, items }) => (
+        <div key={priority}>
+          <p className={`mb-2 text-[9px] font-semibold uppercase tracking-wider ${PRIORITY_LABELS[priority].color}`}>{PRIORITY_LABELS[priority].label}</p>
+          <div className="space-y-2">
+            {items.map((insight, i) => (
+              <InsightCard
+                key={insight.id}
+                insight={insight}
+                index={i}
+                expanded={expandedId === insight.id}
+                onToggle={() => toggle(insight.id)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default function AdvisorNotes({ data, months, categoryLookup }: Props) {
@@ -139,34 +244,7 @@ export default function AdvisorNotes({ data, months, categoryLookup }: Props) {
         </div>
       )}
 
-      <div className="mt-3 space-y-4">
-        {grouped.map(({ priority, items }) => (
-          <div key={priority}>
-            <p className={`mb-2 text-[9px] font-semibold uppercase tracking-wider ${PRIORITY_LABELS[priority].color}`}>{PRIORITY_LABELS[priority].label}</p>
-            <div className="space-y-2">
-              {items.map((insight, i) => (
-                <motion.div
-                  key={insight.id}
-                  className={`rounded-xl border px-3.5 py-3 ${SEVERITY_STYLES[insight.severity] ?? SEVERITY_STYLES.neutral} ${PRIORITY_ACCENT[insight.priority]}`}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.06 }}
-                >
-                  <div className="flex gap-2.5">
-                    <span className={`mt-0.5 shrink-0 ${SEVERITY_ICON_COLOR[insight.severity] ?? SEVERITY_ICON_COLOR.neutral}`}>
-                      <AnalysisIcon name={getInsightIconName(insight.id)} width={16} height={16} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs leading-relaxed text-surface-200">{insight.text}</p>
-                      <p className="mt-1 text-[10px] leading-snug text-surface-500">{insight.rationale}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      <InsightList grouped={grouped} />
     </motion.div>
   )
 }

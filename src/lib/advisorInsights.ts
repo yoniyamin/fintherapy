@@ -10,6 +10,17 @@ import { formatCurrency } from './formatCurrency'
 export type InsightSeverity = 'positive' | 'neutral' | 'warning' | 'concern'
 export type InsightPriority = 'critical' | 'actionable' | 'informational'
 
+export interface EvidenceRow {
+  label: string
+  value: string
+  detail?: string
+}
+
+export interface EvidenceGroup {
+  title: string
+  rows: EvidenceRow[]
+}
+
 export interface AdvisorInsight {
   id: string
   emoji: string
@@ -18,6 +29,8 @@ export interface AdvisorInsight {
   rationale: string
   severity: InsightSeverity
   priority: InsightPriority
+  /** Supporting data the user can expand to understand the insight. */
+  evidence?: EvidenceGroup[]
 }
 
 export type HealthVerdict = 'green' | 'amber' | 'red'
@@ -274,6 +287,18 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
     const discretionaryAvg = discretionaryTotal / Math.max(months.length, 1)
     const fixedAvg = fixedTotal / Math.max(months.length, 1)
 
+    const fixedCats = aggregatedSummary
+      .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID && categoryLookup[c.category]?.expenseType === 'fixed')
+      .sort((a, b) => Number(b.total_amount) - Number(a.total_amount))
+    const discCats = aggregatedSummary
+      .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID && categoryLookup[c.category]?.expenseType !== 'fixed' && Number(c.total_amount) > 0)
+      .sort((a, b) => Number(b.total_amount) - Number(a.total_amount))
+
+    const splitEvidence: EvidenceGroup[] = [
+      { title: 'Fixed costs', rows: fixedCats.slice(0, 5).map(c => ({ label: catLabel(c.category), value: `${formatCurrency(Number(c.total_amount) / Math.max(months.length, 1), false)}/mo` })) },
+      { title: 'Top discretionary', rows: discCats.slice(0, 5).map(c => ({ label: catLabel(c.category), value: `${formatCurrency(Number(c.total_amount) / Math.max(months.length, 1), false)}/mo` })) },
+    ]
+
     if (discretionaryAvg > discretionaryBudget && discretionaryBudget > 0) {
       insights.push({
         id: 'fixed-discretionary-split',
@@ -282,6 +307,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         rationale: 'Fixed costs reduce the money available for choices. Knowing the gap helps set realistic limits.',
         severity: 'warning',
         priority: 'actionable',
+        evidence: splitEvidence,
       })
     } else if (fixedAvg > 0) {
       insights.push({
@@ -291,6 +317,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         rationale: 'Your discretionary spending stayed within the room left after fixed costs.',
         severity: 'positive',
         priority: 'informational',
+        evidence: splitEvidence,
       })
     }
   }
@@ -306,6 +333,14 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
       rationale: 'Subscriptions and recurring fees are easy to forget. Reviewing them annually often uncovers unused services.',
       severity: recurringTotal > avgMonthly * 0.15 ? 'warning' : 'neutral',
       priority: 'actionable',
+      evidence: [{
+        title: 'Recurring charges',
+        rows: recurringCharges.slice(0, 8).map(r => ({
+          label: r.merchantClean,
+          value: `${formatCurrency(r.monthlyEstimate, false)}/mo`,
+          detail: `${r.monthsPresent}/${months.length} months`,
+        })),
+      }],
     })
   }
 
@@ -322,6 +357,19 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
     const microTotal = microTxs.reduce((s, tx) => s + Math.abs(Number(tx.normalized_amount ?? tx.amount)), 0)
     const microMonthly = microTotal / Math.max(months.length, 1)
     const microPct = avgMonthly > 0 ? Math.round((microMonthly / avgMonthly) * 100) : 0
+
+    const microByMerchant = new Map<string, { count: number; total: number }>()
+    for (const tx of microTxs) {
+      const name = tx.merchant_clean || tx.merchant_raw
+      const entry = microByMerchant.get(name) ?? { count: 0, total: 0 }
+      entry.count++
+      entry.total += Math.abs(Number(tx.normalized_amount ?? tx.amount))
+      microByMerchant.set(name, entry)
+    }
+    const topMicro = [...microByMerchant.entries()]
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, 6)
+
     insights.push({
       id: 'micro-spend',
       emoji: '🪙',
@@ -329,6 +377,14 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
       rationale: `Small charges are ${microPct}% of your monthly spend. They fly under the radar individually but compound fast.`,
       severity: microMonthly > avgMonthly * 0.05 ? 'warning' : 'neutral',
       priority: 'informational',
+      evidence: [{
+        title: 'Most frequent small purchases',
+        rows: topMicro.map(([name, info]) => ({
+          label: name,
+          value: formatCurrency(info.total, false),
+          detail: `${info.count} charges`,
+        })),
+      }],
     })
   }
 
@@ -407,13 +463,14 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
     }
 
     if (biggestRise) {
-      const catTxs = transactions
+      const lastMonthTxs = transactions
         .filter(tx => tx.billing_month === sortedMonths[sortedMonths.length - 1] && tx.category === biggestRise!.cat)
         .sort((a, b) => Math.abs(Number(b.normalized_amount ?? b.amount)) - Math.abs(Number(a.normalized_amount ?? a.amount)))
+      const catTxNames = lastMonthTxs
         .slice(0, 2)
         .map(tx => (tx.merchant_clean || tx.merchant_raw).split(' ').slice(0, 3).join(' '))
 
-      const driverHint = catTxs.length > 0 ? ` (${catTxs.join(', ')})` : ''
+      const driverHint = catTxNames.length > 0 ? ` (${catTxNames.join(', ')})` : ''
       insights.push({
         id: 'delta-driver',
         emoji: '📈',
@@ -421,6 +478,14 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         rationale: 'A sharp increase in one category often signals a new habit or one-off event worth investigating.',
         severity: 'warning',
         priority: 'actionable',
+        evidence: [{
+          title: `${catLabel(biggestRise.cat)} charges this month`,
+          rows: lastMonthTxs.slice(0, 8).map(tx => ({
+            label: tx.merchant_clean || tx.merchant_raw,
+            value: formatCurrency(Math.abs(Number(tx.normalized_amount ?? tx.amount)), false),
+            detail: tx.tx_date,
+          })),
+        }],
       })
     }
   }
@@ -431,6 +496,17 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
     if (top.category !== OWN_TRANSFERS_CATEGORY_ID) {
       const share = (top.total_amount / totalSpent) * 100
       if (share > 35) {
+        const domTxs = transactions
+          .filter(tx => tx.category === top.category)
+          .sort((a, b) => Math.abs(Number(b.normalized_amount ?? b.amount)) - Math.abs(Number(a.normalized_amount ?? a.amount)))
+        const domMerchants = new Map<string, { count: number; total: number }>()
+        for (const tx of domTxs) {
+          const name = tx.merchant_clean || tx.merchant_raw
+          const entry = domMerchants.get(name) ?? { count: 0, total: 0 }
+          entry.count++
+          entry.total += Math.abs(Number(tx.normalized_amount ?? tx.amount))
+          domMerchants.set(name, entry)
+        }
         insights.push({
           id: 'dominant-category',
           emoji: '📊',
@@ -438,6 +514,17 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
           rationale: 'When one category dominates, small changes there have outsized impact on the total.',
           severity: 'neutral',
           priority: 'actionable',
+          evidence: [{
+            title: `Where ${catLabel(top.category)} goes`,
+            rows: [...domMerchants.entries()]
+              .sort((a, b) => b[1].total - a[1].total)
+              .slice(0, 8)
+              .map(([name, info]) => ({
+                label: name,
+                value: formatCurrency(info.total / Math.max(months.length, 1), false) + '/mo',
+                detail: `${info.count} charges`,
+              })),
+          }],
         })
       }
     }
@@ -460,6 +547,14 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
       if (cv > 0.25) {
         const min = Math.min(...catMonthlyAmounts)
         const max = Math.max(...catMonthlyAmounts)
+
+        const monthRows: EvidenceRow[] = sortedMonths.map(m => {
+          const monthCats = summaryByMonth.get(m)
+          const match = monthCats?.find(c => c.category === cs.category)
+          const amt = match ? Number(match.total_amount) : 0
+          return { label: formatMonth(m), value: formatCurrency(amt, false) }
+        }).filter(r => r.value !== formatCurrency(0, false))
+
         insights.push({
           id: `experiment-framing-${cs.category}`,
           emoji: '🧪',
@@ -467,6 +562,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
           rationale: 'High variance means this category is responsive to behavior changes — a good place to experiment.',
           severity: 'neutral',
           priority: 'actionable',
+          evidence: [{ title: `${catLabel(cs.category)} by month`, rows: monthRows }],
         })
         break
       }
@@ -494,6 +590,20 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
 
     if (avgWeekend > avgWeekday * 1.4 && avgWeekend > 0) {
       const pct = Math.round(((avgWeekend - avgWeekday) / avgWeekday) * 100)
+
+      const weekendTxs = transactions.filter(tx => {
+        const day = new Date(tx.tx_date).getDay()
+        return (day === 0 || day === 6) && tx.status !== 'transfer' && tx.status !== 'offset' && tx.category !== OWN_TRANSFERS_CATEGORY_ID
+      })
+      const weekendMerchants = new Map<string, { count: number; total: number }>()
+      for (const tx of weekendTxs) {
+        const name = tx.merchant_clean || tx.merchant_raw
+        const entry = weekendMerchants.get(name) ?? { count: 0, total: 0 }
+        entry.count++
+        entry.total += Math.abs(Number(tx.normalized_amount ?? tx.amount))
+        weekendMerchants.set(name, entry)
+      }
+
       insights.push({
         id: 'weekend-spending',
         emoji: '🗓️',
@@ -501,6 +611,17 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         rationale: 'Weekend spending spikes often come from unplanned dining, activities, or impulse purchases.',
         severity: 'neutral',
         priority: 'informational',
+        evidence: [{
+          title: 'Top weekend merchants',
+          rows: [...weekendMerchants.entries()]
+            .sort((a, b) => b[1].total - a[1].total)
+            .slice(0, 6)
+            .map(([name, info]) => ({
+              label: name,
+              value: formatCurrency(info.total, false),
+              detail: `${info.count} charges`,
+            })),
+        }],
       })
     }
   }
@@ -513,6 +634,15 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
     const worstMonth = monthlyTotals[maxIdx]
 
     if (bestMonth && worstMonth && bestMonth.billing_month !== worstMonth.billing_month) {
+      const worstCats = (summaryByMonth.get(worstMonth.billing_month) ?? [])
+        .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID && Number(c.total_amount) > 0)
+        .sort((a, b) => Number(b.total_amount) - Number(a.total_amount))
+        .slice(0, 5)
+      const bestCats = (summaryByMonth.get(bestMonth.billing_month) ?? [])
+        .filter(c => c.category !== OWN_TRANSFERS_CATEGORY_ID && Number(c.total_amount) > 0)
+        .sort((a, b) => Number(b.total_amount) - Number(a.total_amount))
+        .slice(0, 5)
+
       insights.push({
         id: 'best-worst-month',
         emoji: '📅',
@@ -520,6 +650,10 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         rationale: 'Understanding your best and worst months helps anticipate cash flow peaks.',
         severity: 'neutral',
         priority: 'informational',
+        evidence: [
+          { title: `${formatMonth(worstMonth.billing_month)} (heaviest)`, rows: worstCats.map(c => ({ label: catLabel(c.category), value: formatCurrency(Number(c.total_amount), false) })) },
+          { title: `${formatMonth(bestMonth.billing_month)} (lightest)`, rows: bestCats.map(c => ({ label: catLabel(c.category), value: formatCurrency(Number(c.total_amount), false) })) },
+        ],
       })
     }
   }
@@ -538,6 +672,68 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
     if (rawMonthlyAvg >= annualizedAllocation * 2) {
       const baseline = (totalSpent - annualTotal - oneOffSpend) / months.length
       const annualNames = annualCatSpend.map(c => catLabel(c.category)).join(', ')
+
+      const trapEvidence: EvidenceGroup[] = []
+
+      for (const cs of annualCatSpend) {
+        const catTxs = transactions
+          .filter(tx => tx.category === cs.category)
+          .map(tx => ({
+            merchant: tx.merchant_clean || tx.merchant_raw,
+            amount: Math.abs(Number(tx.normalized_amount ?? tx.amount)),
+            month: tx.billing_month,
+          }))
+
+        const allAmounts = catTxs.map(tx => tx.amount).sort((a, b) => a - b)
+        const median = allAmounts.length > 0 ? allAmounts[Math.floor(allAmounts.length / 2)] : 0
+        const bigThreshold = Math.max(median * 3, 100)
+
+        const bigCharges = catTxs.filter(tx => tx.amount >= bigThreshold)
+        const smallCharges = catTxs.filter(tx => tx.amount < bigThreshold)
+
+        if (bigCharges.length > 0) {
+          const merchantTotals = new Map<string, { count: number; total: number }>()
+          for (const tx of bigCharges) {
+            const e = merchantTotals.get(tx.merchant) ?? { count: 0, total: 0 }
+            e.count++
+            e.total += tx.amount
+            merchantTotals.set(tx.merchant, e)
+          }
+          trapEvidence.push({
+            title: `Occasional big expenses (${formatCurrency(bigCharges.reduce((s, tx) => s + tx.amount, 0), false)} total)`,
+            rows: [...merchantTotals.entries()]
+              .sort((a, b) => b[1].total - a[1].total)
+              .slice(0, 6)
+              .map(([name, info]) => ({
+                label: name,
+                value: formatCurrency(info.total, false),
+                detail: info.count > 1 ? `${info.count} charges` : undefined,
+              })),
+          })
+        }
+
+        if (smallCharges.length > 0) {
+          const merchantTotals = new Map<string, { count: number; total: number }>()
+          for (const tx of smallCharges) {
+            const e = merchantTotals.get(tx.merchant) ?? { count: 0, total: 0 }
+            e.count++
+            e.total += tx.amount
+            merchantTotals.set(tx.merchant, e)
+          }
+          trapEvidence.push({
+            title: `Day-to-day spending (${formatCurrency(smallCharges.reduce((s, tx) => s + tx.amount, 0), false)} total)`,
+            rows: [...merchantTotals.entries()]
+              .sort((a, b) => b[1].total - a[1].total)
+              .slice(0, 6)
+              .map(([name, info]) => ({
+                label: name,
+                value: formatCurrency(info.total, false),
+                detail: info.count > 1 ? `${info.count} charges` : undefined,
+              })),
+          })
+        }
+      }
+
       insights.push({
         id: 'average-trap',
         emoji: '⚠️',
@@ -545,6 +741,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         rationale: 'Averaging annual costs into monthly figures inflates your baseline and can lead to cutting the wrong things.',
         severity: 'warning',
         priority: 'critical',
+        evidence: trapEvidence,
       })
     }
   }
@@ -558,6 +755,16 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
       const monthlyAvg = Number(topCat.total_amount) / Math.max(months.length, 1)
       if (monthlyAvg > avgMonthly * 0.1) {
         const tenPctSaving = monthlyAvg * 0.1
+        const impactTxs = transactions.filter(tx => tx.category === topCat.category)
+        const impactMerchants = new Map<string, { count: number; total: number }>()
+        for (const tx of impactTxs) {
+          const name = tx.merchant_clean || tx.merchant_raw
+          const entry = impactMerchants.get(name) ?? { count: 0, total: 0 }
+          entry.count++
+          entry.total += Math.abs(Number(tx.normalized_amount ?? tx.amount))
+          impactMerchants.set(name, entry)
+        }
+
         insights.push({
           id: 'annualized-impact',
           emoji: '📐',
@@ -565,6 +772,17 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
           rationale: 'Small monthly reductions in your biggest category compound into meaningful annual savings.',
           severity: 'neutral',
           priority: 'informational',
+          evidence: [{
+            title: `${catLabel(topCat.category)} top merchants`,
+            rows: [...impactMerchants.entries()]
+              .sort((a, b) => b[1].total - a[1].total)
+              .slice(0, 6)
+              .map(([name, info]) => ({
+                label: name,
+                value: formatCurrency(info.total / Math.max(months.length, 1), false) + '/mo',
+                detail: `${info.count} charges`,
+              })),
+          }],
         })
       }
     }
@@ -585,6 +803,18 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         }
       }
       if (consecutive >= 3) {
+        const budgetMonthRows: EvidenceRow[] = sortedMonths.map(m => {
+          const monthCats = summaryByMonth.get(m)
+          const actual = monthCats?.find(c => c.category === budget.category_id)
+          const spent = actual ? Math.abs(Number(actual.total_amount)) : 0
+          const over = spent - budget.monthly_target
+          return {
+            label: formatMonth(m),
+            value: formatCurrency(spent, false),
+            detail: over > 0 ? `+${formatCurrency(over, false)} over` : 'within budget',
+          }
+        })
+
         insights.push({
           id: `sustainability-${budget.category_id}`,
           emoji: '🔥',
@@ -592,6 +822,7 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
           rationale: 'Consistently blown budgets cause guilt without results. A realistic target you can hit is more effective.',
           severity: 'concern',
           priority: 'critical',
+          evidence: [{ title: `${catLabel(budget.category_id)} vs budget (${formatCurrency(budget.monthly_target, false)}/mo)`, rows: budgetMonthRows }],
         })
         break
       }
@@ -613,6 +844,16 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
 
     const catAvg = Number(tc.total_amount) / Math.max(months.length, 1)
     if (catAvg > avgMonthly * 0.12) {
+      const depthTxs = transactions.filter(tx => tx.category === tc.category)
+      const depthMerchants = new Map<string, { count: number; total: number }>()
+      for (const tx of depthTxs) {
+        const name = tx.merchant_clean || tx.merchant_raw
+        const entry = depthMerchants.get(name) ?? { count: 0, total: 0 }
+        entry.count++
+        entry.total += Math.abs(Number(tx.normalized_amount ?? tx.amount))
+        depthMerchants.set(name, entry)
+      }
+
       insights.push({
         id: `depth-prompt-${tc.category}`,
         emoji: '🔍',
@@ -620,6 +861,17 @@ export function generateInsights(input: InsightInput): AdvisorInsight[] {
         rationale: 'Broad categories hide the actionable detail. You can only optimize what you can see.',
         severity: 'neutral',
         priority: 'actionable',
+        evidence: [{
+          title: `What's inside ${catLabel(tc.category)}`,
+          rows: [...depthMerchants.entries()]
+            .sort((a, b) => b[1].total - a[1].total)
+            .slice(0, 8)
+            .map(([name, info]) => ({
+              label: name,
+              value: formatCurrency(info.total / Math.max(months.length, 1), false) + '/mo',
+              detail: `${info.count} charges`,
+            })),
+        }],
       })
       break
     }

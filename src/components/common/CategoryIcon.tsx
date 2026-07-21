@@ -1,4 +1,4 @@
-import { isGifIconToken, resolveCategoryIconSrc } from '../../lib/categoryIconAssets'
+import { isFluentEmojiToken, isGifIconToken, resolveCategoryIconSrc } from '../../lib/categoryIconAssets'
 
 type CategoryIconSize = 'sm' | 'md' | 'lg' | 'xl'
 
@@ -43,7 +43,7 @@ export default function CategoryIcon({
     )
   }
 
-  const displayEmoji = isGifIconToken(emoji) ? '📦' : emoji
+  const displayEmoji = isGifIconToken(emoji) || isFluentEmojiToken(emoji) ? '📦' : emoji
 
   return (
     <span className={`leading-none ${EMOJI_CLASS[size]} ${className}`} aria-hidden>

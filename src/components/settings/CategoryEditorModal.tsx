@@ -6,9 +6,16 @@ import {
   categoryHasBuiltInIcon,
   CATEGORY_GIF_OPTIONS,
   gifIconKey,
+  isFluentEmojiToken,
   isGifIconToken,
   toGifIconToken,
 } from '../../lib/categoryIconAssets'
+import {
+  buildFluentEmojiUrl,
+  fluentEmojiKey,
+  FLUENT_EMOJI_GROUPS,
+  toFluentEmojiToken,
+} from '../../lib/fluentAnimatedEmojis'
 import { formatCurrency } from '../../lib/formatCurrency'
 import CategoryIcon from '../common/CategoryIcon'
 import { useBottomSheetDrag } from '../../hooks/useBottomSheetDrag'
@@ -55,6 +62,9 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [subcatBannerDismissed, setSubcatBannerDismissed] = useState(false)
+  const [expandedFluentGroups, setExpandedFluentGroups] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(FLUENT_EMOJI_GROUPS.map((g) => [g.id, g.defaultExpanded])),
+  )
   const { sheetDragProps, handleZoneProps } = useBottomSheetDrag(onClose)
 
   useEffect(() => {
@@ -178,6 +188,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
   const editingHasBuiltInIcon =
     !!editingCategoryId && categoryHasBuiltInIcon(editingCategoryId)
   const selectedGifKey = editing ? gifIconKey(editing.icon) : null
+  const selectedFluentKey = editing ? fluentEmojiKey(editing.icon) : null
 
   return createPortal(
     <AnimatePresence>
@@ -353,6 +364,53 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                           </div>
                           <div>
                             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-surface-500">
+                              Fluent Animated
+                            </p>
+                            <div className="max-h-40 overflow-y-auto overscroll-contain rounded-lg border border-white/[0.06] bg-surface-900/30 p-1.5">
+                              {FLUENT_EMOJI_GROUPS.map((group) => {
+                                const isExpanded = expandedFluentGroups[group.id] ?? group.defaultExpanded
+                                return (
+                                  <div key={group.id} className="mb-1 last:mb-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedFluentGroups((prev) => ({ ...prev, [group.id]: !isExpanded }))}
+                                      className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-surface-400 transition-colors hover:text-surface-300"
+                                    >
+                                      <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▸</span>
+                                      {group.label}
+                                    </button>
+                                    {isExpanded && (
+                                      <div className="mt-1 grid grid-cols-5 gap-1 sm:grid-cols-6">
+                                        {group.emojis.map((emoji) => (
+                                          <button
+                                            key={emoji.key}
+                                            type="button"
+                                            onClick={() => setEditing({ ...editing!, icon: toFluentEmojiToken(emoji.key) })}
+                                            title={emoji.label}
+                                            className={`flex h-11 flex-col items-center justify-center rounded-lg border transition-all ${
+                                              selectedFluentKey === emoji.key
+                                                ? 'border-duo-green/60 bg-duo-green/15 scale-105'
+                                                : 'border-white/[0.04] hover:bg-surface-800/80'
+                                            }`}
+                                          >
+                                            <img
+                                              src={buildFluentEmojiUrl(emoji.folder)}
+                                              alt=""
+                                              aria-hidden
+                                              loading="lazy"
+                                              className="h-7 w-7 object-contain"
+                                            />
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-surface-500">
                               Emoji
                             </p>
                             <div className="flex flex-wrap gap-1.5">
@@ -362,7 +420,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                                   type="button"
                                   onClick={() => setEditing({ ...editing, icon })}
                                   className={`flex h-10 w-10 items-center justify-center rounded-lg border text-xl transition-all ${
-                                    !isGifIconToken(editing.icon) && editing.icon === icon
+                                    !isGifIconToken(editing.icon) && !isFluentEmojiToken(editing.icon) && editing.icon === icon
                                       ? 'border-duo-green/60 bg-duo-green/15 scale-110'
                                       : 'border-white/[0.06] bg-surface-900/50 hover:bg-surface-800/80'
                                   }`}

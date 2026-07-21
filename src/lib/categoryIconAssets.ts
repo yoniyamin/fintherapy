@@ -1,4 +1,5 @@
 import { DEFAULT_CATEGORIES } from './constants'
+import { fluentEmojiKey, isFluentEmojiToken, resolveFluentEmojiUrl } from './fluentAnimatedEmojis'
 import leisureIcon from '../assets/Categories/doodle-color-157-sun-lounger-hover-shift.gif'
 import healthIcon from '../assets/Categories/wired-flat-1277-antibacterial-spray-disinfection-hover-pinch.gif'
 import diningIcon from '../assets/Categories/wired-flat-13-pizza-hover-rotate.gif'
@@ -71,11 +72,16 @@ export function toGifIconToken(assetKey: string): string {
   return `${GIF_ICON_PREFIX}${assetKey}`
 }
 
-/** Resolves the GIF URL for a category, preferring an explicit gif: token. */
+/** Resolves the icon URL for a category, checking fluent: tokens, gif: tokens, then built-in assets. */
 export function resolveCategoryIconSrc(categoryId: string, icon: string): string | undefined {
+  const fKey = fluentEmojiKey(icon)
+  if (fKey) return resolveFluentEmojiUrl(fKey)
+
   const tokenKey = gifIconKey(icon)
   if (tokenKey && CATEGORY_ICON_ASSETS[tokenKey]) {
     return CATEGORY_ICON_ASSETS[tokenKey]
   }
   return CATEGORY_ICON_ASSETS[categoryId]
 }
+
+export { isFluentEmojiToken }
