@@ -91,6 +91,21 @@ function CategoryPickerInner({
     [cats, predictedCategory, currentCategory, merchantRaw, merchantClean],
   )
 
+  const parentLabelById = useMemo(
+    () => {
+      const labelMap = new Map(cats.map((c) => [c.id, c.label]))
+      const result: Record<string, string> = {}
+      for (const c of cats) {
+        if (c.parentCategoryId) {
+          const pl = labelMap.get(c.parentCategoryId)
+          if (pl) result[c.id] = pl
+        }
+      }
+      return result
+    },
+    [cats],
+  )
+
   const updateScrollFade = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
@@ -224,6 +239,7 @@ function CategoryPickerInner({
                           onSelect={handleSelect}
                           animationIndex={index}
                           pressed={pressedId === cat.id}
+                          parentLabel={parentLabelById[cat.id]}
                         />
                       )
                     })}
@@ -244,6 +260,7 @@ function CategoryPickerInner({
                           onSelect={handleSelect}
                           animationIndex={index}
                           pressed={pressedId === cat.id}
+                          parentLabel={parentLabelById[cat.id]}
                         />
                       )
                     })}
@@ -270,11 +287,13 @@ function CategoryTile({
   onSelect,
   animationIndex,
   pressed = false,
+  parentLabel,
 }: {
   cat: CategoryDef
   onSelect: (id: string) => void
   animationIndex: number
   pressed?: boolean
+  parentLabel?: string
 }) {
   const [highlighted, setHighlighted] = useState(false)
   const showAccent = pressed || highlighted
@@ -308,6 +327,11 @@ function CategoryTile({
       <span className="line-clamp-2 text-center text-[10px] font-semibold leading-tight text-surface-200">
         {cat.label}
       </span>
+      {parentLabel && (
+        <span className="text-center text-[8px] leading-tight text-surface-400">
+          ↳ {parentLabel}
+        </span>
+      )}
     </motion.button>
   )
 }

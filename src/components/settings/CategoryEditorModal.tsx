@@ -247,17 +247,27 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                     transition={{ duration: 0.15 }}
                   >
                     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {categories.map((cat) => (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => handleEdit(cat)}
-                          className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 transition-all active:scale-95 ${cat.color}`}
-                        >
-                          <CategoryIcon categoryId={cat.id} emoji={cat.icon} size="xl" />
-                          <span className="text-[11px] font-semibold leading-tight text-surface-200 text-center">{cat.label}</span>
-                        </button>
-                      ))}
+                      {categories.map((cat) => {
+                        const parentLabel = cat.parentCategoryId
+                          ? categories.find((c) => c.id === cat.parentCategoryId)?.label
+                          : undefined
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => handleEdit(cat)}
+                            className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 transition-all active:scale-95 ${cat.color}`}
+                          >
+                            <CategoryIcon categoryId={cat.id} emoji={cat.icon} size="xl" />
+                            <span className="text-[11px] font-semibold leading-tight text-surface-200 text-center">{cat.label}</span>
+                            {parentLabel && (
+                              <span className="text-[9px] leading-tight text-surface-400 text-center">
+                                ↳ {parentLabel}
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
                     </div>
 
                     {!subcatBannerDismissed && !categories.some(c => c.parentCategoryId) && (
