@@ -382,12 +382,20 @@ export default function SavingsProjectionPanel({
           </div>
         )}
 
-        <div className="border-t border-slate-600/40 pt-1.5 mt-1 flex items-center justify-between">
-          <span className="text-[11px] font-medium text-slate-400">Monthly surplus</span>
-          <div className="flex items-baseline gap-2">
-            <span className={`text-xs font-bold tabular-nums ${surplusColor}`}>{formatCurrency(projection.inflationAdjustedSurplus, false)}</span>
-            <span className={`text-[10px] font-semibold tabular-nums ${rateColor}`}>{projection.savingsRate.toFixed(1)}% saved</span>
+        <div className="border-t border-slate-600/40 pt-1.5 mt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium text-slate-400">Monthly surplus</span>
+            <div className="flex items-baseline gap-2">
+              <span className={`text-xs font-bold tabular-nums ${surplusColor}`}>{formatCurrency(projection.inflationAdjustedSurplus, false)}</span>
+              <span className={`text-[10px] font-semibold tabular-nums ${rateColor}`}>{projection.savingsRate.toFixed(1)}% saved</span>
+            </div>
           </div>
+          <p className="mt-1 text-[9px] text-slate-600">
+            Across all {budgets.length} categories.
+            {capValue && projection.totalTarget > capValue
+              ? ` ${formatCurrency(projection.totalTarget - capValue, false)} over cap.`
+              : capValue ? ' Within cap.' : ''}
+          </p>
         </div>
       </div>
 
@@ -396,7 +404,7 @@ export default function SavingsProjectionPanel({
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <p className="text-[11px] text-slate-500">If you cut discretionary by</p>
+              <p className="text-[11px] text-slate-500">If you cut these {scenarioCategories.length} categories by</p>
               {isCustomList && (
                 <span className="rounded-full bg-teal-500/10 px-1.5 py-0.5 text-[8px] font-semibold text-teal-400 uppercase tracking-wider">
                   Custom
