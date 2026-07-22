@@ -26,6 +26,7 @@
     "canvas-confetti": "^1.9.4",
     "d3": "^7.9.0",
     "framer-motion": "^12.38.0",
+    "graphify": "^1.0.0",
     "jspdf": "^4.2.1",
     "papaparse": "^5.5.3",
     "pptxgenjs": "^4.0.1",

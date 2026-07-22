@@ -33,3 +33,4 @@ CaixaBank_digital_CaixaBankNow_20260407.csv
 dev-dist/*
 dev-dist/sw.js
 dev-dist/sw.js
+graphify-out/*

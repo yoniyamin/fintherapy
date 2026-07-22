@@ -115,7 +115,7 @@ export default function BudgetVsActualPanel({ budgets, summaryByMonth, months, i
         <button
           type="button"
           onClick={onEditBudgets}
-          className="text-[10px] font-medium text-teal-400 hover:text-teal-300"
+          className="rounded-md border border-teal-500/20 px-2.5 py-1 text-[10px] font-medium text-teal-400 hover:bg-teal-500/10 active:bg-teal-500/20 transition-colors"
         >
           Edit
         </button>

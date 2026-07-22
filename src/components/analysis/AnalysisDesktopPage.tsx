@@ -90,6 +90,7 @@ export default function AnalysisDesktopPage() {
     handleExportCsv,
     handleExportSlides,
     handleExportPdf,
+    saveIncome,
   } = useAnalysisData()
 
   const [activeSection, setActiveSection] = useState('overview')
@@ -104,10 +105,10 @@ export default function AnalysisDesktopPage() {
   const hasReport = !!data && !noData
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 pb-6" data-testid="analysis-desktop-page">
-      {/* Sticky header: title + section nav */}
-      <div className="sticky top-0 z-20 -mx-6 bg-surface-900/95 backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-4 px-6 pb-2 pt-5">
+    <div data-testid="analysis-desktop-page">
+      <div className="sticky top-0 z-20 w-full bg-surface-900/95 backdrop-blur-xl">
+        <div className="mx-auto w-full max-w-7xl px-6">
+          <div className="flex items-center justify-between gap-4 pb-2 pt-5">
           <div>
             <h1 className={ui.heroTitle}>Financial Health Check</h1>
             <p className={ui.heroSub}>Here's how your household is doing</p>
@@ -180,10 +181,10 @@ export default function AnalysisDesktopPage() {
               </>
             )}
           </div>
-        </div>
+          </div>
 
-        {hasReport && (
-          <div className="flex items-center gap-1 overflow-x-auto border-t border-white/[0.04] px-6 py-1.5 scrollbar-hide">
+          {hasReport && (
+            <div className="flex items-center gap-1 overflow-x-auto border-t border-white/[0.04] py-1.5 scrollbar-hide">
             {REPORT_SECTIONS.filter(s => visibleSections.has(s.id)).map((section) => (
               <button
                 key={section.id}
@@ -199,12 +200,14 @@ export default function AnalysisDesktopPage() {
                 {section.label}
               </button>
             ))}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
         <div className="h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
       </div>
 
+      <div className="mx-auto w-full max-w-7xl px-6 pb-6">
       {analysisError && (
         <div className="mx-auto mt-6 max-w-md rounded-xl border border-flame/20 bg-flame/10 p-4 text-center text-sm font-semibold text-flame">
           {analysisError}
@@ -248,16 +251,27 @@ export default function AnalysisDesktopPage() {
           accountAliases={aliasMap}
           categories={catConfig.categories}
           budgets={budgetHook.budgets}
-          inflationRate={prefs.assumedInflationRate ?? 3}
+          inflationRate={prefs.assumedInflationRate ?? 3.2}
           savingsGoals={prefs.savingsGoals ?? []}
           reportConfig={rc}
           visibleSections={visibleSections}
           onActiveSectionChange={setActiveSection}
           navigateRef={navigateRef}
-          onSaveBudgets={async (params) => { for (const p of params) await budgetHook.upsert(p) }}
+          onSaveBudgets={async (upserts, deleteIds) => {
+            for (const p of upserts) await budgetHook.upsert(p)
+            for (const id of deleteIds) await budgetHook.remove(id)
+          }}
+          onSaveIncome={saveIncome}
+          budgetSettings={budgetHook.settings}
+          changeLog={budgetHook.changeLog}
+          onSaveSettings={budgetHook.upsertSettings}
+          onLogChange={budgetHook.logChange}
+          onUpdateScenarioCategories={budgetHook.updateScenarioCategories}
           onDataChange={handleRefreshData}
+          onManageGoals={() => setShowReportConfig(true)}
         />
       )}
+      </div>
 
       <AnimatePresence>
         {showSlidePreview && data && (
@@ -276,7 +290,7 @@ export default function AnalysisDesktopPage() {
         open={showReportConfig}
         onClose={() => setShowReportConfig(false)}
         config={rc}
-        inflationRate={prefs.assumedInflationRate ?? 3}
+        inflationRate={prefs.assumedInflationRate ?? 3.2}
         savingsGoals={prefs.savingsGoals ?? []}
         monthCount={selection.months.length}
         onSave={(config, inflRate, goals) => {
@@ -287,7 +301,7 @@ export default function AnalysisDesktopPage() {
   )
 }
 
-function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, categories, budgets, inflationRate, savingsGoals, reportConfig, visibleSections, onActiveSectionChange, navigateRef, onSaveBudgets, onDataChange }: {
+function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, categories, budgets, inflationRate, savingsGoals, reportConfig, visibleSections, onActiveSectionChange, navigateRef, onSaveBudgets, onSaveIncome, budgetSettings, changeLog, onSaveSettings, onLogChange, onUpdateScenarioCategories, onDataChange, onManageGoals }: {
   data: MultiMonthData
   months: string[]
   categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
@@ -300,8 +314,15 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
   visibleSections: Set<string>
   onActiveSectionChange: (id: string) => void
   navigateRef: React.MutableRefObject<((id: string) => void) | undefined>
-  onSaveBudgets: (params: UpsertBudgetParams[]) => Promise<void>
+  onSaveBudgets: (upserts: UpsertBudgetParams[], deleteIds: string[]) => Promise<void>
+  onSaveIncome: (income: number) => Promise<void>
+  budgetSettings: import('../../hooks/useCategoryBudgets').BudgetSettings | null
+  changeLog: import('../../hooks/useCategoryBudgets').BudgetChangeLogEntry[]
+  onSaveSettings: (target: number) => Promise<void>
+  onLogChange: (action: 'save' | 'reset_medians', summary: string, snapshot: import('../../hooks/useCategoryBudgets').BudgetSnapshot) => Promise<void>
+  onUpdateScenarioCategories: (ids: string[]) => Promise<void>
   onDataChange: () => void
+  onManageGoals: () => void
 }) {
   const [showBudgetEditor, setShowBudgetEditor] = useState(false)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -468,16 +489,6 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
           <div ref={setSectionRef('recurring')}>
             <div className="grid grid-cols-2 gap-5 items-start">
               {show('recurring', 1) && <RecurringPanel charges={recurringCharges} months={months.length} />}
-              {show('budgetVsActual', 3) && (
-                <BudgetVsActualPanel
-                  budgets={budgets}
-                  summaryByMonth={data.summaryByMonth}
-                  months={months}
-                  income={data.householdIncome}
-                  categoryLookup={categoryLookup}
-                  onEditBudgets={() => setShowBudgetEditor(true)}
-                />
-              )}
             </div>
           </div>
         )}
@@ -492,8 +503,26 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
                   inflationRate={inflationRate}
                   savingsGoals={savingsGoals}
                   months={months.length}
+                  categoryLookup={categoryLookup}
+                  spendingCap={budgetSettings?.monthly_spending_target}
+                  scenarioCategoryIds={budgetSettings?.scenario_category_ids}
+                  onUpdateScenarioCategories={onUpdateScenarioCategories}
+                  onEditBudgets={() => setShowBudgetEditor(true)}
+                  onManageGoals={onManageGoals}
                 />
               )}
+              {show('budgetVsActual', 3) && (
+                <BudgetVsActualPanel
+                  budgets={budgets}
+                  summaryByMonth={data.summaryByMonth}
+                  months={months}
+                  income={data.householdIncome}
+                  categoryLookup={categoryLookup}
+                  onEditBudgets={() => setShowBudgetEditor(true)}
+                />
+              )}
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-5 items-start">
               {show('velocityGauge', 1) && <VelocityGauge velocity={velocity} />}
             </div>
           </div>
@@ -514,7 +543,13 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
         months={months}
         income={data.householdIncome}
         categoryLookup={categoryLookup}
+        inflationRate={inflationRate}
         onSave={onSaveBudgets}
+        onSaveIncome={onSaveIncome}
+        budgetSettings={budgetSettings}
+        changeLog={changeLog}
+        onSaveSettings={onSaveSettings}
+        onLogChange={onLogChange}
       />
     </>
   )

@@ -65,7 +65,7 @@ function ReportConfigModalInner({ onClose, config, inflationRate, savingsGoals, 
 
   const handleSave = useCallback(() => {
     const validGoals = goals.filter(g => g.name && g.target > 0)
-    onSave(draft, Number(inflation) || 3, validGoals)
+    onSave(draft, Number(inflation) || 3.2, validGoals)
     onClose()
   }, [draft, inflation, goals, onSave, onClose])
 

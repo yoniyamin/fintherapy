@@ -55,6 +55,7 @@ export default function AnalysisPage() {
     handleExportCsv,
     handleExportSlides,
     handleExportPdf,
+    saveIncome,
   } = useAnalysisData()
 
   return (
@@ -203,11 +204,21 @@ export default function AnalysisPage() {
           accountAliases={aliasMap}
           categories={catConfig.categories}
           budgets={budgetHook.budgets}
-          inflationRate={prefs.assumedInflationRate ?? 3}
+          inflationRate={prefs.assumedInflationRate ?? 3.2}
           savingsGoals={prefs.savingsGoals ?? []}
           reportConfig={prefs.analysisReportConfig ?? {}}
-          onSaveBudgets={async (params) => { for (const p of params) await budgetHook.upsert(p) }}
+          onSaveBudgets={async (upserts, deleteIds) => {
+            for (const p of upserts) await budgetHook.upsert(p)
+            for (const id of deleteIds) await budgetHook.remove(id)
+          }}
+          onSaveIncome={saveIncome}
+          budgetSettings={budgetHook.settings}
+          changeLog={budgetHook.changeLog}
+          onSaveSettings={budgetHook.upsertSettings}
+          onLogChange={budgetHook.logChange}
+          onUpdateScenarioCategories={budgetHook.updateScenarioCategories}
           onDataChange={handleRefreshData}
+          onManageGoals={() => setShowReportConfig(true)}
         />
       )}
 
@@ -229,7 +240,7 @@ export default function AnalysisPage() {
         open={showReportConfig}
         onClose={() => setShowReportConfig(false)}
         config={prefs.analysisReportConfig ?? {}}
-        inflationRate={prefs.assumedInflationRate ?? 3}
+        inflationRate={prefs.assumedInflationRate ?? 3.2}
         savingsGoals={prefs.savingsGoals ?? []}
         monthCount={selection.months.length}
         onSave={(config, inflRate, goals) => {
@@ -240,7 +251,7 @@ export default function AnalysisPage() {
   )
 }
 
-function AnalysisContent({ data, months, categoryLookup, accountAliases, categories, budgets, inflationRate, savingsGoals, reportConfig, onSaveBudgets, onDataChange }: {
+function AnalysisContent({ data, months, categoryLookup, accountAliases, categories, budgets, inflationRate, savingsGoals, reportConfig, onSaveBudgets, onSaveIncome, budgetSettings, changeLog, onSaveSettings, onLogChange, onUpdateScenarioCategories, onDataChange, onManageGoals }: {
   data: MultiMonthData
   months: string[]
   categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
@@ -250,8 +261,15 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
   inflationRate: number
   savingsGoals: import('../../types/database').SavingsGoal[]
   reportConfig: import('../../types/database').AnalysisReportConfig
-  onSaveBudgets: (params: UpsertBudgetParams[]) => Promise<void>
+  onSaveBudgets: (upserts: UpsertBudgetParams[], deleteIds: string[]) => Promise<void>
+  onSaveIncome: (income: number) => Promise<void>
+  budgetSettings: import('../../hooks/useCategoryBudgets').BudgetSettings | null
+  changeLog: import('../../hooks/useCategoryBudgets').BudgetChangeLogEntry[]
+  onSaveSettings: (target: number) => Promise<void>
+  onLogChange: (action: 'save' | 'reset_medians', summary: string, snapshot: import('../../hooks/useCategoryBudgets').BudgetSnapshot) => Promise<void>
+  onUpdateScenarioCategories: (ids: string[]) => Promise<void>
   onDataChange: () => void
+  onManageGoals: () => void
 }) {
   const [showBudgetEditor, setShowBudgetEditor] = useState(false)
   const rc = reportConfig
@@ -325,6 +343,22 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
 
       {show('cardCategorySplit', 3) && <CardCategorySplitPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />}
 
+      {show('savingsProjection', 3) && (
+        <SavingsProjectionPanel
+          income={data.householdIncome}
+          budgets={budgets}
+          inflationRate={inflationRate}
+          savingsGoals={savingsGoals}
+          months={months.length}
+          categoryLookup={categoryLookup}
+          spendingCap={budgetSettings?.monthly_spending_target}
+          scenarioCategoryIds={budgetSettings?.scenario_category_ids}
+          onUpdateScenarioCategories={onUpdateScenarioCategories}
+          onEditBudgets={() => setShowBudgetEditor(true)}
+          onManageGoals={onManageGoals}
+        />
+      )}
+
       {show('budgetVsActual', 3) && (
         <BudgetVsActualPanel
           budgets={budgets}
@@ -333,16 +367,6 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
           income={data.householdIncome}
           categoryLookup={categoryLookup}
           onEditBudgets={() => setShowBudgetEditor(true)}
-        />
-      )}
-
-      {show('savingsProjection', 3) && (
-        <SavingsProjectionPanel
-          income={data.householdIncome}
-          budgets={budgets}
-          inflationRate={inflationRate}
-          savingsGoals={savingsGoals}
-          months={months.length}
         />
       )}
 
@@ -373,7 +397,13 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
         months={months}
         income={data.householdIncome}
         categoryLookup={categoryLookup}
+        inflationRate={inflationRate}
         onSave={onSaveBudgets}
+        onSaveIncome={onSaveIncome}
+        budgetSettings={budgetSettings}
+        changeLog={changeLog}
+        onSaveSettings={onSaveSettings}
+        onLogChange={onLogChange}
       />
     </div>
   )

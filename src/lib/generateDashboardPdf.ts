@@ -1339,7 +1339,7 @@ function drawBudgetPage(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean)
     y += 10
 
     const goals = input.savingsGoals ?? []
-    const inflRate = input.inflationRate ?? 3
+    const inflRate = input.inflationRate ?? 3.2
     if (goals.length > 0) {
       pdf.setFontSize(10)
       pdf.setTextColor(...hexToRgb(TEXT))
@@ -1347,8 +1347,8 @@ function drawBudgetPage(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean)
       pdf.text('Savings Goals', mx, y + 4)
       y += 8
 
-      const fixedCosts = budgets.filter(b => !b.subject_to_inflation).reduce((s, b) => s + b.monthly_target, 0)
-      const variableCosts = budgets.filter(b => b.subject_to_inflation).reduce((s, b) => s + b.monthly_target, 0)
+      const fixedCosts = budgets.filter(b => input.categoryLookup[b.category_id]?.expenseType === 'fixed').reduce((s, b) => s + b.monthly_target, 0)
+      const variableCosts = budgets.filter(b => input.categoryLookup[b.category_id]?.expenseType !== 'fixed').reduce((s, b) => s + b.monthly_target, 0)
       const realSurplus = input.income - fixedCosts - variableCosts * (1 + inflRate / 1200)
 
       for (const goal of goals) {
@@ -1370,7 +1370,15 @@ function drawBudgetPage(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean)
       pdf.setFontSize(7)
       pdf.setTextColor(...hexToRgb(TEXT_DIM))
       pdf.text(`Inflation-adjusted surplus: ${formatCurrency(realSurplus, false)}/mo (at ${inflRate}% annual inflation)`, mx, y + 3)
+      y += 6
     }
+
+    pdf.setFontSize(6)
+    pdf.setTextColor(...hexToRgb(TEXT_DIM))
+    pdf.text(
+      `Note: Savings projections assume ${inflRate}% annual inflation applied to all variable/discretionary spending. Fixed costs (mortgage, loans) are held flat. Per-category inflation flags are not used in this report.`,
+      mx, y + 6, { maxWidth: pw },
+    )
   }
 
   drawFooter(pdf)

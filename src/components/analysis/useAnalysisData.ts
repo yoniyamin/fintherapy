@@ -3,6 +3,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useCategoryBudgets } from '../../hooks/useCategoryBudgets'
 import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import { useMultiMonthReveal } from '../../hooks/useMultiMonthReveal'
+import type { MonthlyTotal } from '../../hooks/useReveal'
 import { useTransactions } from '../../hooks/useTransactions'
 import { useUiPrefs } from '../../hooks/useUiPrefs'
 import { generateHeadline, type InsightInput } from '../../lib/advisorInsights'
@@ -11,7 +12,6 @@ import { downloadTransactionsCsv, multiMonthCsvLabel } from '../../lib/exportTra
 import { detectRecurring } from '../../lib/recurringDetector'
 import { supabase } from '../../lib/supabase'
 import type { MonthSelection } from '../common/MonthRangePicker'
-import type { MonthlyTotal } from '../../hooks/useReveal'
 
 function getDefaultSelection(): MonthSelection {
   const now = new Date()
@@ -87,9 +87,27 @@ export function useAnalysisData() {
   }, [profile?.household_id, getAccountAliases])
 
   const fetchBudgets = budgetHook.fetch
+  const fetchSettings = budgetHook.fetchSettings
+  const fetchChangeLog = budgetHook.fetchChangeLog
   useEffect(() => {
-    if (profile?.household_id) fetchBudgets()
-  }, [profile?.household_id, fetchBudgets])
+    if (profile?.household_id) {
+      fetchBudgets()
+      fetchSettings()
+      fetchChangeLog()
+    }
+  }, [profile?.household_id, fetchBudgets, fetchSettings, fetchChangeLog])
+
+  const saveIncome = useCallback(async (income: number) => {
+    if (!profile?.household_id) return
+    const { error } = await supabase.rpc('set_household_income', {
+      p_household_id: profile.household_id,
+      p_income: income,
+    })
+    if (error) throw new Error(error.message)
+    if (selection.months.length > 0) {
+      await fetch(selection.months)
+    }
+  }, [profile?.household_id, selection.months, fetch])
 
   const handleRefreshData = useCallback(() => {
     if (selection.months.length > 0) {
@@ -189,7 +207,7 @@ export function useAnalysisData() {
           headline,
           reportConfig: prefs.analysisReportConfig as Record<string, boolean> | undefined,
           budgets: budgetHook.budgets.map(b => ({ category_id: b.category_id, monthly_target: Number(b.monthly_target), is_discretionary: b.is_discretionary, subject_to_inflation: b.subject_to_inflation })),
-          inflationRate: prefs.assumedInflationRate ?? 3,
+          inflationRate: prefs.assumedInflationRate ?? 3.2,
           savingsGoals: prefs.savingsGoals,
         },
         mode,
@@ -227,5 +245,6 @@ export function useAnalysisData() {
     handleExportCsv,
     handleExportSlides,
     handleExportPdf,
+    saveIncome,
   }
 }
