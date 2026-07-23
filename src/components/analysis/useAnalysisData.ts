@@ -208,7 +208,6 @@ export function useAnalysisData() {
           reportConfig: prefs.analysisReportConfig as Record<string, boolean> | undefined,
           budgets: budgetHook.budgets.map(b => ({ category_id: b.category_id, monthly_target: Number(b.monthly_target), is_discretionary: b.is_discretionary, subject_to_inflation: b.subject_to_inflation })),
           inflationRate: prefs.assumedInflationRate ?? 3.2,
-          savingsGoals: prefs.savingsGoals,
         },
         mode,
       )

@@ -99,3 +99,74 @@ export function buildDraftRows(
 
   return rows.sort((a, b) => b.medianActual - a.medianActual)
 }
+
+export interface SmartReduction {
+  category_id: string
+  label: string
+  icon: string
+  currentTarget: number
+  proposedTarget: number
+  reduction: number
+  isFixed: boolean
+}
+
+export interface SmartReductionResult {
+  reductions: SmartReduction[]
+  totalReduction: number
+  newTotal: number
+}
+
+/**
+ * Propose weighted reductions across discretionary categories to fit within
+ * the spending cap. Fixed categories are excluded. Larger discretionary
+ * categories absorb proportionally more of the cut.
+ */
+export function computeSmartReductions(
+  rows: DraftRow[],
+  envelope: number,
+  categoryLookup: Record<string, { icon?: string; label?: string; expenseType?: string }>,
+): SmartReductionResult {
+  const totalAllocated = rows.reduce((s, r) => s + r.target, 0)
+  const overAmount = totalAllocated - envelope
+  if (overAmount <= 0) return { reductions: [], totalReduction: 0, newTotal: totalAllocated }
+
+  const discretionary = rows.filter(r => {
+    const info = categoryLookup[r.category_id]
+    return info?.expenseType !== 'fixed' && r.target > 0
+  })
+
+  const discretionaryTotal = discretionary.reduce((s, r) => s + r.target, 0)
+  if (discretionaryTotal <= 0) return { reductions: [], totalReduction: 0, newTotal: totalAllocated }
+
+  const reductions: SmartReduction[] = []
+  let totalReduction = 0
+
+  for (const row of discretionary) {
+    const weight = row.target / discretionaryTotal
+    const rawCut = Math.round(overAmount * weight)
+    const floor = Math.round(row.lowActual > 0 ? row.lowActual : row.target * 0.5)
+    const maxCut = Math.max(0, row.target - floor)
+    const reduction = Math.min(rawCut, maxCut)
+
+    if (reduction > 0) {
+      reductions.push({
+        category_id: row.category_id,
+        label: row.label,
+        icon: row.icon,
+        currentTarget: row.target,
+        proposedTarget: row.target - reduction,
+        reduction,
+        isFixed: false,
+      })
+      totalReduction += reduction
+    }
+  }
+
+  reductions.sort((a, b) => b.reduction - a.reduction)
+
+  return {
+    reductions,
+    totalReduction,
+    newTotal: totalAllocated - totalReduction,
+  }
+}

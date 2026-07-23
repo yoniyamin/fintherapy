@@ -5,7 +5,7 @@ import type { BudgetChangeLogEntry, BudgetSettings, CategoryBudget, UpsertBudget
 import { buildBudgetSnapshot } from '../../hooks/useCategoryBudgets'
 import type { SpendingFrequency } from '../../lib/constants'
 import { formatCurrency } from '../../lib/formatCurrency'
-import { buildDraftRows, deltaLabel, sliderBounds, type DraftRow } from './budgetEditorUtils'
+import { buildDraftRows, computeSmartReductions, deltaLabel, sliderBounds, type DraftRow, type SmartReductionResult } from './budgetEditorUtils'
 import type { CategorySummary } from '../../hooks/useReveal'
 
 interface Props {
@@ -29,11 +29,42 @@ type ConfirmAction =
   | { type: 'close' }
   | { type: 'reset'; beforeTotal: number; afterTotal: number }
   | { type: 'distribute-cap'; suggestedTotal: number; capAmount: number }
+  | { type: 'smart-adjust'; result: SmartReductionResult; capAmount: number; income: number }
 
 interface UndoState {
   catId: string
   label: string
   prevTarget: number
+}
+
+// --- Savings Goal Bar -------------------------------------------------------
+
+function SavingsGoalBar({ surplus, target }: { surplus: number; target: number }) {
+  const pct = target > 0 ? Math.max(0, Math.min((surplus / target) * 100, 100)) : 0
+  const barColor = pct >= 80 ? 'bg-emerald-500'
+    : pct >= 50 ? 'bg-amber-500'
+      : 'bg-red-500'
+  const textColor = pct >= 80 ? 'text-emerald-400'
+    : pct >= 50 ? 'text-amber-400'
+      : 'text-red-400'
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[10px] text-surface-500">Savings</span>
+        <span className={`text-[10px] tabular-nums font-medium ${textColor}`}>
+          {formatCurrency(Math.max(0, surplus), false)} / {formatCurrency(target, false)} target
+          {' '}({Math.round(pct)}%)
+        </span>
+      </div>
+      <div className="h-1.5 rounded-full bg-surface-800 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-200 ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  )
 }
 
 // --- Slider Row -------------------------------------------------------------
@@ -361,6 +392,30 @@ export default function BudgetEditorModal({
     setConfirmAction({ type: 'reset', beforeTotal, afterTotal })
   }, [totalAllocated, rows])
 
+  const handleSmartAdjust = useCallback(() => {
+    if (envelope <= 0) return
+    const result = computeSmartReductions(rows, envelope, categoryLookup)
+    setConfirmAction({
+      type: 'smart-adjust',
+      result,
+      capAmount: envelope,
+      income: effectiveIncome,
+    })
+  }, [rows, envelope, categoryLookup, effectiveIncome])
+
+  const applySmartReductions = useCallback(() => {
+    if (confirmAction?.type !== 'smart-adjust') return
+    const reductionMap = new Map(
+      confirmAction.result.reductions.map(r => [r.category_id, r.proposedTarget]),
+    )
+    const adjusted = rows.map(r => {
+      const proposed = reductionMap.get(r.category_id)
+      return proposed !== undefined ? { ...r, target: proposed } : r
+    })
+    setRows(adjusted)
+    setConfirmAction(null)
+  }, [confirmAction, rows])
+
   const confirmReset = useCallback(async () => {
     const resetRows = rows.map(r => ({ ...r, target: Math.round(r.medianActual) }))
     setRows(resetRows)
@@ -453,21 +508,11 @@ export default function BudgetEditorModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 left-[var(--shell-nav-offset)] z-[9999] flex items-end justify-center bg-black/60 backdrop-blur-sm"
-        onClick={handleClose}
+        className="fixed inset-0 left-[var(--shell-nav-offset)] z-[9999] flex flex-col bg-surface-950/98 backdrop-blur-xl"
       >
-        <motion.div
-          key="budget-editor-sheet"
-          initial={{ y: '100%' }}
-          animate={{ y: 0 }}
-          exit={{ y: '100%' }}
-          transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-          className="relative w-full max-w-lg rounded-t-2xl border-t border-white/10 bg-surface-950/95 backdrop-blur-xl"
-          style={{ maxHeight: '85vh' }}
-          onClick={e => e.stopPropagation()}
-        >
+        <div className="relative flex flex-1 flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-3">
+          <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-3 md:px-8">
             <h2 className="text-sm font-bold text-surface-100">Budget Targets</h2>
             <div className="flex items-center gap-3">
               {changeLog && (
@@ -492,7 +537,8 @@ export default function BudgetEditorModal({
             </div>
           </div>
 
-          <div className="overflow-y-auto px-5 py-4" style={{ maxHeight: 'calc(85vh - 140px)' }}>
+          <div className="flex-1 overflow-y-auto px-5 py-4 md:px-8">
+            <div className="mx-auto max-w-4xl">
             {/* Budget envelope */}
             <div className="mb-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-2">
               <div className="flex items-center justify-between gap-3">
@@ -534,24 +580,33 @@ export default function BudgetEditorModal({
               )}
 
               {envelope > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-surface-500">Allocated</span>
-                    <span className={`text-[10px] tabular-nums font-medium ${remaining >= 0 ? 'text-surface-400' : 'text-red-400'}`}>
-                      {formatCurrency(totalAllocated, false)} / {formatCurrency(envelope, false)}
-                      {remaining !== 0 && (
-                        <span className={remaining > 0 ? 'text-emerald-400' : 'text-red-400'}>
-                          {' '}({remaining > 0 ? '+' : ''}{formatCurrency(remaining, false)} left)
-                        </span>
-                      )}
-                    </span>
+                <div className="space-y-2">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-surface-500">Allocated</span>
+                      <span className={`text-[10px] tabular-nums font-medium ${remaining >= 0 ? 'text-surface-400' : 'text-red-400'}`}>
+                        {formatCurrency(totalAllocated, false)} / {formatCurrency(envelope, false)}
+                        {remaining !== 0 && (
+                          <span className={remaining > 0 ? 'text-emerald-400' : 'text-red-400'}>
+                            {' '}({remaining > 0 ? '+' : ''}{formatCurrency(remaining, false)} left)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-surface-800 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-200 ${remaining >= 0 ? 'bg-teal-500' : 'bg-red-500'}`}
+                        style={{ width: `${Math.min(envelopePct, 100)}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-1.5 rounded-full bg-surface-800 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-200 ${remaining >= 0 ? 'bg-teal-500' : 'bg-red-500'}`}
-                      style={{ width: `${Math.min(envelopePct, 100)}%` }}
+
+                  {plannedSavings !== null && effectiveIncome > 0 && (
+                    <SavingsGoalBar
+                      surplus={effectiveIncome - totalAllocated}
+                      target={plannedSavings}
                     />
-                  </div>
+                  )}
                 </div>
               )}
             </div>
@@ -642,7 +697,7 @@ export default function BudgetEditorModal({
             </div>
 
             {/* Category slider rows */}
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {visibleRows.map(row => (
                 <BudgetSliderRow
                   key={row.category_id}
@@ -652,39 +707,56 @@ export default function BudgetEditorModal({
                 />
               ))}
             </div>
+            </div>{/* end max-w-4xl */}
           </div>
 
           {/* Footer */}
-          <div className="border-t border-white/[0.06] px-5 py-3">
-            {saveError && (
-              <p className="mb-2 text-[10px] text-red-400">{saveError}</p>
-            )}
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-surface-400">
-                Total: {formatCurrency(totalAllocated, false)}/mo
-              </span>
-              {effectiveIncome > 0 && (
-                <span className={`text-xs font-bold ${effectiveIncome - totalAllocated >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {effectiveIncome - totalAllocated >= 0 ? 'Surplus' : 'Deficit'}: {formatCurrency(Math.abs(effectiveIncome - totalAllocated), false)}/mo
-                </span>
+          <div className="border-t border-white/[0.06] px-5 py-3 md:px-8">
+            <div className="mx-auto max-w-4xl">
+              {saveError && (
+                <p className="mb-2 text-[10px] text-red-400">{saveError}</p>
               )}
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleResetAll}
-                className="rounded-xl border border-white/[0.06] px-4 py-2.5 text-xs font-medium text-surface-400 transition-colors hover:text-surface-200 hover:border-white/[0.12]"
-              >
-                Reset to suggested
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 rounded-xl bg-teal-500/20 py-2.5 text-sm font-medium text-teal-300 transition-colors hover:bg-teal-500/30 disabled:opacity-50"
-              >
-                {saveBtnLabel}
-              </button>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-surface-400">
+                  Total: {formatCurrency(totalAllocated, false)}/mo
+                </span>
+                {effectiveIncome > 0 && plannedSavings !== null ? (
+                  <span className={`text-xs font-bold ${effectiveIncome - totalAllocated >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {effectiveIncome - totalAllocated >= 0 ? 'Surplus' : 'Deficit'}: {formatCurrency(Math.abs(effectiveIncome - totalAllocated), false)}
+                    /{formatCurrency(plannedSavings, false)}
+                  </span>
+                ) : effectiveIncome > 0 ? (
+                  <span className={`text-xs font-bold ${effectiveIncome - totalAllocated >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {effectiveIncome - totalAllocated >= 0 ? 'Surplus' : 'Deficit'}: {formatCurrency(Math.abs(effectiveIncome - totalAllocated), false)}/mo
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetAll}
+                  className="rounded-xl border border-white/[0.06] px-3 py-2.5 text-xs font-medium text-surface-400 transition-colors hover:text-surface-200 hover:border-white/[0.12]"
+                >
+                  Reset to suggested
+                </button>
+                {envelope > 0 && totalAllocated > envelope && (
+                  <button
+                    type="button"
+                    onClick={handleSmartAdjust}
+                    className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-500/15"
+                  >
+                    Smart adjust
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1 rounded-xl bg-teal-500/20 py-2.5 text-sm font-medium text-teal-300 transition-colors hover:bg-teal-500/30 disabled:opacity-50"
+                >
+                  {saveBtnLabel}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -695,7 +767,7 @@ export default function BudgetEditorModal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 z-10 flex items-center justify-center rounded-t-2xl bg-black/50 backdrop-blur-sm"
+                className="absolute inset-0 z-10 flex items-center justify-center bg-black/50 backdrop-blur-sm"
               >
                 <div className="mx-8 rounded-xl border border-white/[0.08] bg-surface-900 p-5 shadow-2xl">
                   {confirmAction.type === 'close' && (
@@ -790,6 +862,13 @@ export default function BudgetEditorModal({
                         </button>
                         <button
                           type="button"
+                          onClick={handleSmartAdjust}
+                          className="w-full rounded-lg border border-amber-500/20 bg-amber-500/[0.04] py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/10"
+                        >
+                          Try Smart adjust
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setConfirmAction(null)}
                           className="w-full py-1.5 text-[10px] text-surface-500 hover:text-surface-300"
                         >
@@ -798,11 +877,85 @@ export default function BudgetEditorModal({
                       </div>
                     </>
                   )}
+                  {confirmAction.type === 'smart-adjust' && (
+                    <>
+                      <p className="text-sm font-medium text-surface-100">Smart adjust</p>
+                      <p className="mt-1 text-xs text-surface-400">
+                        Weighted reductions across discretionary categories to fit your cap.
+                        Larger categories absorb more; fixed costs are untouched.
+                      </p>
+
+                      {confirmAction.income > 0 && confirmAction.capAmount > 0 && (
+                        <div className="mt-3">
+                          <SavingsGoalBar
+                            surplus={confirmAction.income - confirmAction.result.newTotal}
+                            target={confirmAction.income - confirmAction.capAmount}
+                          />
+                        </div>
+                      )}
+
+                      <div className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded-lg bg-white/[0.03] px-3 py-2">
+                        {confirmAction.result.reductions.map(r => (
+                          <div key={r.category_id} className="flex items-center justify-between text-[10px]">
+                            <span className="text-surface-400 truncate">{r.icon} {r.label}</span>
+                            <span className="tabular-nums text-surface-300 shrink-0 ml-2">
+                              {formatCurrency(r.currentTarget, false)}
+                              <span className="text-emerald-400"> → {formatCurrency(r.proposedTarget, false)}</span>
+                              <span className="text-emerald-400/60 ml-1">(-{formatCurrency(r.reduction, false)})</span>
+                            </span>
+                          </div>
+                        ))}
+                        {confirmAction.result.reductions.length === 0 && (
+                          <p className="text-[10px] text-surface-600 italic py-1">
+                            No discretionary categories available to reduce.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="mt-2 flex justify-between text-[10px] px-1">
+                        <span className="text-surface-500">Total reduction</span>
+                        <span className="tabular-nums font-medium text-emerald-400">
+                          -{formatCurrency(confirmAction.result.totalReduction, false)}/mo
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[10px] px-1">
+                        <span className="text-surface-500">New total</span>
+                        <span className={`tabular-nums font-medium ${
+                          confirmAction.result.newTotal <= confirmAction.capAmount ? 'text-emerald-400' : 'text-amber-400'
+                        }`}>
+                          {formatCurrency(confirmAction.result.newTotal, false)}/mo
+                          {confirmAction.result.newTotal > confirmAction.capAmount && (
+                            <span className="text-amber-400/60 ml-1">
+                              (still {formatCurrency(confirmAction.result.newTotal - confirmAction.capAmount, false)} over)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 flex flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={applySmartReductions}
+                          disabled={confirmAction.result.reductions.length === 0}
+                          className="w-full rounded-lg bg-teal-500/20 py-2 text-xs font-medium text-teal-300 hover:bg-teal-500/30 disabled:opacity-50"
+                        >
+                          Apply reductions
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmAction(null)}
+                          className="w-full py-1.5 text-[10px] text-surface-500 hover:text-surface-300"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
+        </div>{/* end flex container */}
       </motion.div>
 
       {/* Undo snackbar */}

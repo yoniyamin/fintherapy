@@ -30,12 +30,6 @@ export interface Household {
   created_at: string
 }
 
-export interface SavingsGoal {
-  name: string
-  target: number
-  horizon_months: number
-}
-
 export interface AnalysisReportConfig {
   headline?: boolean
   kpiCards?: boolean
@@ -56,10 +50,17 @@ export interface AnalysisReportConfig {
   subcategoryDisplay?: 'grouped' | 'detailed'
 }
 
+export interface SavedProjection {
+  categoryIds: string[]
+  cutPct: number
+  savedAt: string
+}
+
 export interface UiPrefs {
   comparisonView?: 'bars' | 'cards'
   assumedInflationRate?: number
-  savingsGoals?: SavingsGoal[]
+  savedProjection?: SavedProjection
+  savedProjectionHistory?: SavedProjection[]
   analysisReportConfig?: AnalysisReportConfig
 }
 

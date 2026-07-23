@@ -205,7 +205,6 @@ export default function AnalysisPage() {
           categories={catConfig.categories}
           budgets={budgetHook.budgets}
           inflationRate={prefs.assumedInflationRate ?? 3.2}
-          savingsGoals={prefs.savingsGoals ?? []}
           reportConfig={prefs.analysisReportConfig ?? {}}
           onSaveBudgets={async (upserts, deleteIds) => {
             for (const p of upserts) await budgetHook.upsert(p)
@@ -218,7 +217,13 @@ export default function AnalysisPage() {
           onLogChange={budgetHook.logChange}
           onUpdateScenarioCategories={budgetHook.updateScenarioCategories}
           onDataChange={handleRefreshData}
-          onManageGoals={() => setShowReportConfig(true)}
+          savedProjection={prefs.savedProjection}
+          onSaveProjection={proj => {
+            const old = prefs.savedProjection
+            const history = prefs.savedProjectionHistory ?? []
+            const nextHistory = old ? [...history, old] : history
+            updatePrefs({ savedProjection: proj, savedProjectionHistory: nextHistory })
+          }}
         />
       )}
 
@@ -241,17 +246,16 @@ export default function AnalysisPage() {
         onClose={() => setShowReportConfig(false)}
         config={prefs.analysisReportConfig ?? {}}
         inflationRate={prefs.assumedInflationRate ?? 3.2}
-        savingsGoals={prefs.savingsGoals ?? []}
         monthCount={selection.months.length}
-        onSave={(config, inflRate, goals) => {
-          updatePrefs({ analysisReportConfig: config, assumedInflationRate: inflRate, savingsGoals: goals })
+        onSave={(config, inflRate) => {
+          updatePrefs({ analysisReportConfig: config, assumedInflationRate: inflRate })
         }}
       />
     </div>
   )
 }
 
-function AnalysisContent({ data, months, categoryLookup, accountAliases, categories, budgets, inflationRate, savingsGoals, reportConfig, onSaveBudgets, onSaveIncome, budgetSettings, changeLog, onSaveSettings, onLogChange, onUpdateScenarioCategories, onDataChange, onManageGoals }: {
+function AnalysisContent({ data, months, categoryLookup, accountAliases, categories, budgets, inflationRate, reportConfig, onSaveBudgets, onSaveIncome, budgetSettings, changeLog, onSaveSettings, onLogChange, onUpdateScenarioCategories, onDataChange, savedProjection, onSaveProjection }: {
   data: MultiMonthData
   months: string[]
   categoryLookup: Record<string, { icon: string; label: string; expenseType?: string }>
@@ -259,7 +263,6 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
   categories: readonly CategoryDef[]
   budgets: import('../../hooks/useCategoryBudgets').CategoryBudget[]
   inflationRate: number
-  savingsGoals: import('../../types/database').SavingsGoal[]
   reportConfig: import('../../types/database').AnalysisReportConfig
   onSaveBudgets: (upserts: UpsertBudgetParams[], deleteIds: string[]) => Promise<void>
   onSaveIncome: (income: number) => Promise<void>
@@ -269,7 +272,8 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
   onLogChange: (action: 'save' | 'reset_medians', summary: string, snapshot: import('../../hooks/useCategoryBudgets').BudgetSnapshot) => Promise<void>
   onUpdateScenarioCategories: (ids: string[]) => Promise<void>
   onDataChange: () => void
-  onManageGoals: () => void
+  savedProjection?: import('../../types/database').SavedProjection
+  onSaveProjection: (proj: import('../../types/database').SavedProjection) => void
 }) {
   const [showBudgetEditor, setShowBudgetEditor] = useState(false)
   const rc = reportConfig
@@ -348,14 +352,14 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
           income={data.householdIncome}
           budgets={budgets}
           inflationRate={inflationRate}
-          savingsGoals={savingsGoals}
           months={months.length}
           categoryLookup={categoryLookup}
           spendingCap={budgetSettings?.monthly_spending_target}
           scenarioCategoryIds={budgetSettings?.scenario_category_ids}
           onUpdateScenarioCategories={onUpdateScenarioCategories}
           onEditBudgets={() => setShowBudgetEditor(true)}
-          onManageGoals={onManageGoals}
+          savedProjection={savedProjection}
+          onSaveProjection={onSaveProjection}
         />
       )}
 

@@ -2,24 +2,27 @@ import { useCallback, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { CategoryBudget } from '../../hooks/useCategoryBudgets'
-import type { SavingsGoal } from '../../types/database'
+import type { SavedProjection } from '../../types/database'
 import { formatCurrency } from '../../lib/formatCurrency'
 
 const CUT_PRESETS = [5, 10, 15] as const
 const MAX_SCENARIO_CATEGORIES = 6
+const VISIBLE_SCENARIO_COUNT = 6
+
+type PanelMode = 'projection' | 'budget-goals'
 
 interface Props {
   income: number | null
   budgets: CategoryBudget[]
   inflationRate: number
-  savingsGoals: SavingsGoal[]
   months: number
   categoryLookup: Record<string, { icon?: string; label?: string; expenseType?: string; spendingFrequency?: string }>
   spendingCap?: number | null
   scenarioCategoryIds?: string[]
   onUpdateScenarioCategories?: (ids: string[]) => Promise<void>
   onEditBudgets?: () => void
-  onManageGoals?: () => void
+  savedProjection?: SavedProjection
+  onSaveProjection?: (proj: SavedProjection) => void
 }
 
 interface BudgetLine {
@@ -40,15 +43,12 @@ interface Projection {
   inflationPressure: number
   inflationAdjustedSurplus: number
   allVariableCategories: BudgetLine[]
-  goalAllocations: { name: string; target: number; monthlyNeeded: number; monthsToGoal: number; funded: boolean }[]
-  freeSavings: number
 }
 
 function computeProjection(
   income: number,
   budgets: CategoryBudget[],
   inflationRate: number,
-  savingsGoals: SavingsGoal[],
   categoryLookup: Record<string, { icon?: string; label?: string; expenseType?: string; spendingFrequency?: string }>,
 ): Projection {
   const monthlyInflation = inflationRate / 1200
@@ -82,12 +82,6 @@ function computeProjection(
     .filter(l => l.target > 0)
     .sort((a, b) => b.target - a.target)
 
-  const goalAllocations = savingsGoals.map(goal => {
-    const monthlyNeeded = goal.horizon_months > 0 ? goal.target / goal.horizon_months : goal.target
-    const monthsToGoal = realMonthlySurplus > 0 ? Math.ceil(goal.target / realMonthlySurplus) : Infinity
-    return { name: goal.name, target: goal.target, monthlyNeeded, monthsToGoal, funded: realMonthlySurplus >= monthlyNeeded }
-  })
-
   return {
     fixedCosts,
     variableCosts,
@@ -97,8 +91,6 @@ function computeProjection(
     inflationPressure,
     inflationAdjustedSurplus: realMonthlySurplus,
     allVariableCategories,
-    goalAllocations,
-    freeSavings: realMonthlySurplus - goalAllocations.reduce((s, g) => s + g.monthlyNeeded, 0),
   }
 }
 
@@ -113,21 +105,19 @@ function categoryTag(cat: BudgetLine, isSuggested: boolean): { label: string; co
 }
 
 function ScenarioCategoryPicker({
-  open,
   onClose,
   allCategories,
-  selectedIds,
-  onToggle,
-  onReset,
+  initialIds,
+  onSave,
 }: {
-  open: boolean
   onClose: () => void
   allCategories: BudgetLine[]
-  selectedIds: Set<string>
-  onToggle: (id: string) => void
-  onReset: () => void
+  initialIds: string[]
+  onSave: (ids: string[]) => void
 }) {
-  const atLimit = selectedIds.size >= MAX_SCENARIO_CATEGORIES
+  const [localIds, setLocalIds] = useState<Set<string>>(() => new Set(initialIds))
+
+  const atLimit = localIds.size >= MAX_SCENARIO_CATEGORIES
 
   const suggestedIds = useMemo(() => {
     const monthlyCuttable = allCategories
@@ -150,7 +140,24 @@ function ScenarioCategoryPicker({
     })
   }, [allCategories, suggestedIds])
 
-  if (!open) return null
+  const handleToggle = useCallback((id: string) => {
+    setLocalIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else if (next.size < MAX_SCENARIO_CATEGORIES) next.add(id)
+      return next
+    })
+  }, [])
+
+  const handleDone = useCallback(() => {
+    onSave([...localIds])
+    onClose()
+  }, [localIds, onSave, onClose])
+
+  const handleReset = useCallback(() => {
+    onSave([])
+    onClose()
+  }, [onSave, onClose])
 
   return createPortal(
     <AnimatePresence>
@@ -160,7 +167,7 @@ function ScenarioCategoryPicker({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 left-[var(--shell-nav-offset)] z-[9999] flex items-end justify-center bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleDone}
       >
         <motion.div
           key="scenario-picker-sheet"
@@ -178,10 +185,10 @@ function ScenarioCategoryPicker({
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
                 atLimit ? 'bg-amber-500/15 text-amber-300' : 'bg-teal-500/15 text-teal-300'
               }`}>
-                {selectedIds.size}/{MAX_SCENARIO_CATEGORIES}
+                {localIds.size}/{MAX_SCENARIO_CATEGORIES}
               </span>
             </div>
-            <button type="button" onClick={onClose} className="text-xs text-surface-500 hover:text-surface-300">
+            <button type="button" onClick={handleDone} className="text-xs text-surface-500 hover:text-surface-300">
               Done
             </button>
           </div>
@@ -193,7 +200,7 @@ function ScenarioCategoryPicker({
           <div className="overflow-y-auto px-5 py-3" style={{ maxHeight: 'calc(70vh - 120px)' }}>
             <div className="space-y-1">
               {sorted.map(cat => {
-                const checked = selectedIds.has(cat.categoryId)
+                const checked = localIds.has(cat.categoryId)
                 const disabled = !checked && atLimit
                 const tag = categoryTag(cat, suggestedIds.has(cat.categoryId))
                 return (
@@ -201,7 +208,7 @@ function ScenarioCategoryPicker({
                     key={cat.categoryId}
                     type="button"
                     disabled={disabled}
-                    onClick={() => onToggle(cat.categoryId)}
+                    onClick={() => handleToggle(cat.categoryId)}
                     className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
                       checked
                         ? 'bg-teal-500/10 border border-teal-500/20'
@@ -250,7 +257,7 @@ function ScenarioCategoryPicker({
           <div className="border-t border-white/[0.06] px-5 py-3">
             <button
               type="button"
-              onClick={onReset}
+              onClick={handleReset}
               className="w-full py-1.5 text-[10px] text-surface-500 hover:text-surface-300 transition-colors"
             >
               Reset to auto (top by spend)
@@ -263,56 +270,197 @@ function ScenarioCategoryPicker({
   )
 }
 
+// --- Budget Goals View (read-only) ------------------------------------------
+
+function BudgetGoalsView({
+  projection,
+  income,
+  spendingCap,
+  onEditBudgets,
+}: {
+  projection: Projection
+  income: number
+  spendingCap: number | null
+  onEditBudgets?: () => void
+}) {
+  const [showFixed, setShowFixed] = useState(false)
+  const plannedSavings = spendingCap && spendingCap > 0 ? income - spendingCap : null
+
+  const fixed = projection.allVariableCategories.filter(c => c.isFixed)
+  const discretionary = projection.allVariableCategories.filter(c => !c.isFixed)
+
+  const savingsPct = plannedSavings !== null && plannedSavings > 0
+    ? Math.max(0, Math.min((projection.nominalSurplus / plannedSavings) * 100, 100))
+    : null
+
+  const barColor = savingsPct === null ? ''
+    : savingsPct >= 80 ? 'bg-emerald-500'
+      : savingsPct >= 50 ? 'bg-amber-500'
+        : 'bg-red-500'
+
+  return (
+    <div>
+      {/* Savings goal progress */}
+      {plannedSavings !== null && savingsPct !== null && (
+        <div className="mb-3 rounded-lg bg-slate-700/20 px-3 py-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] text-slate-500">Savings goal</span>
+            <span className={`text-[10px] tabular-nums font-medium ${
+              savingsPct >= 80 ? 'text-emerald-400' : savingsPct >= 50 ? 'text-amber-400' : 'text-red-400'
+            }`}>
+              {formatCurrency(Math.max(0, projection.nominalSurplus), false)} / {formatCurrency(plannedSavings, false)}
+              {' '}({Math.round(savingsPct)}%)
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-200 ${barColor}`}
+              style={{ width: `${savingsPct}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Discretionary categories */}
+      <div className="space-y-1">
+        {discretionary.map(cat => {
+          const pct = projection.totalTarget > 0 ? (cat.target / projection.totalTarget) * 100 : 0
+          return (
+            <div key={cat.categoryId} className="flex items-center gap-2 rounded-md px-2.5 py-1.5 bg-slate-700/15">
+              <span className="text-xs shrink-0">{cat.icon}</span>
+              <span className="flex-1 truncate text-[11px] text-slate-300">{cat.label}</span>
+              <span className="text-[10px] tabular-nums text-slate-400 shrink-0">{Math.round(pct)}%</span>
+              <span className="text-[11px] tabular-nums font-medium text-slate-200 shrink-0">
+                {formatCurrency(cat.target, false)}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Fixed costs (collapsed) */}
+      {fixed.length > 0 && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setShowFixed(!showFixed)}
+            className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left hover:bg-white/[0.02] transition-colors"
+          >
+            <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+              <span className={`text-[8px] transition-transform ${showFixed ? 'rotate-90' : ''}`}>▶</span>
+              {fixed.length} fixed cost{fixed.length !== 1 ? 's' : ''}
+            </span>
+            <span className="text-[10px] tabular-nums text-slate-500">
+              {formatCurrency(projection.fixedCosts, false)}
+            </span>
+          </button>
+          <AnimatePresence>
+            {showFixed && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-1 space-y-1">
+                  {fixed.map(cat => (
+                    <div key={cat.categoryId} className="flex items-center gap-2 rounded-md px-2.5 py-1.5 bg-slate-700/10">
+                      <span className="text-xs shrink-0">{cat.icon}</span>
+                      <span className="flex-1 truncate text-[10px] text-slate-500">{cat.label}</span>
+                      <span className="text-[10px] tabular-nums text-slate-500 shrink-0">
+                        {formatCurrency(cat.target, false)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Footer totals */}
+      <div className="mt-3 border-t border-slate-600/30 pt-2 flex items-center justify-between">
+        <span className="text-[10px] text-slate-500">
+          {projection.allVariableCategories.length} categories · {formatCurrency(projection.totalTarget, false)}/mo
+        </span>
+        {onEditBudgets && (
+          <button
+            type="button"
+            onClick={onEditBudgets}
+            className="text-[10px] font-medium text-teal-400 hover:text-teal-300 transition-colors"
+          >
+            Edit targets
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // --- Main Panel -------------------------------------------------------------
 
 export default function SavingsProjectionPanel({
-  income, budgets, inflationRate, savingsGoals, months,
+  income, budgets, inflationRate, months,
   categoryLookup, spendingCap, scenarioCategoryIds,
-  onUpdateScenarioCategories, onEditBudgets, onManageGoals,
+  onUpdateScenarioCategories, onEditBudgets,
+  savedProjection, onSaveProjection,
 }: Props) {
-  const [cutPct, setCutPct] = useState(10)
-  const [customPct, setCustomPct] = useState('')
-  const [isCustomActive, setIsCustomActive] = useState(false)
+  const savedPct = savedProjection?.cutPct
+  const [cutPct, setCutPct] = useState(savedPct ?? 10)
+  const [customPct, setCustomPct] = useState(() =>
+    savedPct && !([5, 10, 15] as number[]).includes(savedPct) ? String(savedPct) : '',
+  )
+  const [isCustomActive, setIsCustomActive] = useState(() =>
+    !!savedPct && !([5, 10, 15] as number[]).includes(savedPct),
+  )
   const [showBreakdown, setShowBreakdown] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
+  const [showOverflow, setShowOverflow] = useState(false)
+  const [panelMode, setPanelMode] = useState<PanelMode>(() =>
+    budgets.length > 0 ? 'budget-goals' : 'projection',
+  )
 
   const projection = useMemo(() => {
     if (!income || income <= 0 || budgets.length === 0) return null
-    return computeProjection(income, budgets, inflationRate, savingsGoals, categoryLookup)
-  }, [income, budgets, inflationRate, savingsGoals, categoryLookup])
+    return computeProjection(income, budgets, inflationRate, categoryLookup)
+  }, [income, budgets, inflationRate, categoryLookup])
 
   const isCustomList = !!scenarioCategoryIds && scenarioCategoryIds.length > 0
-  const selectedSet = useMemo(
-    () => new Set(scenarioCategoryIds ?? []),
-    [scenarioCategoryIds],
-  )
 
-  const scenarioCategories = useMemo(() => {
+  const allScenarioCategories = useMemo(() => {
     if (!projection) return []
     if (isCustomList) {
       const byId = new Map(projection.allVariableCategories.map(c => [c.categoryId, c]))
       return (scenarioCategoryIds ?? [])
         .map(id => byId.get(id))
         .filter((c): c is BudgetLine => !!c)
-        .slice(0, MAX_SCENARIO_CATEGORIES)
     }
     return projection.allVariableCategories.slice(0, 5)
   }, [projection, isCustomList, scenarioCategoryIds])
 
-  const handleToggle = useCallback((id: string) => {
-    const current = scenarioCategoryIds ?? []
-    const next = current.includes(id)
-      ? current.filter(c => c !== id)
-      : current.length < MAX_SCENARIO_CATEGORIES
-        ? [...current, id]
-        : current
-    onUpdateScenarioCategories?.(next)
-  }, [scenarioCategoryIds, onUpdateScenarioCategories])
+  const scenarioCategories = useMemo(
+    () => allScenarioCategories.slice(0, VISIBLE_SCENARIO_COUNT),
+    [allScenarioCategories],
+  )
 
-  const handleReset = useCallback(() => {
-    onUpdateScenarioCategories?.([])
-    setShowPicker(false)
+  const overflowCategories = useMemo(
+    () => allScenarioCategories.slice(VISIBLE_SCENARIO_COUNT),
+    [allScenarioCategories],
+  )
+
+  const handlePickerSave = useCallback((ids: string[]) => {
+    onUpdateScenarioCategories?.(ids)
   }, [onUpdateScenarioCategories])
+
+  const isSaved = useMemo(() => {
+    if (!savedProjection) return false
+    const currentIds = allScenarioCategories.map(c => c.categoryId)
+    return savedProjection.cutPct === cutPct
+      && savedProjection.categoryIds.length === currentIds.length
+      && savedProjection.categoryIds.every((id, i) => id === currentIds[i])
+  }, [savedProjection, cutPct, allScenarioCategories])
 
   if (!projection || months < 3) return null
 
@@ -322,8 +470,10 @@ export default function SavingsProjectionPanel({
       : projection.savingsRate >= 0 ? 'text-amber-400'
         : 'text-red-400'
 
-  const scenarioTotal = Math.round(scenarioCategories.reduce((s, c) => s + c.target * cutPct / 100, 0))
+  const scenarioTotal = Math.round(allScenarioCategories.reduce((s, c) => s + c.target * cutPct / 100, 0))
+  const overflowTotal = Math.round(overflowCategories.reduce((s, c) => s + c.target * cutPct / 100, 0))
   const capValue = spendingCap && spendingCap > 0 ? spendingCap : null
+  const hasBudgets = budgets.length > 0
 
   return (
     <motion.div
@@ -331,9 +481,38 @@ export default function SavingsProjectionPanel({
       animate={{ opacity: 1, y: 0 }}
       className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-4"
     >
-      <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
-        Savings Projection
-      </h3>
+      {/* Header with mode toggle */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          Savings Projection
+        </h3>
+        {hasBudgets && (
+          <div className="flex rounded-lg bg-slate-800/80 p-0.5">
+            <button
+              type="button"
+              onClick={() => setPanelMode('budget-goals')}
+              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
+                panelMode === 'budget-goals'
+                  ? 'bg-slate-700/60 text-slate-200 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-400'
+              }`}
+            >
+              Budget goals
+            </button>
+            <button
+              type="button"
+              onClick={() => setPanelMode('projection')}
+              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
+                panelMode === 'projection'
+                  ? 'bg-teal-500/20 text-teal-300 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-400'
+              }`}
+            >
+              Projection
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Summary waterfall */}
       <div className="mb-4 rounded-lg bg-slate-700/30 p-3">
@@ -399,12 +578,22 @@ export default function SavingsProjectionPanel({
         </div>
       </div>
 
-      {/* Scenario: segmented control */}
-      {scenarioCategories.length > 0 && (
+      {/* ─── Budget Goals Mode ─── */}
+      {panelMode === 'budget-goals' && (
+        <BudgetGoalsView
+          projection={projection}
+          income={income!}
+          spendingCap={capValue}
+          onEditBudgets={onEditBudgets}
+        />
+      )}
+
+      {/* ─── Projection Mode ─── */}
+      {panelMode === 'projection' && scenarioCategories.length > 0 && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <p className="text-[11px] text-slate-500">If you cut these {scenarioCategories.length} categories by</p>
+              <p className="text-[11px] text-slate-500">If you cut these {allScenarioCategories.length} categories by</p>
               {isCustomList && (
                 <span className="rounded-full bg-teal-500/10 px-1.5 py-0.5 text-[8px] font-semibold text-teal-400 uppercase tracking-wider">
                   Custom
@@ -463,7 +652,7 @@ export default function SavingsProjectionPanel({
             ))}
           </div>
 
-          {/* Category deltas */}
+          {/* Category deltas — visible */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {scenarioCategories.map(cat => {
               const delta = Math.round(cat.target * cutPct / 100)
@@ -479,9 +668,69 @@ export default function SavingsProjectionPanel({
             })}
           </div>
 
-          <p className="mt-2 text-[9px] text-slate-600 italic leading-relaxed">
-            Explore only — not saved to your budget.
-          </p>
+          {/* Overflow categories */}
+          {overflowCategories.length > 0 && (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setShowOverflow(!showOverflow)}
+                className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left hover:bg-white/[0.02] transition-colors"
+              >
+                <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                  <span className={`text-[8px] transition-transform ${showOverflow ? 'rotate-90' : ''}`}>▶</span>
+                  +{overflowCategories.length} more categories
+                </span>
+                <span className="text-[10px] font-semibold tabular-nums text-emerald-400/70">
+                  +{formatCurrency(overflowTotal, false)}/mo
+                </span>
+              </button>
+              <AnimatePresence>
+                {showOverflow && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {overflowCategories.map(cat => {
+                        const delta = Math.round(cat.target * cutPct / 100)
+                        return (
+                          <div key={cat.categoryId} className="flex items-center justify-between rounded-md px-2.5 py-1.5 bg-slate-700/10">
+                            <span className="text-[10px] text-slate-500 truncate">{cat.label}</span>
+                            <div className="flex flex-col items-end shrink-0 ml-2">
+                              <span className="text-[10px] tabular-nums text-slate-400">{formatCurrency(cat.target, false)}</span>
+                              <span className="text-[8px] font-semibold tabular-nums text-emerald-400/70">+{formatCurrency(delta, false)}/mo</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
+          <div className="mt-2 flex items-center justify-between">
+            {isSaved
+              ? <span className="text-[9px] text-emerald-500 font-medium">✓ Projection saved</span>
+              : <span className="text-[9px] text-slate-600 italic">Explore only — not saved.</span>}
+            {onSaveProjection && (
+              <button
+                type="button"
+                onClick={() => onSaveProjection({
+                  categoryIds: allScenarioCategories.map(c => c.categoryId),
+                  cutPct,
+                  savedAt: new Date().toISOString(),
+                })}
+                className="rounded-md border border-teal-500/20 px-2.5 py-1 text-[10px] font-medium text-teal-400 hover:bg-teal-500/10 active:bg-teal-500/20 transition-colors"
+              >
+                {isSaved ? 'Update' : 'Save projection'}
+              </button>
+            )}
+          </div>
 
           {onEditBudgets && (
             <button
@@ -495,81 +744,15 @@ export default function SavingsProjectionPanel({
         </div>
       )}
 
-      {/* Goals */}
-      {projection.goalAllocations.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Goal Progress</p>
-            {onManageGoals && (
-              <button
-                type="button"
-                onClick={onManageGoals}
-                className="text-[10px] font-medium text-teal-400 hover:text-teal-300 py-1"
-              >
-                Manage goals
-              </button>
-            )}
-          </div>
-          {projection.goalAllocations.map(goal => {
-            const progress = projection.inflationAdjustedSurplus > 0
-              ? Math.min(100, (projection.inflationAdjustedSurplus / goal.monthlyNeeded) * 100)
-              : 0
-            return (
-              <div key={goal.name} className="rounded-lg bg-slate-700/20 p-2.5">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-slate-300">{goal.name}</span>
-                  <span className="text-[10px] tabular-nums text-slate-400">
-                    {goal.monthsToGoal === Infinity ? '—' : `${goal.monthsToGoal}mo`} to goal
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${progress}%` }}
-                      transition={{ duration: 0.6 }}
-                      className={`h-full rounded-full ${goal.funded ? 'bg-emerald-400' : 'bg-amber-400'}`}
-                    />
-                  </div>
-                  <span className="text-[10px] tabular-nums text-slate-500">{formatCurrency(goal.target, false)}</span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+      {/* Scenario category picker bottom sheet — remounts on open to reset local state */}
+      {showPicker && (
+        <ScenarioCategoryPicker
+          onClose={() => setShowPicker(false)}
+          allCategories={projection.allVariableCategories}
+          initialIds={scenarioCategoryIds ?? []}
+          onSave={handlePickerSave}
+        />
       )}
-
-      {projection.goalAllocations.length === 0 && onManageGoals && (
-        <button
-          type="button"
-          onClick={onManageGoals}
-          className="w-full rounded-lg border border-dashed border-slate-600/50 py-2 text-[10px] text-slate-500 hover:text-slate-400 hover:border-slate-500/50 transition-colors"
-        >
-          + Add savings goals
-        </button>
-      )}
-
-      {/* Free savings after goals */}
-      {projection.goalAllocations.length > 0 && (
-        <div className="mt-3 pt-2 border-t border-slate-700/40">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-slate-500">Free savings after goals</span>
-            <span className={`text-xs font-bold tabular-nums ${projection.freeSavings >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {formatCurrency(projection.freeSavings, false)}/mo
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Scenario category picker bottom sheet */}
-      <ScenarioCategoryPicker
-        open={showPicker}
-        onClose={() => setShowPicker(false)}
-        allCategories={projection.allVariableCategories}
-        selectedIds={selectedSet}
-        onToggle={handleToggle}
-        onReset={handleReset}
-      />
     </motion.div>
   )
 }

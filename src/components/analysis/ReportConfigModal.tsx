@@ -1,16 +1,15 @@
 import { useCallback, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { AnalysisReportConfig, SavingsGoal } from '../../types/database'
+import type { AnalysisReportConfig } from '../../types/database'
 
 interface Props {
   open: boolean
   onClose: () => void
   config: AnalysisReportConfig
   inflationRate: number
-  savingsGoals: SavingsGoal[]
   monthCount: number
-  onSave: (config: AnalysisReportConfig, inflationRate: number, savingsGoals: SavingsGoal[]) => void
+  onSave: (config: AnalysisReportConfig, inflationRate: number) => void
 }
 
 interface SectionDef {
@@ -37,37 +36,23 @@ const SECTIONS: SectionDef[] = [
   { key: 'velocityGauge', label: 'Velocity Gauge', minMonths: 1 },
 ]
 
-export default function ReportConfigModal({ open, onClose, config, inflationRate, savingsGoals, monthCount, onSave }: Props) {
+export default function ReportConfigModal({ open, onClose, config, inflationRate, monthCount, onSave }: Props) {
   if (!open) return null
-  return <ReportConfigModalInner onClose={onClose} config={config} inflationRate={inflationRate} savingsGoals={savingsGoals} monthCount={monthCount} onSave={onSave} />
+  return <ReportConfigModalInner onClose={onClose} config={config} inflationRate={inflationRate} monthCount={monthCount} onSave={onSave} />
 }
 
-function ReportConfigModalInner({ onClose, config, inflationRate, savingsGoals, monthCount, onSave }: Omit<Props, 'open'>) {
+function ReportConfigModalInner({ onClose, config, inflationRate, monthCount, onSave }: Omit<Props, 'open'>) {
   const [draft, setDraft] = useState<AnalysisReportConfig>(config)
   const [inflation, setInflation] = useState(String(inflationRate))
-  const [goals, setGoals] = useState<SavingsGoal[]>(savingsGoals.length > 0 ? savingsGoals : [])
 
   const toggleSection = useCallback((key: keyof AnalysisReportConfig) => {
     setDraft(prev => ({ ...prev, [key]: !(prev[key] ?? true) }))
   }, [])
 
-  const addGoal = useCallback(() => {
-    setGoals(prev => [...prev, { name: '', target: 0, horizon_months: 12 }])
-  }, [])
-
-  const updateGoal = useCallback((index: number, field: keyof SavingsGoal, value: string | number) => {
-    setGoals(prev => prev.map((g, i) => i === index ? { ...g, [field]: value } : g))
-  }, [])
-
-  const removeGoal = useCallback((index: number) => {
-    setGoals(prev => prev.filter((_, i) => i !== index))
-  }, [])
-
   const handleSave = useCallback(() => {
-    const validGoals = goals.filter(g => g.name && g.target > 0)
-    onSave(draft, Number(inflation) || 3.2, validGoals)
+    onSave(draft, Number(inflation) || 3.2)
     onClose()
-  }, [draft, inflation, goals, onSave, onClose])
+  }, [draft, inflation, onSave, onClose])
 
   return createPortal(
     <AnimatePresence>
@@ -137,56 +122,7 @@ function ReportConfigModalInner({ onClose, config, inflationRate, savingsGoals, 
               />
               <span className="text-xs text-surface-400">% per year</span>
             </div>
-            <p className="text-[9px] text-surface-600 mb-5 leading-tight">Used in savings projections to adjust variable costs forward. Categories marked "Infl." in budget targets grow at this rate; fixed costs (rent, loans) stay flat.</p>
-
-            {/* Savings goals */}
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-surface-500">Savings Goals</p>
-              <button
-                type="button"
-                onClick={addGoal}
-                className="text-[10px] font-medium text-teal-400 hover:text-teal-300"
-              >
-                + Add
-              </button>
-            </div>
-            <div className="space-y-2">
-              {goals.map((goal, i) => (
-                <div key={i} className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-white/[0.02] p-2">
-                  <input
-                    type="text"
-                    value={goal.name}
-                    onChange={e => updateGoal(i, 'name', e.target.value)}
-                    placeholder="Name"
-                    className="flex-1 min-w-0 rounded-md border border-white/[0.06] bg-surface-950/55 px-2 py-1 text-xs text-surface-50 outline-none"
-                  />
-                  <input
-                    type="number"
-                    value={goal.target || ''}
-                    onChange={e => updateGoal(i, 'target', Number(e.target.value))}
-                    placeholder="€"
-                    className="w-16 rounded-md border border-white/[0.06] bg-surface-950/55 px-2 py-1 text-xs text-surface-50 outline-none"
-                  />
-                  <input
-                    type="number"
-                    value={goal.horizon_months || ''}
-                    onChange={e => updateGoal(i, 'horizon_months', Number(e.target.value))}
-                    placeholder="mo"
-                    className="w-12 rounded-md border border-white/[0.06] bg-surface-950/55 px-2 py-1 text-xs text-surface-50 outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeGoal(i)}
-                    className="text-xs text-red-400 hover:text-red-300 shrink-0"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              {goals.length === 0 && (
-                <p className="text-[10px] text-surface-600 italic py-2">No goals configured</p>
-              )}
-            </div>
+            <p className="text-[9px] text-surface-600 mb-5 leading-tight">Used in savings projections to adjust variable costs forward. Categories marked &quot;Infl.&quot; in budget targets grow at this rate; fixed costs (rent, loans) stay flat.</p>
           </div>
         </motion.div>
       </motion.div>

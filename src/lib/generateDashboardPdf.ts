@@ -42,7 +42,6 @@ export interface PdfReportInput {
   reportConfig?: Record<string, boolean>
   budgets?: BudgetEntry[]
   inflationRate?: number
-  savingsGoals?: { name: string; target: number; horizon_months: number }[]
 }
 
 const PALETTE = ['#58CC02', '#38bdf8', '#f59e0b', '#ef4444', '#a78bfa', '#f472b6', '#22d3ee', '#fb923c']
@@ -1338,40 +1337,7 @@ function drawBudgetPage(pdf: jsPDF, input: PdfReportInput, isLandscape: boolean)
     pdf.text(`Projected surplus: ${formatCurrency(surplus, false)}/mo`, mx + pw / 2, y + 4)
     y += 10
 
-    const goals = input.savingsGoals ?? []
     const inflRate = input.inflationRate ?? 3.2
-    if (goals.length > 0) {
-      pdf.setFontSize(10)
-      pdf.setTextColor(...hexToRgb(TEXT))
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('Savings Goals', mx, y + 4)
-      y += 8
-
-      const fixedCosts = budgets.filter(b => input.categoryLookup[b.category_id]?.expenseType === 'fixed').reduce((s, b) => s + b.monthly_target, 0)
-      const variableCosts = budgets.filter(b => input.categoryLookup[b.category_id]?.expenseType !== 'fixed').reduce((s, b) => s + b.monthly_target, 0)
-      const realSurplus = input.income - fixedCosts - variableCosts * (1 + inflRate / 1200)
-
-      for (const goal of goals) {
-        const monthlyNeeded = goal.horizon_months > 0 ? goal.target / goal.horizon_months : goal.target
-        const monthsToGoal = realSurplus > 0 ? Math.ceil(goal.target / realSurplus) : Infinity
-
-        pdf.setFillColor(...hexToRgb(BG_CARD))
-        pdf.roundedRect(mx, y, pw, 8, 1, 1, 'F')
-        pdf.setFontSize(8)
-        pdf.setFont('helvetica', 'normal')
-        pdf.setTextColor(...hexToRgb(TEXT))
-        pdf.text(goal.name, mx + 4, y + 5)
-        pdf.setTextColor(...hexToRgb(TEXT_MUTED))
-        pdf.text(`${formatCurrency(goal.target, false)} goal · ${formatCurrency(monthlyNeeded, false)}/mo needed · ${monthsToGoal === Infinity ? '—' : monthsToGoal + 'mo'} to goal`, mx + pw - 4, y + 5, { align: 'right' })
-        y += 10
-      }
-
-      y += 4
-      pdf.setFontSize(7)
-      pdf.setTextColor(...hexToRgb(TEXT_DIM))
-      pdf.text(`Inflation-adjusted surplus: ${formatCurrency(realSurplus, false)}/mo (at ${inflRate}% annual inflation)`, mx, y + 3)
-      y += 6
-    }
 
     pdf.setFontSize(6)
     pdf.setTextColor(...hexToRgb(TEXT_DIM))
