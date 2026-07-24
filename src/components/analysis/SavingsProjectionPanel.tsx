@@ -5,6 +5,9 @@ import type { CategoryBudget } from '../../hooks/useCategoryBudgets'
 import type { SavedProjection } from '../../types/database'
 import { formatCurrency } from '../../lib/formatCurrency'
 
+import type { CategorySummary } from '../../hooks/useReveal'
+import { computeMedian } from './budgetEditorUtils'
+
 const CUT_PRESETS = [5, 10, 15] as const
 const MAX_SCENARIO_CATEGORIES = 6
 const VISIBLE_SCENARIO_COUNT = 6
@@ -14,8 +17,9 @@ type PanelMode = 'projection' | 'budget-goals'
 interface Props {
   income: number | null
   budgets: CategoryBudget[]
+  summaryByMonth: Map<string, CategorySummary[]>
+  months: string[]
   inflationRate: number
-  months: number
   categoryLookup: Record<string, { icon?: string; label?: string; expenseType?: string; spendingFrequency?: string }>
   spendingCap?: number | null
   scenarioCategoryIds?: string[]
@@ -30,6 +34,7 @@ interface BudgetLine {
   icon: string
   label: string
   target: number
+  medianActual: number
   isFixed: boolean
   spendingFrequency: string
 }
@@ -48,6 +53,8 @@ interface Projection {
 function computeProjection(
   income: number,
   budgets: CategoryBudget[],
+  summaryByMonth: Map<string, CategorySummary[]>,
+  months: string[],
   inflationRate: number,
   categoryLookup: Record<string, { icon?: string; label?: string; expenseType?: string; spendingFrequency?: string }>,
 ): Projection {
@@ -55,13 +62,32 @@ function computeProjection(
 
   const lines: BudgetLine[] = budgets.map(b => {
     const info = categoryLookup[b.category_id]
+    
+    // Calculate median using the exported helper
+    const monthlyAmounts = months.map(m => {
+      const summary = summaryByMonth.get(m)
+      const cat = summary?.find(c => c.category === b.category_id)
+      return cat ? Math.abs(Number(cat.total_amount)) : 0
+    })
+    
+    let medianActual = 0
+    const freq = info?.spendingFrequency ?? 'monthly'
+    if (freq === 'annual') {
+      const totalSpent = monthlyAmounts.reduce((s, v) => s + v, 0)
+      const yearsOfData = Math.max(months.length / 12, 1)
+      medianActual = Math.round(totalSpent / yearsOfData / 12)
+    } else {
+      medianActual = computeMedian(monthlyAmounts)
+    }
+
     return {
       categoryId: b.category_id,
       icon: info?.icon ?? '📦',
       label: info?.label ?? b.category_id,
       target: Number(b.monthly_target),
+      medianActual,
       isFixed: info?.expenseType === 'fixed',
-      spendingFrequency: info?.spendingFrequency ?? 'monthly',
+      spendingFrequency: freq,
     }
   })
 
@@ -175,7 +201,7 @@ function ScenarioCategoryPicker({
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
           transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-          className="relative w-full max-w-lg rounded-t-2xl border-t border-white/10 bg-surface-950/95 backdrop-blur-xl"
+          className="relative w-full max-w-lg rounded-t-2xl border-t border-white/10 bg-surface-950/95 backdrop-blur-xl pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
           style={{ maxHeight: '70vh' }}
           onClick={e => e.stopPropagation()}
         >
@@ -324,15 +350,30 @@ function BudgetGoalsView({
       {/* Discretionary categories */}
       <div className="space-y-1">
         {discretionary.map(cat => {
-          const pct = projection.totalTarget > 0 ? (cat.target / projection.totalTarget) * 100 : 0
+          const isCut = cat.target < cat.medianActual
+          const diff = Math.abs(cat.target - cat.medianActual)
+          
           return (
-            <div key={cat.categoryId} className="flex items-center gap-2 rounded-md px-2.5 py-1.5 bg-slate-700/15">
+            <div key={cat.categoryId} className="flex items-center gap-2 rounded-md px-2.5 py-2 bg-slate-700/15">
               <span className="text-xs shrink-0">{cat.icon}</span>
-              <span className="flex-1 truncate text-[11px] text-slate-300">{cat.label}</span>
-              <span className="text-[10px] tabular-nums text-slate-400 shrink-0">{Math.round(pct)}%</span>
-              <span className="text-[11px] tabular-nums font-medium text-slate-200 shrink-0">
-                {formatCurrency(cat.target, false)}
-              </span>
+              <div className="flex-1 min-w-0 flex flex-col">
+                <span className="truncate text-[11px] text-slate-300">{cat.label}</span>
+                {cat.medianActual > 0 && (
+                  <span className="truncate text-[9px] text-slate-500">
+                    Suggested {formatCurrency(cat.medianActual, false)}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col items-end shrink-0">
+                <span className="text-[11px] tabular-nums font-medium text-slate-200">
+                  {formatCurrency(cat.target, false)}
+                </span>
+                {diff > 0 && cat.medianActual > 0 && (
+                  <span className={`text-[9px] font-semibold tabular-nums ${isCut ? 'text-emerald-400/80' : 'text-amber-400/80'}`}>
+                    {isCut ? `Save ${formatCurrency(diff, false)}/mo` : `+${formatCurrency(diff, false)}/mo`}
+                  </span>
+                )}
+              </div>
             </div>
           )
         })}
@@ -402,7 +443,7 @@ function BudgetGoalsView({
 // --- Main Panel -------------------------------------------------------------
 
 export default function SavingsProjectionPanel({
-  income, budgets, inflationRate, months,
+  income, budgets, summaryByMonth, months, inflationRate,
   categoryLookup, spendingCap, scenarioCategoryIds,
   onUpdateScenarioCategories, onEditBudgets,
   savedProjection, onSaveProjection,
@@ -424,8 +465,8 @@ export default function SavingsProjectionPanel({
 
   const projection = useMemo(() => {
     if (!income || income <= 0 || budgets.length === 0) return null
-    return computeProjection(income, budgets, inflationRate, categoryLookup)
-  }, [income, budgets, inflationRate, categoryLookup])
+    return computeProjection(income, budgets, summaryByMonth, months, inflationRate, categoryLookup)
+  }, [income, budgets, summaryByMonth, months, inflationRate, categoryLookup])
 
   const isCustomList = !!scenarioCategoryIds && scenarioCategoryIds.length > 0
 

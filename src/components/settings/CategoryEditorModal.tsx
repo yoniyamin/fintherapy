@@ -466,6 +466,35 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                       </div>
                     </div>
 
+                    {/* Expense Type */}
+                    <div>
+                      <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-surface-500">
+                        Expense Type
+                      </label>
+                      <div className="flex gap-1.5">
+                        {([
+                          { value: 'discretionary' as const, label: 'Discretionary' },
+                          { value: 'fixed' as const, label: 'Fixed Cost' },
+                        ]).map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setEditing({ ...editing, expenseType: opt.value })}
+                            className={`flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
+                              editing.expenseType === opt.value
+                                ? 'border-duo-green/60 bg-duo-green/15 text-duo-green'
+                                : 'border-white/[0.08] bg-surface-900/80 text-surface-400 hover:bg-surface-800'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-[10px] text-surface-500">
+                        Fixed costs (like rent or school fees) are separated from discretionary spending (like dining or clothes) in budget analysis.
+                      </p>
+                    </div>
+
                     {/* Spending Frequency */}
                     <div>
                       <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-surface-500">

@@ -81,7 +81,7 @@ function ReportConfigModalInner({ onClose, config, inflationRate, monthCount, on
             </button>
           </div>
 
-          <div className="overflow-y-auto px-5 py-4" style={{ maxHeight: 'calc(85vh - 60px)' }}>
+          <div className="overflow-y-auto px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom,1rem))]" style={{ maxHeight: 'calc(85vh - 60px)' }}>
             {/* Section toggles */}
             <p className="text-[10px] font-bold uppercase tracking-wider text-surface-500 mb-2">Sections</p>
             <div className="space-y-1 mb-5">

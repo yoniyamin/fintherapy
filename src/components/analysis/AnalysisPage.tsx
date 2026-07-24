@@ -351,8 +351,9 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
         <SavingsProjectionPanel
           income={data.householdIncome}
           budgets={budgets}
+          summaryByMonth={data.summaryByMonth}
+          months={months}
           inflationRate={inflationRate}
-          months={months.length}
           categoryLookup={categoryLookup}
           spendingCap={budgetSettings?.monthly_spending_target}
           scenarioCategoryIds={budgetSettings?.scenario_category_ids}

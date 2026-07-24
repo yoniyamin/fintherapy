@@ -512,7 +512,7 @@ export default function BudgetEditorModal({
       >
         <div className="relative flex flex-1 flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-3 md:px-8">
+          <div className="flex items-center justify-between border-b border-white/[0.06] px-5 pb-3 md:px-8 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
             <h2 className="text-sm font-bold text-surface-100">Budget Targets</h2>
             <div className="flex items-center gap-3">
               {changeLog && (
@@ -711,7 +711,7 @@ export default function BudgetEditorModal({
           </div>
 
           {/* Footer */}
-          <div className="border-t border-white/[0.06] px-5 py-3 md:px-8">
+          <div className="border-t border-white/[0.06] px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0.75rem))] md:px-8">
             <div className="mx-auto max-w-4xl">
               {saveError && (
                 <p className="mb-2 text-[10px] text-red-400">{saveError}</p>

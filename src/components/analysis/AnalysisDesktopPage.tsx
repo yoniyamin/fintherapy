@@ -504,8 +504,9 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
                 <SavingsProjectionPanel
                   income={data.householdIncome}
                   budgets={budgets}
+                  summaryByMonth={data.summaryByMonth}
+                  months={months}
                   inflationRate={inflationRate}
-                  months={months.length}
                   categoryLookup={categoryLookup}
                   spendingCap={budgetSettings?.monthly_spending_target}
                   scenarioCategoryIds={budgetSettings?.scenario_category_ids}
