@@ -503,7 +503,7 @@ export default function SavingsProjectionPanel({
       && savedProjection.categoryIds.every((id, i) => id === currentIds[i])
   }, [savedProjection, cutPct, allScenarioCategories])
 
-  if (!projection || months < 3) return null
+  if (!projection || months.length < 3) return null
 
   const surplusColor = projection.inflationAdjustedSurplus >= 0 ? 'text-emerald-400' : 'text-red-400'
   const rateColor = projection.savingsRate >= 20 ? 'text-emerald-400'
