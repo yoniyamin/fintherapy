@@ -13,9 +13,26 @@ export interface Database {
         Update: Partial<Omit<Profile, 'id'>>
         Relationships: []
       }
+      session_statistics: {
+        Row: SessionStatistics
+        Insert: Omit<SessionStatistics, 'created_at' | 'updated_at' | 'duration_seconds'> & {
+          duration_seconds?: number
+        }
+        Update: Partial<Omit<SessionStatistics, 'id'>>
+        Relationships: []
+      }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      upsert_session_statistics: {
+        Args: {
+          p_id: string
+          p_auth_action: string
+          p_section_seconds: Record<string, number>
+        }
+        Returns: undefined
+      }
+    }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
   }
@@ -28,6 +45,15 @@ export interface Household {
   invite_code: string
   monthly_income: number | null
   created_at: string
+}
+
+export interface SessionStatistics {
+  id: string
+  created_at: string
+  updated_at: string
+  auth_action: 'sign_in' | 'sign_up' | 'password_recovery'
+  section_seconds: Record<string, number>
+  duration_seconds: number
 }
 
 export interface AnalysisReportConfig {

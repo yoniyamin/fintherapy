@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
+import { sessionStats } from '../lib/sessionStats'
+import { flushSessionStats } from '../lib/sessionStatsFlush'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../types/database'
 import { friendlyAuthError } from './authErrors'
@@ -294,6 +296,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const session = data.session
       if (session && user) {
+        sessionStats.stop()
+        await flushSessionStats()
+        sessionStats.beginNewSession('sign_up')
         const profile = await fetchProfile()
         setState((prev) => ({
           ...prev,
@@ -330,6 +335,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         hadSessionRef.current = true
+        sessionStats.stop()
+        await flushSessionStats()
+        sessionStats.beginNewSession('sign_in')
         setState((prev) => ({ ...prev, user, session, loading: true, bootStage: 'profile' }))
 
         const profile = await fetchProfile()
@@ -352,6 +360,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     manualSignOutRef.current = true
     try {
+      sessionStats.stop()
+      await flushSessionStats()
+      sessionStats.clear()
       const { error } = await supabase.auth.signOut()
       if (error) throw error
     } finally {

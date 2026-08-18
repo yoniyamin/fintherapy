@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import { sessionStats } from '../../lib/sessionStats'
+import { supabase } from '../../lib/supabase'
 import PasswordInput from '../common/PasswordInput'
 import ScreenSurface from '../layout/ScreenSurface'
 import { ui } from '../../lib/uiClasses'
@@ -74,6 +75,7 @@ export default function ResetPasswordPage() {
     try {
       const { error: updateErr } = await supabase.auth.updateUser({ password })
       if (updateErr) throw updateErr
+      sessionStats.queueAuthAction('password_recovery')
       await supabase.auth.signOut()
       navigate('/login?password_reset=success', { replace: true })
     } catch (err: unknown) {

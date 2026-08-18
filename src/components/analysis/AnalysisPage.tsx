@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { type UpsertBudgetParams } from '../../hooks/useCategoryBudgets'
+import { useTrackVisibleAnalysisSection } from '../../hooks/useSessionStats'
 import MonthRangePicker from '../common/MonthRangePicker'
 import AdvisorNotes from './AdvisorNotes'
 import BudgetEditorModal from './BudgetEditorModal'
@@ -276,6 +277,7 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
   onSaveProjection: (proj: import('../../types/database').SavedProjection) => void
 }) {
   const [showBudgetEditor, setShowBudgetEditor] = useState(false)
+  useTrackVisibleAnalysisSection(true)
   const rc = reportConfig
   const show = (key: keyof typeof rc, minMonths: number) => (rc[key] ?? true) && months.length >= minMonths
   const recurringCharges = useMemo(
@@ -324,75 +326,114 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
 
   return (
     <div className="mt-4 space-y-5">
-      {show('headline', 1) && <HeadlineBanner headline={headline} verdict={healthSummary.verdict} />}
-
-      {show('kpiCards', 1) && <KpiCards data={data} months={months} categoryLookup={categoryLookup} />}
-
-      {show('fixedDiscretionary', 1) && (
-        <FixedDiscretionarySplit
-          fixedTotal={fixedTotal}
-          discretionaryTotal={discretionaryTotal}
-          months={months.length}
-          income={data.householdIncome}
-        />
+      {(show('headline', 1) || show('kpiCards', 1) || show('fixedDiscretionary', 1)) && (
+        <div className="space-y-5" data-analysis-section="overview">
+          {show('headline', 1) && <HeadlineBanner headline={headline} verdict={healthSummary.verdict} />}
+          {show('kpiCards', 1) && <KpiCards data={data} months={months} categoryLookup={categoryLookup} />}
+          {show('fixedDiscretionary', 1) && (
+            <FixedDiscretionarySplit
+              fixedTotal={fixedTotal}
+              discretionaryTotal={discretionaryTotal}
+              months={months.length}
+              income={data.householdIncome}
+            />
+          )}
+        </div>
       )}
 
-      {show('categoryTrend', 2) && <CategoryTrendChart data={data} months={months} categoryLookup={categoryLookup} />}
+      {show('categoryTrend', 2) && (
+        <div data-analysis-section="trends">
+          <CategoryTrendChart data={data} months={months} categoryLookup={categoryLookup} />
+        </div>
+      )}
 
-      {show('deltaDrivers', 2) && <DeltaDrivers drivers={deltaDrivers} />}
+      {(show('deltaDrivers', 2) || show('memberSpending', 1)) && (
+        <div className="space-y-5" data-analysis-section="breakdown">
+          {show('deltaDrivers', 2) && <DeltaDrivers drivers={deltaDrivers} />}
+          {show('memberSpending', 1) && <MemberSpendingPanel spendingByAccount={data.spendingByAccount} months={months.length} />}
+        </div>
+      )}
 
-      {show('memberSpending', 1) && <MemberSpendingPanel spendingByAccount={data.spendingByAccount} months={months.length} />}
+      {show('topVendors', 3) && (
+        <div data-analysis-section="details">
+          <TopVendorsPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />
+        </div>
+      )}
 
-      {show('topVendors', 3) && <TopVendorsPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />}
-
-      {show('cardCategorySplit', 3) && <CardCategorySplitPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />}
+      {show('cardCategorySplit', 3) && (
+        <div data-analysis-section="details">
+          <CardCategorySplitPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />
+        </div>
+      )}
 
       {show('savingsProjection', 3) && (
-        <SavingsProjectionPanel
-          income={data.householdIncome}
-          budgets={budgets}
-          summaryByMonth={data.summaryByMonth}
-          months={months}
-          inflationRate={inflationRate}
-          categoryLookup={categoryLookup}
-          spendingCap={budgetSettings?.monthly_spending_target}
-          scenarioCategoryIds={budgetSettings?.scenario_category_ids}
-          onUpdateScenarioCategories={onUpdateScenarioCategories}
-          onEditBudgets={() => setShowBudgetEditor(true)}
-          savedProjection={savedProjection}
-          onSaveProjection={onSaveProjection}
-        />
+        <div data-analysis-section="projections">
+          <SavingsProjectionPanel
+            income={data.householdIncome}
+            budgets={budgets}
+            summaryByMonth={data.summaryByMonth}
+            months={months}
+            inflationRate={inflationRate}
+            categoryLookup={categoryLookup}
+            spendingCap={budgetSettings?.monthly_spending_target}
+            scenarioCategoryIds={budgetSettings?.scenario_category_ids}
+            onUpdateScenarioCategories={onUpdateScenarioCategories}
+            onEditBudgets={() => setShowBudgetEditor(true)}
+            savedProjection={savedProjection}
+            onSaveProjection={onSaveProjection}
+          />
+        </div>
       )}
 
       {show('budgetVsActual', 3) && (
-        <BudgetVsActualPanel
-          budgets={budgets}
-          summaryByMonth={data.summaryByMonth}
-          months={months}
-          income={data.householdIncome}
-          categoryLookup={categoryLookup}
-          onEditBudgets={() => setShowBudgetEditor(true)}
-        />
+        <div data-analysis-section="projections">
+          <BudgetVsActualPanel
+            budgets={budgets}
+            summaryByMonth={data.summaryByMonth}
+            months={months}
+            income={data.householdIncome}
+            categoryLookup={categoryLookup}
+            onEditBudgets={() => setShowBudgetEditor(true)}
+          />
+        </div>
       )}
 
-      {show('recurring', 1) && <RecurringPanel charges={recurringCharges} months={months.length} />}
+      {show('recurring', 1) && (
+        <div data-analysis-section="recurring">
+          <RecurringPanel charges={recurringCharges} months={months.length} />
+        </div>
+      )}
 
       {show('comparisonTable', 2) && (
-        <ComparisonTable
-          data={data}
-          months={months}
-          categoryLookup={categoryLookup}
-          accountAliases={accountAliases}
-          categories={categories}
-          onDataChange={onDataChange}
-        />
+        <div data-analysis-section="breakdown">
+          <ComparisonTable
+            data={data}
+            months={months}
+            categoryLookup={categoryLookup}
+            accountAliases={accountAliases}
+            categories={categories}
+            onDataChange={onDataChange}
+          />
+        </div>
       )}
 
-      {show('calendarHeatmap', 2) && <CalendarHeatmap dailyTotals={data.dailyTotals} months={months} />}
+      {show('calendarHeatmap', 2) && (
+        <div data-analysis-section="calendar">
+          <CalendarHeatmap dailyTotals={data.dailyTotals} months={months} />
+        </div>
+      )}
 
-      {show('advisorNotes', 1) && <AdvisorNotes data={data} months={months} categoryLookup={categoryLookup} />}
+      {show('advisorNotes', 1) && (
+        <div data-analysis-section="advisor">
+          <AdvisorNotes data={data} months={months} categoryLookup={categoryLookup} />
+        </div>
+      )}
 
-      {show('velocityGauge', 1) && <VelocityGauge velocity={velocity} />}
+      {show('velocityGauge', 1) && (
+        <div data-analysis-section="projections">
+          <VelocityGauge velocity={velocity} />
+        </div>
+      )}
 
       <BudgetEditorModal
         open={showBudgetEditor}

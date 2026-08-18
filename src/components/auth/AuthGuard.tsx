@@ -2,6 +2,7 @@ import { Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import type { BootStage } from '../../hooks/useAuth'
+import { useSessionStatsCollector } from '../../hooks/useSessionStats'
 
 const STAGE_PROGRESS: Record<NonNullable<BootStage>, { pct: number; label: string }> = {
   init:    { pct: 10,  label: 'Starting up…' },
@@ -43,5 +44,10 @@ export default function AuthGuard({ children, requireHousehold = true }: AuthGua
     return <Navigate to="/household" replace />
   }
 
+  return <SessionStatsCollector>{children}</SessionStatsCollector>
+}
+
+function SessionStatsCollector({ children }: { children: React.ReactNode }) {
+  useSessionStatsCollector()
   return <>{children}</>
 }

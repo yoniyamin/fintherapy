@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { type UpsertBudgetParams } from '../../hooks/useCategoryBudgets'
 import type { MultiMonthData } from '../../hooks/useMultiMonthReveal'
+import { useTrackAnalysisSection } from '../../hooks/useSessionStats'
 import { generateHeadline, getDeltaDrivers, getHealthSummary, getSpendingVelocity, type InsightInput } from '../../lib/advisorInsights'
+import { ANALYSIS_SECTIONS, getVisibleAnalysisSections } from '../../lib/analysisSections'
 import { OWN_TRANSFERS_CATEGORY_ID, type CategoryDef } from '../../lib/constants'
 import { detectRecurring } from '../../lib/recurringDetector'
 import { ui } from '../../lib/uiClasses'
@@ -30,39 +32,6 @@ import AnalysisIcon from './AnalysisIcons'
 import { SECTION_ICON_NAMES } from './analysisIconPaths'
 import { useAnalysisData } from './useAnalysisData'
 import VelocityGauge from './VelocityGauge'
-
-interface SectionDef {
-  id: string
-  label: string
-}
-
-const REPORT_SECTIONS: SectionDef[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'trends', label: 'Trends' },
-  { id: 'breakdown', label: 'Breakdown' },
-  { id: 'calendar', label: 'Calendar' },
-  { id: 'details', label: 'Details' },
-  { id: 'recurring', label: 'Recurring & Budget' },
-  { id: 'projections', label: 'Projections' },
-  { id: 'advisor', label: 'Advisor' },
-]
-
-function showSection(rc: import('../../types/database').AnalysisReportConfig, key: keyof typeof rc, minMonths: number, monthCount: number) {
-  return (rc[key] ?? true) && monthCount >= minMonths
-}
-
-function getVisibleSections(rc: import('../../types/database').AnalysisReportConfig, monthCount: number) {
-  const visible = new Set<string>()
-  if (showSection(rc, 'headline', 1, monthCount) || showSection(rc, 'kpiCards', 1, monthCount) || showSection(rc, 'fixedDiscretionary', 1, monthCount)) visible.add('overview')
-  if (showSection(rc, 'categoryTrend', 2, monthCount)) visible.add('trends')
-  if (showSection(rc, 'deltaDrivers', 2, monthCount) || showSection(rc, 'memberSpending', 1, monthCount) || showSection(rc, 'comparisonTable', 2, monthCount)) visible.add('breakdown')
-  if (showSection(rc, 'calendarHeatmap', 2, monthCount)) visible.add('calendar')
-  if (showSection(rc, 'topVendors', 3, monthCount) || showSection(rc, 'cardCategorySplit', 3, monthCount)) visible.add('details')
-  if (showSection(rc, 'recurring', 1, monthCount) || showSection(rc, 'budgetVsActual', 3, monthCount)) visible.add('recurring')
-  if (showSection(rc, 'savingsProjection', 3, monthCount) || showSection(rc, 'velocityGauge', 1, monthCount)) visible.add('projections')
-  if (showSection(rc, 'advisorNotes', 1, monthCount)) visible.add('advisor')
-  return visible
-}
 
 export default function AnalysisDesktopPage() {
   const {
@@ -98,11 +67,12 @@ export default function AnalysisDesktopPage() {
 
   const rc = useMemo(() => prefs.analysisReportConfig ?? {}, [prefs.analysisReportConfig])
   const visibleSections = useMemo(
-    () => getVisibleSections(rc, selection.months.length),
+    () => getVisibleAnalysisSections(rc, selection.months.length),
     [selection.months.length, rc],
   )
 
   const hasReport = !!data && !noData
+  useTrackAnalysisSection(hasReport ? activeSection : null)
 
   return (
     <div data-testid="analysis-desktop-page">
@@ -185,7 +155,7 @@ export default function AnalysisDesktopPage() {
 
           {hasReport && (
             <div className="flex items-center gap-1 overflow-x-auto border-t border-white/[0.04] py-1.5 scrollbar-hide">
-            {REPORT_SECTIONS.filter(s => visibleSections.has(s.id)).map((section) => (
+            {ANALYSIS_SECTIONS.filter(s => visibleSections.has(s.id)).map((section) => (
               <button
                 key={section.id}
                 type="button"
@@ -362,7 +332,7 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
     const handleScroll = () => {
       if (isScrollingToRef.current) return
       const stickyOffset = 140
-      const sections = REPORT_SECTIONS.filter(s => visibleSections.has(s.id))
+      const sections = ANALYSIS_SECTIONS.filter(s => visibleSections.has(s.id))
       let current = sections[0]?.id ?? 'overview'
       for (const section of sections) {
         const el = sectionRefs.current[section.id]
