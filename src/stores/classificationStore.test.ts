@@ -254,4 +254,49 @@ describe('classificationStore', () => {
       expect(state.sessionHistory).toEqual([])
     })
   })
+
+  describe('refreshDeck', () => {
+    it('skips rebuild when transaction IDs are unchanged', () => {
+      // Arrange
+      const tx1 = makeTx({ id: 'aaa', merchant_raw: 'Starbucks' })
+      const tx2 = makeTx({ id: 'bbb', merchant_raw: 'Amazon' })
+      useClassificationStore.getState().load([tx1, tx2])
+      const groupsBefore = useClassificationStore.getState().groups
+
+      // Act
+      useClassificationStore.getState().refreshDeck([tx1, tx2])
+
+      // Assert
+      expect(useClassificationStore.getState().groups).toBe(groupsBefore)
+    })
+
+    it('rebuilds groups when IDs change (e.g. after classify)', () => {
+      // Arrange
+      const tx1 = makeTx({ id: 'aaa', merchant_raw: 'Starbucks' })
+      const tx2 = makeTx({ id: 'bbb', merchant_raw: 'Amazon' })
+      useClassificationStore.getState().load([tx1, tx2])
+
+      // Act
+      useClassificationStore.getState().refreshDeck([tx2])
+
+      // Assert
+      const { groups, currentIndex } = useClassificationStore.getState()
+      expect(groups.length).toBe(1)
+      expect(groups[0]!.merchantRaw).toBe('Amazon')
+      expect(currentIndex).toBe(0)
+    })
+
+    it('resets to empty when called with no transactions', () => {
+      // Arrange
+      useClassificationStore.getState().load([makeTx()])
+
+      // Act
+      useClassificationStore.getState().refreshDeck([])
+
+      // Assert
+      const { groups, activeGroup } = useClassificationStore.getState()
+      expect(groups.length).toBe(0)
+      expect(activeGroup).toBeNull()
+    })
+  })
 })

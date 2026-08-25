@@ -31,12 +31,12 @@ export function useMerchantKnowledge(householdId: string | null | undefined) {
   }, [householdId])
 
   const confirmAutoClassifiedBatch = useCallback(async (txIds: string[]) => {
-    if (!householdId) return { error: new Error('No household') }
-    const { error } = await supabase.rpc('confirm_auto_classified_batch', {
+    if (!householdId) return { error: new Error('No household'), updatedCount: 0 }
+    const { data, error } = await supabase.rpc('confirm_auto_classified_batch', {
       p_household_id: householdId,
       p_tx_ids: txIds,
     })
-    return { error }
+    return { error, updatedCount: (data as number) ?? 0 }
   }, [householdId])
 
   const rejectAutoClassified = useCallback(async (txId: string) => {

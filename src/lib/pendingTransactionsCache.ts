@@ -11,6 +11,11 @@ export interface PendingTransactionsPayload {
  * share one pair of RPC calls instead of each firing duplicate requests.
  */
 const inflightByHousehold = new Map<string, Promise<PendingTransactionsPayload>>()
+const generationByHousehold = new Map<string, number>()
+
+function getGeneration(householdId: string): number {
+  return generationByHousehold.get(householdId) ?? 0
+}
 
 async function loadPendingFromServer(householdId: string): Promise<PendingTransactionsPayload> {
   const [pendingRes, autoRes] = await Promise.all([
@@ -29,7 +34,13 @@ async function loadPendingFromServer(householdId: string): Promise<PendingTransa
 export function fetchPendingTransactionsShared(householdId: string): Promise<PendingTransactionsPayload> {
   let p = inflightByHousehold.get(householdId)
   if (!p) {
-    p = loadPendingFromServer(householdId).finally(() => {
+    const startGen = getGeneration(householdId)
+    p = loadPendingFromServer(householdId).then((result) => {
+      if (getGeneration(householdId) !== startGen) {
+        return loadPendingFromServer(householdId)
+      }
+      return result
+    }).finally(() => {
       if (inflightByHousehold.get(householdId) === p) {
         inflightByHousehold.delete(householdId)
       }
@@ -41,5 +52,6 @@ export function fetchPendingTransactionsShared(householdId: string): Promise<Pen
 
 /** Clears any in-flight promise so the next fetch starts a fresh network round-trip (e.g. after CSV upload). */
 export function invalidatePendingTransactionsInflight(householdId: string): void {
+  generationByHousehold.set(householdId, getGeneration(householdId) + 1)
   inflightByHousehold.delete(householdId)
 }

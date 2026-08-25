@@ -31,7 +31,6 @@ CREATE OR REPLACE FUNCTION public.upsert_session_statistics(
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = ''
 AS $$
 DECLARE
   v_key text;
@@ -59,15 +58,15 @@ BEGIN
     RAISE EXCEPTION 'invalid auth_action';
   END IF;
 
-  IF p_section_seconds IS NULL OR pg_catalog.jsonb_typeof(p_section_seconds) <> 'object' THEN
+  IF p_section_seconds IS NULL OR jsonb_typeof(p_section_seconds) <> 'object' THEN
     RAISE EXCEPTION 'invalid section_seconds';
   END IF;
 
-  IF (SELECT count(*) FROM pg_catalog.jsonb_object_keys(p_section_seconds)) > 24 THEN
+  IF (SELECT count(*) FROM jsonb_object_keys(p_section_seconds)) > 24 THEN
     RAISE EXCEPTION 'too many keys';
   END IF;
 
-  FOR v_key, v_raw IN SELECT key, value FROM pg_catalog.jsonb_each_text(p_section_seconds)
+  FOR v_key, v_raw IN SELECT key, value FROM jsonb_each_text(p_section_seconds)
   LOOP
     IF NOT v_key = ANY (v_all_keys) THEN
       RAISE EXCEPTION 'invalid section key';
@@ -75,9 +74,9 @@ BEGIN
     IF v_raw !~ '^[0-9]{1,9}$' THEN
       RAISE EXCEPTION 'invalid section seconds';
     END IF;
-    v_seconds := pg_catalog.GREATEST(0, pg_catalog.LEAST(v_raw::int, 604800));
+    v_seconds := GREATEST(0, LEAST(v_raw::int, 604800));
     IF v_seconds > 0 THEN
-      v_clean := v_clean || pg_catalog.jsonb_build_object(v_key, v_seconds);
+      v_clean := v_clean || jsonb_build_object(v_key, v_seconds);
     END IF;
     IF v_key = ANY (v_route_keys) THEN
       v_duration := v_duration + v_seconds;
@@ -89,9 +88,6 @@ BEGIN
   ON CONFLICT (id) DO UPDATE
     SET section_seconds = EXCLUDED.section_seconds,
         duration_seconds = EXCLUDED.duration_seconds,
-        updated_at = pg_catalog.now();
+        updated_at = now();
 END;
 $$;
-
-REVOKE ALL ON FUNCTION public.upsert_session_statistics(uuid, text, jsonb) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.upsert_session_statistics(uuid, text, jsonb) TO authenticated;

@@ -345,12 +345,13 @@ export default function SwipeDeck() {
   const {
     transactions: fetched, autoClassified, loading,
     removeTransactions, addPendingTransactions, refetchFresh,
+    detectRefundsAndRefresh,
     classifyTransactionsBatch,
     flagTransactionsBatch,
     markTransferBatch,
     reclassifyTransactionsBatch,
     revertToPendingBatch,
-    detectRefunds, awardXp, getLeaderboard, getMonthStats, getAccountAliases, upsertAccountAlias,
+    awardXp, getLeaderboard, getMonthStats, getAccountAliases, upsertAccountAlias,
     setTransactionsUserNote,
     getDistinctAccountLast4ForHousehold,
     getClassifiedCountsForAccount,
@@ -1002,6 +1003,25 @@ export default function SwipeDeck() {
 
       if (allDeckTxns.length === 0) {
         if (gen !== deckSyncGenerationRef.current) return
+        if (deckMode === 'pending' && useClassificationStore.getState().sessionHistory.length > 0) {
+          try {
+            const { pending, autoClassified: autoRefreshed } = await detectRefundsAndRefresh()
+            if (gen !== deckSyncGenerationRef.current) return
+            const merged = [...pending, ...autoRefreshed]
+            if (merged.length > 0) {
+              const deckAfter = filterTransactionsByBillingMonth(
+                filterTransactionsByAccount(merged, accountFilter),
+                effectiveMonthFilter,
+              )
+              const { refreshDeck: refreshAfter } = useClassificationStore.getState()
+              refreshAfter(deckAfter)
+            } else {
+              useClassificationStore.getState().refreshDeck([])
+            }
+          } catch {
+            useClassificationStore.getState().refreshDeck([])
+          }
+        }
         return
       }
 
@@ -1020,33 +1040,20 @@ export default function SwipeDeck() {
       }
 
       try {
-        const offsetCount = await detectRefunds()
+        const { offsetCount, pending, autoClassified: autoRefreshed } = await detectRefundsAndRefresh()
         if (gen !== deckSyncGenerationRef.current) return
         setRefundsOffset(offsetCount)
-        if (offsetCount > 0) {
-          const [pendingRes, autoRes] = await Promise.all([
-            supabase.rpc('get_pending_transactions', { p_household_id: hid }),
-            supabase.rpc('get_auto_classified_transactions', { p_household_id: hid }),
-          ])
-          if (gen !== deckSyncGenerationRef.current) return
-          const refreshedPending =
-            !pendingRes.error && pendingRes.data ? (pendingRes.data as typeof fetched) : []
-          const refreshedAuto =
-            !autoRes.error && autoRes.data ? (autoRes.data as typeof fetched) : []
-          const merged = [...refreshedPending, ...refreshedAuto]
-          if (merged.length > 0) {
-            finalTxns = merged
-            const deckAfter = filterTransactionsByBillingMonth(
-              filterTransactionsByAccount(finalTxns, accountFilter),
-              effectiveMonthFilter,
-            )
-            const { load: loadAfter, refreshDeck: refreshAfter } = useClassificationStore.getState()
-            if (contextChanged) {
-              loadAfter(deckAfter)
-            } else {
-              refreshAfter(deckAfter)
-            }
-          }
+        const merged = [...pending, ...autoRefreshed]
+        finalTxns = merged
+        const deckAfter = filterTransactionsByBillingMonth(
+          filterTransactionsByAccount(finalTxns, accountFilter),
+          effectiveMonthFilter,
+        )
+        const { load: loadAfter, refreshDeck: refreshAfter } = useClassificationStore.getState()
+        if (contextChanged) {
+          loadAfter(deckAfter)
+        } else {
+          refreshAfter(deckAfter)
         }
       } catch {
         // Refund detection failed; data is already loaded above
@@ -1074,7 +1081,7 @@ export default function SwipeDeck() {
     effectiveMonthFilter,
     loading,
     profile?.household_id,
-    detectRefunds,
+    detectRefundsAndRefresh,
     loadMonthStats,
     deckMode,
   ])
@@ -1120,23 +1127,29 @@ export default function SwipeDeck() {
     [store],
   )
 
-  /** Runs an async RPC per tx; on first failure re-injects the group and surfaces an error. */
+  /** Runs a batch RPC; on error or partial update, refetches and re-injects still-pending txns. */
   const runBatchRpc = useCallback(
     async (
       group: MerchantGroup,
-      batchRpc: (txIds: string[]) => Promise<{ error: unknown }>,
+      batchRpc: (txIds: string[]) => Promise<{ error: unknown; updatedCount: number }>,
     ): Promise<boolean> => {
       const ids = group.transactions.map((t) => t.id)
-      const { error } = await batchRpc(ids)
-      if (error) {
-        addPendingTransactions(group.transactions.map((t) => ({ ...t })))
+      const { error, updatedCount } = await batchRpc(ids)
+      if (error || updatedCount !== ids.length) {
+        const payload = await refetchFresh({ silent: true })
+        const stillPendingIds = new Set([
+          ...payload.pending.map((t) => t.id),
+          ...payload.autoClassified.map((t) => t.id),
+        ])
+        const toReInject = group.transactions.filter((t) => stillPendingIds.has(t.id))
+        if (toReInject.length > 0) addPendingTransactions(toReInject)
         setActionError('Could not save — try again. Your stack was put back.')
         setTimeout(() => setActionError(null), 5000)
         return false
       }
       return true
     },
-    [addPendingTransactions],
+    [addPendingTransactions, refetchFresh],
   )
 
   const handleSwipeRight = async () => {
@@ -1280,7 +1293,13 @@ export default function SwipeDeck() {
   const handleRevertAction = useCallback(
     async (action: SessionAction, origin: 'session' | 'history') => {
       const ids = action.txSnapshots.map((t) => t.id)
-      await revertToPendingBatch(ids)
+      const { error, updatedCount } = await revertToPendingBatch(ids)
+      if (error || updatedCount !== ids.length) {
+        await refetchFresh({ silent: true })
+        setActionError('Could not revert — some transactions may have changed.')
+        setTimeout(() => setActionError(null), 5000)
+        return
+      }
       const reverted: Transaction[] = action.txSnapshots.map((t) => ({
         ...t,
         status: 'pending',
@@ -1301,14 +1320,20 @@ export default function SwipeDeck() {
       }
       invalidateFlaggedCount()
     },
-    [revertToPendingBatch, addPendingTransactions, awardXp, store, loadHistoryRecentActions],
+    [revertToPendingBatch, addPendingTransactions, awardXp, store, loadHistoryRecentActions, refetchFresh],
   )
 
   /** Convert any prior action into a "marked as transfer". Used from the Recent panel. */
   const handleConvertActionToTransfer = useCallback(
     async (action: SessionAction, origin: 'session' | 'history') => {
       const ids = action.txSnapshots.map((t) => t.id)
-      await markTransferBatch(ids)
+      const { error, updatedCount } = await markTransferBatch(ids)
+      if (error || updatedCount !== ids.length) {
+        await refetchFresh({ silent: true })
+        setActionError('Could not convert — some transactions may have changed.')
+        setTimeout(() => setActionError(null), 5000)
+        return
+      }
       if (origin === 'session') {
         store.updateActionInHistory(action.id, 'transfer', OWN_TRANSFERS_CATEGORY_ID)
       } else {
@@ -1316,14 +1341,20 @@ export default function SwipeDeck() {
       }
       invalidateFlaggedCount()
     },
-    [markTransferBatch, store, loadHistoryRecentActions],
+    [markTransferBatch, store, loadHistoryRecentActions, refetchFresh],
   )
 
   /** Move a prior action into the No idea queue. */
   const handleConvertActionToFlagged = useCallback(
     async (action: SessionAction, origin: 'session' | 'history') => {
       const ids = action.txSnapshots.map((t) => t.id)
-      await flagTransactionsBatch(ids)
+      const { error, updatedCount } = await flagTransactionsBatch(ids)
+      if (error || updatedCount !== ids.length) {
+        await refetchFresh({ silent: true })
+        setActionError('Could not flag — some transactions may have changed.')
+        setTimeout(() => setActionError(null), 5000)
+        return
+      }
       if (origin === 'session') {
         store.updateActionInHistory(action.id, 'flagged', null)
       } else {
@@ -1331,7 +1362,7 @@ export default function SwipeDeck() {
       }
       invalidateFlaggedCount()
     },
-    [flagTransactionsBatch, store, loadHistoryRecentActions],
+    [flagTransactionsBatch, store, loadHistoryRecentActions, refetchFresh],
   )
 
   const openNoteModal = useCallback(() => {
@@ -1373,13 +1404,23 @@ export default function SwipeDeck() {
 
 
   useEffect(() => {
-    if (!isDone) return
+    if (!isDone) {
+      setDeckVerifyState((prev) => prev !== 'idle' ? 'idle' : prev)
+      return
+    }
     let cancelled = false
     queueMicrotask(() => setDeckVerifyState('verifying'))
-    void refetchFresh({ silent: true }).then(() => {
-      if (cancelled) return
-      setDeckVerifyState('confirmed')
-    })
+    void (async () => {
+      try {
+        const payload = await refetchFresh({ silent: true })
+        if (cancelled) return
+        const serverEmpty = payload.pending.length + payload.autoClassified.length === 0
+        setDeckVerifyState(serverEmpty ? 'confirmed' : 'idle')
+      } catch {
+        if (cancelled) return
+        setDeckVerifyState('idle')
+      }
+    })()
     return () => {
       cancelled = true
     }
@@ -1425,6 +1466,13 @@ export default function SwipeDeck() {
   }
 
   if (total === 0 && !showCardCaughtUp && !showMonthCaughtUp && !isDone) {
+    if (allDeckTxns.length > 0 && !loading) {
+      return (
+        <div className="flex h-full items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
+        </div>
+      )
+    }
     if (deckMode === 'pending' && !loading && flaggedQueueCount > 0) {
       return <Navigate to="/classify/no-idea" replace />
     }
@@ -1699,7 +1747,13 @@ export default function SwipeDeck() {
             suggestions={flaggedSuggestions}
             categoryLookup={catConfig.categoryLookup}
             onAccept={async (txId, category, merchantRaw) => {
-              await reclassifyTransactionsBatch([txId], category)
+              const { error, updatedCount } = await reclassifyTransactionsBatch([txId], category)
+              if (error || updatedCount !== 1) {
+                await refetchFresh({ silent: true })
+                setActionError('Could not reclassify — try again.')
+                setTimeout(() => setActionError(null), 5000)
+                return
+              }
               learnMerchant(merchantRaw, category)
               removeFlaggedSuggestion(txId)
               removeTransactions([txId])

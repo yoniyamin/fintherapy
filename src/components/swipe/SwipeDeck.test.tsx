@@ -21,6 +21,7 @@ const mockCategories = [
   { id: 'own_transfers', label: 'Own transfers', icon: '🔁', color: 'bg-slate-600/25 border-slate-500/35', expenseType: 'fixed' as const },
 ]
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const makeTx = (overrides: Partial<Transaction> = {}): Transaction => ({
   id: crypto.randomUUID(),
   household_id: TEST_HOUSEHOLD_ID,
@@ -45,18 +46,22 @@ const makeTx = (overrides: Partial<Transaction> = {}): Transaction => ({
   ...overrides,
 })
 
-const mockClassifyBatch = vi.fn().mockResolvedValue({ error: null })
-const mockFlagBatch = vi.fn().mockResolvedValue({ error: null })
-const mockMarkTransferBatch = vi.fn().mockResolvedValue({ error: null })
-const mockRevertBatch = vi.fn().mockResolvedValue({ error: null })
-const mockReclassifyBatch = vi.fn().mockResolvedValue({ error: null })
+const mockClassifyBatch = vi.fn().mockResolvedValue({ error: null, updatedCount: 2 })
+const mockFlagBatch = vi.fn().mockResolvedValue({ error: null, updatedCount: 1 })
+const mockMarkTransferBatch = vi.fn().mockResolvedValue({ error: null, updatedCount: 1 })
+const mockRevertBatch = vi.fn().mockResolvedValue({ error: null, updatedCount: 1 })
+const mockReclassifyBatch = vi.fn().mockResolvedValue({ error: null, updatedCount: 1 })
 const mockAwardXp = vi.fn().mockResolvedValue({ error: null })
 const mockGetMonthStats = vi.fn().mockResolvedValue({ total_count: 5, pending_count: 2, classified_count: 3, transfer_count: 0, offset_count: 0, flagged_count: 0 })
-const mockRefetchFresh = vi.fn()
+const mockRefetchFresh = vi.fn().mockResolvedValue({ pending: [], autoClassified: [] })
+const mockApplyPendingPayload = vi.fn()
+const mockDetectRefundsAndRefresh = vi.fn().mockResolvedValue({ offsetCount: 0, pending: [], autoClassified: [] })
+
+const mockTransactions: Transaction[] = []
 
 vi.mock('../../hooks/useTransactions', () => ({
   useTransactions: () => ({
-    transactions: [makeTx(), makeTx({ merchant_raw: 'GAS STATION', merchant_clean: 'Gas Station', amount: -30 })],
+    transactions: mockTransactions,
     autoClassified: [],
     loading: false,
     classifyTransactionsBatch: mockClassifyBatch,
@@ -72,6 +77,13 @@ vi.mock('../../hooks/useTransactions', () => ({
     upsertAccountAlias: vi.fn().mockResolvedValue(undefined),
     setTransactionsUserNote: vi.fn().mockResolvedValue(undefined),
     refetchFresh: mockRefetchFresh,
+    applyPendingPayload: mockApplyPendingPayload,
+    detectRefundsAndRefresh: mockDetectRefundsAndRefresh,
+    removeTransactions: vi.fn(),
+    addPendingTransactions: vi.fn(),
+    detectRefunds: vi.fn().mockResolvedValue(0),
+    getClassifiedCountsForAccount: vi.fn().mockResolvedValue([]),
+    getTransactionsClassifiedInDateRange: vi.fn().mockResolvedValue([]),
     getClassifiedTransactions: vi.fn().mockResolvedValue([]),
   }),
 }))
@@ -79,8 +91,9 @@ vi.mock('../../hooks/useTransactions', () => ({
 vi.mock('../../hooks/useMerchantKnowledge', () => ({
   useMerchantKnowledge: () => ({
     confirmAutoClassified: vi.fn().mockResolvedValue({ error: null }),
-    confirmAutoClassifiedBatch: vi.fn().mockResolvedValue({ error: null }),
+    confirmAutoClassifiedBatch: vi.fn().mockResolvedValue({ error: null, updatedCount: 1 }),
     rejectAutoClassified: vi.fn().mockResolvedValue({ error: null }),
+    learnMerchant: vi.fn(),
   }),
 }))
 

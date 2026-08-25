@@ -115,13 +115,43 @@ export function useTransactions(
     fetchPending()
   }, [fetchPending])
 
-  /** Clears shared cache and refetches — use on classify mount and before deck-cleared verification. */
-  const refetchFresh = useCallback(async (options?: { silent?: boolean }) => {
-    if (!householdId) return
+  /** Clears shared cache and refetches — use on classify mount and before deck-cleared verification.
+   *  Returns the fetched payload so callers can inspect counts without reading stale React state. */
+  const refetchFresh = useCallback(async (options?: { silent?: boolean }): Promise<{ pending: Transaction[]; autoClassified: Transaction[] }> => {
+    if (!householdId) return { pending: [], autoClassified: [] }
     invalidatePendingTransactionsInflight(householdId)
     loadedKeyRef.current = null
-    await fetchPending(options)
-  }, [householdId, fetchPending])
+    const key = `${householdId}:${deck}`
+    const blocking = loadedKeyRef.current !== key
+    if (blocking && !options?.silent) setLoading(true)
+    try {
+      if (deck === 'no-idea') {
+        const { data, error } = await supabase.rpc('get_flagged_transactions', {
+          p_household_id: householdId,
+        })
+        const txs = (!error && data ? data as Transaction[] : [])
+        setTransactions(txs)
+        setAutoClassified([])
+        loadedKeyRef.current = key
+        return { pending: txs, autoClassified: [] }
+      }
+      const payload = await fetchPendingTransactionsShared(householdId)
+      setTransactions(payload.pending)
+      setAutoClassified(payload.autoClassified)
+      loadedKeyRef.current = key
+      return payload
+    } finally {
+      if (blocking && !options?.silent) setLoading(false)
+    }
+  }, [householdId, deck])
+
+  /** Sets hook state from an already-fetched payload without triggering loading spinners.
+   *  Used by SwipeDeck after detectRefunds to keep hook and store in sync. */
+  const applyPendingPayload = useCallback((payload: { pending: Transaction[]; autoClassified: Transaction[] }) => {
+    setTransactions(payload.pending)
+    setAutoClassified(payload.autoClassified)
+    if (householdId) loadedKeyRef.current = `${householdId}:${deck}`
+  }, [householdId, deck])
 
   useEffect(() => {
     if (!householdId) return
@@ -167,13 +197,13 @@ export function useTransactions(
   }
 
   const classifyTransactionsBatch = async (txIds: string[], category: string) => {
-    if (!householdId) return { error: new Error('No household') }
-    const { error } = await supabase.rpc('classify_transactions_batch', {
+    if (!householdId) return { error: new Error('No household'), updatedCount: 0 }
+    const { data, error } = await supabase.rpc('classify_transactions_batch', {
       p_household_id: householdId,
       p_tx_ids: txIds,
       p_category: category,
     })
-    return { error }
+    return { error, updatedCount: (data as number) ?? 0 }
   }
 
   const flagTransaction = async (txId: string) => {
@@ -188,12 +218,12 @@ export function useTransactions(
   }
 
   const flagTransactionsBatch = async (txIds: string[]) => {
-    if (!householdId) return { error: new Error('No household') }
-    const { error } = await supabase.rpc('flag_transactions_batch', {
+    if (!householdId) return { error: new Error('No household'), updatedCount: 0 }
+    const { data, error } = await supabase.rpc('flag_transactions_batch', {
       p_household_id: householdId,
       p_tx_ids: txIds,
     })
-    return { error }
+    return { error, updatedCount: (data as number) ?? 0 }
   }
 
   const setTransactionsUserNote = async (txIds: string[], note: string | null) => {
@@ -222,12 +252,12 @@ export function useTransactions(
   }
 
   const markTransferBatch = async (txIds: string[]) => {
-    if (!householdId) return { error: new Error('No household') }
-    const { error } = await supabase.rpc('mark_as_transfer_batch', {
+    if (!householdId) return { error: new Error('No household'), updatedCount: 0 }
+    const { data, error } = await supabase.rpc('mark_as_transfer_batch', {
       p_household_id: householdId,
       p_tx_ids: txIds,
     })
-    return { error }
+    return { error, updatedCount: (data as number) ?? 0 }
   }
 
   const detectRefunds = useCallback(async () => {
@@ -243,6 +273,20 @@ export function useTransactions(
     }
     return (data as number) ?? 0
   }, [householdId])
+
+  /** Runs refund detection then refetches the full pending+auto queue.
+   *  Updates both hook state and returns the payload for store sync.
+   *  Only meaningful in 'pending' deck mode. */
+  const detectRefundsAndRefresh = useCallback(async (): Promise<{ offsetCount: number; pending: Transaction[]; autoClassified: Transaction[] }> => {
+    if (!householdId) return { offsetCount: 0, pending: [], autoClassified: [] }
+    const offsetCount = await detectRefunds()
+    invalidatePendingTransactionsInflight(householdId)
+    const payload = await fetchPendingTransactionsShared(householdId)
+    setTransactions(payload.pending)
+    setAutoClassified(payload.autoClassified)
+    loadedKeyRef.current = `${householdId}:${deck}`
+    return { offsetCount, ...payload }
+  }, [householdId, deck, detectRefunds])
 
   const awardXp = async (xp: number) => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -314,13 +358,13 @@ export function useTransactions(
   }
 
   const reclassifyTransactionsBatch = async (txIds: string[], newCategory: string) => {
-    if (!householdId) return { error: new Error('No household') }
-    const { error } = await supabase.rpc('reclassify_transactions_batch', {
+    if (!householdId) return { error: new Error('No household'), updatedCount: 0 }
+    const { data, error } = await supabase.rpc('reclassify_transactions_batch', {
       p_household_id: householdId,
       p_tx_ids: txIds,
       p_new_category: newCategory,
     })
-    return { error }
+    return { error, updatedCount: (data as number) ?? 0 }
   }
 
   const revertToPending = async (txId: string) => {
@@ -333,12 +377,12 @@ export function useTransactions(
   }
 
   const revertToPendingBatch = async (txIds: string[]) => {
-    if (!householdId) return { error: new Error('No household') }
-    const { error } = await supabase.rpc('revert_to_pending_batch', {
+    if (!householdId) return { error: new Error('No household'), updatedCount: 0 }
+    const { data, error } = await supabase.rpc('revert_to_pending_batch', {
       p_household_id: householdId,
       p_tx_ids: txIds,
     })
-    return { error }
+    return { error, updatedCount: (data as number) ?? 0 }
   }
 
   /** Transactions classified between inclusive calendar dates (by classified_at). Optional card filter (last 4). */
@@ -585,6 +629,8 @@ export function useTransactions(
     loading,
     fetchPending,
     refetchFresh,
+    applyPendingPayload,
+    detectRefundsAndRefresh,
     removeTransactions,
     addPendingTransactions,
     classifyTransaction,
