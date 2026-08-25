@@ -1206,7 +1206,8 @@ export default function SwipeDeck() {
       const ok = await runBatchRpc(group, async (ids) => {
         const results = await Promise.all(ids.map((id) => rejectAutoClassified(id)))
         const firstError = results.find((r) => r?.error)
-        return { error: firstError?.error ?? null }
+        const successCount = results.filter((r) => !r?.error).length
+        return { error: firstError?.error ?? null, updatedCount: successCount }
       })
       if (!ok) return
       removeTransactions(group.transactions.map((t) => t.id))
