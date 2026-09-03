@@ -7,7 +7,6 @@ import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import { OWN_TRANSFERS_CATEGORY_ID } from '../../lib/constants'
 import { formatAccountLabel } from '../../lib/accountDisplay'
 import { downloadTransactionsCsv } from '../../lib/exportTransactionsCsv'
-import { generateSlideDeck, downloadBlob } from '../../lib/generateSlideDeck'
 import { supabase } from '../../lib/supabase'
 import type { AccountType, Transaction } from '../../types/database'
 import type { CategorySummary } from '../../hooks/useReveal'
@@ -401,6 +400,7 @@ export function useRevealData() {
       const catLookup: Record<string, { icon: string; label: string }> = Object.fromEntries(
         catConfig.categories.map((c) => [c.id, { icon: c.icon, label: c.label }]),
       )
+      const { generateSlideDeck, downloadBlob } = await import('../../lib/generateSlideDeck')
       const blob = await generateSlideDeck({
         month,
         summary,

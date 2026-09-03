@@ -62,6 +62,9 @@ export default defineConfig(({ mode }) => {
       .filter(Boolean) ?? []
 
   return {
+  build: {
+    chunkSizeWarningLimit: 1000,
+  },
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
   },
