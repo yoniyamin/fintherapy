@@ -29,11 +29,11 @@ export default function FixedDiscretionarySplit({ fixedTotal, discretionaryTotal
 
       <div className="flex h-4 w-full overflow-hidden rounded-full bg-slate-700/50">
         <div
-          className="bg-purple-500/80 transition-all duration-500"
+          className="bg-purple-500/80 transition-[width] duration-500"
           style={{ width: `${fixedPct}%` }}
         />
         <div
-          className="bg-cyan-500/80 transition-all duration-500"
+          className="bg-cyan-500/80 transition-[width] duration-500"
           style={{ width: `${100 - fixedPct}%` }}
         />
       </div>

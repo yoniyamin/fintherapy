@@ -48,15 +48,15 @@ export default function DeckClearedScreen({
       {showConfetti && <Confetti active count={60} />}
       <motion.div
         className={`mx-auto flex w-full max-w-sm min-h-0 flex-col items-center justify-center gap-2 overflow-hidden px-4 text-center ${VIEWPORT_HEIGHT[viewport]}`}
-        initial={{ scale: 0.8, opacity: 0 }}
+        initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: 'spring', damping: 15 }}
+        transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
       >
         <motion.div
           className="shrink-0"
-          initial={{ scale: 0.88, y: 12 }}
-          animate={{ scale: 1, y: 0 }}
-          transition={{ type: 'spring', damping: 16, stiffness: 320, delay: 0.1 }}
+          initial={{ scale: 0.93, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1], delay: 0.1 }}
         >
           <DeckClearedAnimation
             key={animationKey}
@@ -106,9 +106,9 @@ export default function DeckClearedScreen({
               <span className="text-sm text-surface-400">XP Earned</span>
               <motion.span
                 className="text-lg font-extrabold tabular-nums text-gem"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', delay: 0.4 }}
+                initial={{ scale: 0.93, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1], delay: 0.4 }}
               >
                 +{totalXp}
               </motion.span>
@@ -119,7 +119,7 @@ export default function DeckClearedScreen({
         <div className="flex w-full shrink-0 flex-col gap-2">
           <Link
             to="/reveal"
-            className="rounded-xl border-b-[3px] border-gem-dark bg-gem px-5 py-2 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(28,176,246,0.45)] active:translate-y-[1px] active:border-b"
+            className="rounded-xl border-b-[3px] border-gem-dark bg-gem px-5 py-2 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(28,176,246,0.45)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97]"
           >
             Reveal your spending
           </Link>

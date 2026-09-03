@@ -229,7 +229,7 @@ export default function MonthRangePicker({ value, onChange, monthsWithData, allo
                       type="button"
                       disabled={disabled}
                       onClick={() => handleMonthClick(month)}
-                      className={`rounded-xl py-2.5 text-xs font-semibold transition-all ${
+                      className={`rounded-xl py-2.5 text-xs font-semibold transition-[background-color,border-color,color] duration-150 ${
                         selected
                           ? 'bg-duo-green/20 text-duo-green border border-duo-green/40 shadow-[0_0_8px_rgba(88,204,2,0.2)]'
                           : disabled
@@ -259,7 +259,7 @@ export default function MonthRangePicker({ value, onChange, monthsWithData, allo
                     type="button"
                     onClick={handleApply}
                     disabled={draft.size === 0}
-                    className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] transition-all active:translate-y-[1px] active:border-b disabled:opacity-40"
+                    className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100"
                   >
                     Apply ({draft.size} month{draft.size !== 1 ? 's' : ''})
                   </button>

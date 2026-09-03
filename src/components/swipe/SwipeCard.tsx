@@ -250,7 +250,7 @@ export default function SwipeCard({
       dragMomentum={false}
       onDragEnd={isTopCard ? handleDragEnd : undefined}
       animate={isTopCard ? controls : { scale, opacity: 1, y: yOffset }}
-      initial={{ scale: 0.95, opacity: 0, y: yOffset + 30 }}
+      initial={{ scale: 0.95, opacity: 0, y: yOffset }}
       exit={{ opacity: 0, transition: { duration: 0.18 } }}
     >
       <div
@@ -303,7 +303,7 @@ export default function SwipeCard({
               e.stopPropagation()
               onOpenNote()
             }}
-            className="absolute bottom-4 left-4 flex h-10 w-10 items-center justify-center rounded-full bg-gem/15 text-lg transition-all active:scale-90 active:bg-gem/25"
+            className="absolute bottom-4 left-4 flex h-10 w-10 items-center justify-center rounded-full bg-gem/15 text-lg transition-transform duration-100 active:scale-90 active:bg-gem/25"
             title="Add or edit note"
           >
             📝
@@ -316,7 +316,7 @@ export default function SwipeCard({
               e.stopPropagation()
               onTransfer()
             }}
-            className="absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-ice/10 text-lg transition-all active:scale-90 active:bg-ice/20"
+            className="absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-ice/10 text-lg transition-transform duration-100 active:scale-90 active:bg-ice/20"
             title="Mark as own account transfer"
           >
             💸
@@ -346,7 +346,7 @@ export default function SwipeCard({
                   e.stopPropagation()
                   setSearchOpen(true)
                 }}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-800/60 text-surface-400 transition-all hover:bg-surface-700 hover:text-surface-200 active:scale-90"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-800/60 text-surface-400 transition-[transform,background-color,color] duration-100 hover:bg-surface-700 hover:text-surface-200 active:scale-90"
                 title="Search Google for this merchant"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
@@ -359,9 +359,9 @@ export default function SwipeCard({
           {predicted && (
             <motion.div
               className="mx-auto mt-2 inline-flex items-center gap-1.5 rounded-full border border-duo-green/40 bg-duo-green/15 px-2.5 py-1"
-              initial={{ scale: 0, opacity: 0 }}
+              initial={{ scale: 0.93, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', delay: 0.05, damping: 18 }}
+              transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1], delay: 0.05 }}
             >
               <span className="text-[11px] uppercase tracking-wider text-duo-green/80">Predicted</span>
               <CategoryIcon categoryId={predicted.id} emoji={predicted.icon} size="sm" />
@@ -372,9 +372,9 @@ export default function SwipeCard({
           {group.count > 1 && (
             <motion.div
               className="mx-auto mt-2 inline-flex items-center gap-1.5 rounded-full bg-gem/10 px-2.5 py-0.5"
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', delay: 0.1 }}
+              initial={{ scale: 0.93, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1], delay: 0.1 }}
             >
               <span className="text-xs font-semibold text-gem">
                 {group.count >= 3 ? '🎯 Smart Stack · ' : ''}

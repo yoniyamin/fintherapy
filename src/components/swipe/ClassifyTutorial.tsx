@@ -190,7 +190,7 @@ export default function ClassifyTutorial({ hasTransactions, onDismiss }: Classif
               key={i}
               type="button"
               onClick={() => setStep(i)}
-              className={`h-2 rounded-full transition-all ${
+              className={`h-2 rounded-full transition-[width,background-color] duration-200 ${
                 i === step ? 'w-6 bg-duo-green' : 'w-2 bg-surface-700'
               }`}
               aria-label={`Step ${i + 1}`}
@@ -204,7 +204,7 @@ export default function ClassifyTutorial({ hasTransactions, onDismiss }: Classif
               <button
                 type="button"
                 onClick={handleDismiss}
-                className="w-full rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-5 py-3 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
+                className="w-full rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-5 py-3 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97]"
               >
                 Got it!
               </button>
@@ -229,7 +229,7 @@ export default function ClassifyTutorial({ hasTransactions, onDismiss }: Classif
               <button
                 type="button"
                 onClick={() => setStep((s) => s + 1)}
-                className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_-10px_rgba(88,204,2,0.4)] active:translate-y-[1px] active:border-b"
+                className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_-10px_rgba(88,204,2,0.4)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97]"
               >
                 Next
               </button>

@@ -16,6 +16,7 @@ import FixedDiscretionarySplit from './FixedDiscretionarySplit'
 import HeadlineBanner from './HeadlineBanner'
 import KpiCards from './KpiCards'
 import MemberSpendingPanel from './MemberSpendingPanel'
+import MonthlySummaryTable from './MonthlySummaryTable'
 import MultiMonthSlideDeckPreview from './MultiMonthSlideDeckPreview'
 import RecurringPanel from './RecurringPanel'
 import ReportConfigModal from './ReportConfigModal'
@@ -326,10 +327,20 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
 
   return (
     <div className="mt-4 space-y-5">
+      {/* 1. Overview */}
       {(show('headline', 1) || show('kpiCards', 1) || show('fixedDiscretionary', 1)) && (
         <div className="space-y-5" data-analysis-section="overview">
           {show('headline', 1) && <HeadlineBanner headline={headline} verdict={healthSummary.verdict} />}
           {show('kpiCards', 1) && <KpiCards data={data} months={months} categoryLookup={categoryLookup} />}
+          {months.length >= 1 && (
+            <MonthlySummaryTable
+              monthlyTotals={data.monthlyTotals}
+              months={months}
+              income={data.householdIncome}
+              summaryByMonth={data.summaryByMonth}
+              categoryLookup={categoryLookup}
+            />
+          )}
           {show('fixedDiscretionary', 1) && (
             <FixedDiscretionarySplit
               fixedTotal={fixedTotal}
@@ -341,12 +352,31 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
         </div>
       )}
 
-      {show('categoryTrend', 2) && (
-        <div data-analysis-section="trends">
-          <CategoryTrendChart data={data} months={months} categoryLookup={categoryLookup} />
+      {/* 2. Trends — category trend chart + month-over-month comparison */}
+      {(show('categoryTrend', 2) || show('comparisonTable', 2)) && (
+        <div className="space-y-5" data-analysis-section="trends">
+          {show('categoryTrend', 2) && <CategoryTrendChart data={data} months={months} categoryLookup={categoryLookup} />}
+          {show('comparisonTable', 2) && (
+            <ComparisonTable
+              data={data}
+              months={months}
+              categoryLookup={categoryLookup}
+              accountAliases={accountAliases}
+              categories={categories}
+              onDataChange={onDataChange}
+            />
+          )}
         </div>
       )}
 
+      {/* 3. Advisor — surfaced early for critical/actionable insights */}
+      {show('advisorNotes', 1) && (
+        <div data-analysis-section="advisor">
+          <AdvisorNotes data={data} months={months} categoryLookup={categoryLookup} />
+        </div>
+      )}
+
+      {/* 4. Breakdown */}
       {(show('deltaDrivers', 2) || show('memberSpending', 1)) && (
         <div className="space-y-5" data-analysis-section="breakdown">
           {show('deltaDrivers', 2) && <DeltaDrivers drivers={deltaDrivers} />}
@@ -354,6 +384,14 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
         </div>
       )}
 
+      {/* 5. Calendar */}
+      {show('calendarHeatmap', 2) && (
+        <div data-analysis-section="calendar">
+          <CalendarHeatmap dailyTotals={data.dailyTotals} months={months} />
+        </div>
+      )}
+
+      {/* 6. Details */}
       {show('topVendors', 3) && (
         <div data-analysis-section="details">
           <TopVendorsPanel transactions={data.allTransactions} months={months.length} categoryLookup={categoryLookup} accountAliases={accountAliases} />
@@ -366,6 +404,14 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
         </div>
       )}
 
+      {/* 7. Recurring */}
+      {show('recurring', 1) && (
+        <div data-analysis-section="recurring">
+          <RecurringPanel charges={recurringCharges} months={months.length} />
+        </div>
+      )}
+
+      {/* 8. Projections */}
       {show('savingsProjection', 3) && (
         <div data-analysis-section="projections">
           <SavingsProjectionPanel
@@ -395,37 +441,6 @@ function AnalysisContent({ data, months, categoryLookup, accountAliases, categor
             categoryLookup={categoryLookup}
             onEditBudgets={() => setShowBudgetEditor(true)}
           />
-        </div>
-      )}
-
-      {show('recurring', 1) && (
-        <div data-analysis-section="recurring">
-          <RecurringPanel charges={recurringCharges} months={months.length} />
-        </div>
-      )}
-
-      {show('comparisonTable', 2) && (
-        <div data-analysis-section="breakdown">
-          <ComparisonTable
-            data={data}
-            months={months}
-            categoryLookup={categoryLookup}
-            accountAliases={accountAliases}
-            categories={categories}
-            onDataChange={onDataChange}
-          />
-        </div>
-      )}
-
-      {show('calendarHeatmap', 2) && (
-        <div data-analysis-section="calendar">
-          <CalendarHeatmap dailyTotals={data.dailyTotals} months={months} />
-        </div>
-      )}
-
-      {show('advisorNotes', 1) && (
-        <div data-analysis-section="advisor">
-          <AdvisorNotes data={data} months={months} categoryLookup={categoryLookup} />
         </div>
       )}
 

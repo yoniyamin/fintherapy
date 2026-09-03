@@ -35,7 +35,7 @@ export default function HouseholdSetupPage() {
               <div className="space-y-3">
                 <motion.button
                   onClick={() => setMode('create')}
-                  className="flex w-full items-center gap-4 rounded-2xl border border-white/[0.08] bg-surface-950/50 p-4 text-left shadow-[0_16px_40px_-18px_rgba(88,204,2,0.25)] transition-all hover:bg-surface-900/55 active:scale-[0.98]"
+                  className="flex w-full items-center gap-4 rounded-2xl border border-white/[0.08] bg-surface-950/50 p-4 text-left shadow-[0_16px_40px_-18px_rgba(88,204,2,0.25)] transition-[transform,opacity,background-color] duration-150 hover:bg-surface-900/55 active:scale-[0.98]"
                   whileTap={{ scale: 0.98 }}
                 >
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-duo-green/15 text-2xl">
@@ -51,7 +51,7 @@ export default function HouseholdSetupPage() {
 
                 <motion.button
                   onClick={() => setMode('join')}
-                  className="flex w-full items-center gap-4 rounded-2xl border border-white/[0.08] bg-surface-950/50 p-4 text-left shadow-[0_16px_40px_-18px_rgba(165,96,232,0.28)] transition-all hover:bg-surface-900/55 active:scale-[0.98]"
+                  className="flex w-full items-center gap-4 rounded-2xl border border-white/[0.08] bg-surface-950/50 p-4 text-left shadow-[0_16px_40px_-18px_rgba(165,96,232,0.28)] transition-[transform,opacity,background-color] duration-150 hover:bg-surface-900/55 active:scale-[0.98]"
                   whileTap={{ scale: 0.98 }}
                 >
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gem/15 text-2xl">
@@ -164,7 +164,7 @@ function CreateHouseholdForm({
         <button
           type="submit"
           disabled={submitting}
-          className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-2.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] active:translate-y-[1px] active:border-b disabled:opacity-50"
+          className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-2.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97] disabled:opacity-50"
         >
           {submitting ? 'Creating...' : 'Create'}
         </button>
@@ -243,7 +243,7 @@ function JoinHouseholdForm({
         <button
           type="submit"
           disabled={submitting || code.trim().length === 0}
-          className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-2.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] active:translate-y-[1px] active:border-b disabled:opacity-50"
+          className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-2.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97] disabled:opacity-50"
         >
           {submitting ? 'Joining...' : 'Join'}
         </button>

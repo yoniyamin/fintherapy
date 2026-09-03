@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import CategoryIcon from '../common/CategoryIcon'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import type { FlaggedSuggestion } from '../../hooks/useFlaggedSuggestions'
 import type { CategoryDef } from '../../lib/constants'
 import { formatCurrency } from '../../lib/formatCurrency'
@@ -48,15 +48,10 @@ export default function FlaggedSuggestionsBanner({ suggestions, categoryLookup, 
         </svg>
       </button>
 
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ease-[var(--ease-out)] ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      >
+        <div className="overflow-hidden">
             <div className="space-y-1.5 px-3 pb-3">
               {suggestions.map((s) => {
                 const cat = categoryLookup[s.suggested_category]
@@ -105,9 +100,8 @@ export default function FlaggedSuggestionsBanner({ suggestions, categoryLookup, 
                 )
               })}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      </div>
     </motion.div>
   )
 }

@@ -512,7 +512,7 @@ export default function UploadPage() {
       </div>
 
       {/* File picker */}
-      <label className="mt-4 flex cursor-pointer flex-col items-center gap-3 rounded-2xl border border-dashed border-white/[0.12] bg-surface-950/40 px-6 py-10 shadow-[0_20px_48px_-28px_rgba(28,176,246,0.2)] transition-all hover:border-ice/40 hover:bg-ice/[0.04]">
+      <label className="mt-4 flex cursor-pointer flex-col items-center gap-3 rounded-2xl border border-dashed border-white/[0.12] bg-surface-950/40 px-6 py-10 shadow-[0_20px_48px_-28px_rgba(28,176,246,0.2)] transition-[border-color,background-color] duration-200 hover:border-ice/40 hover:bg-ice/[0.04]">
         <motion.div
           animate={{ y: [0, -6, 0] }}
           transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
@@ -645,9 +645,9 @@ export default function UploadPage() {
         {result && (
           <motion.div
             className={`${ui.glassFlat} mt-4 border border-duo-green/25 bg-duo-green/[0.08] p-6 text-center`}
-            initial={{ scale: 0.9, opacity: 0 }}
+            initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', damping: 15 }}
+            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
           >
             <motion.div
               className="text-4xl"
@@ -690,7 +690,7 @@ export default function UploadPage() {
             <div className="mt-4 flex flex-col items-center gap-2">
               <Link
                 to="/classify"
-                className="inline-block rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
+                className="inline-block rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.45)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97]"
               >
                 Go classify
               </Link>
@@ -802,9 +802,8 @@ export default function UploadPage() {
                 <motion.div
                   className="fixed inset-x-0 left-[var(--shell-nav-offset)] bottom-0 z-[101] flex max-h-[85vh] flex-col rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
                   initial={{ y: '100%' }}
-                  animate={{ y: 0 }}
-                  exit={{ y: '100%' }}
-                  transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                  animate={{ y: 0, transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } }}
+                  exit={{ y: '100%', transition: { duration: 0.18, ease: [0.4, 0, 1, 0] } }}
                   {...columnMapSheetDrag.sheetDragProps}
                 >
                   <div {...columnMapSheetDrag.handleZoneProps('shrink-0 px-4 pt-3')}>
@@ -895,7 +894,7 @@ export default function UploadPage() {
                         !headerList.includes(columnMapDraft.amount) ||
                         columnMapDraft.merchant === columnMapDraft.amount
                       }
-                      className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] active:translate-y-[1px] active:border-b disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Apply mapping
                     </button>

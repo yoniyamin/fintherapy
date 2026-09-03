@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
 import { useFlaggedSuggestions } from '../../hooks/useFlaggedSuggestions'
@@ -269,82 +269,58 @@ export default function CompactHomePanel() {
         {activityLines.length > 0 && (
           <div>
             <AccordionToggle label="Activity today" open={expanded === 'activity'} onToggle={() => toggle('activity')} />
-            <AnimatePresence initial={false}>
-              {expanded === 'activity' && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
-                >
-                  <div className={`mx-1 mb-2 space-y-2 p-3 ${ui.glassFlat}`}>
-                    {activityLines.map((line) => (
-                      <div key={line.userId} className="flex items-center gap-2.5">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gem/15 text-[10px] font-bold text-gem ring-2 ring-surface-900">
-                          {line.displayName.charAt(0).toUpperCase()}
-                        </div>
-                        <p className="min-w-0 text-xs text-surface-300">
-                          <span className="font-semibold text-surface-100">{line.displayName}</span>{' '}
-                          {line.summary}
-                        </p>
+            <div className={`grid transition-[grid-template-rows] duration-200 ease-[var(--ease-out)] ${expanded === 'activity' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+              <div className="overflow-hidden">
+                <div className={`mx-1 mb-2 space-y-2 p-3 ${ui.glassFlat}`}>
+                  {activityLines.map((line) => (
+                    <div key={line.userId} className="flex items-center gap-2.5">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gem/15 text-[10px] font-bold text-gem ring-2 ring-surface-900">
+                        {line.displayName.charAt(0).toUpperCase()}
                       </div>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                      <p className="min-w-0 text-xs text-surface-300">
+                        <span className="font-semibold text-surface-100">{line.displayName}</span>{' '}
+                        {line.summary}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
         {leaderboard.length > 1 && (
           <div>
             <AccordionToggle label="Leaderboard" open={expanded === 'leaderboard'} onToggle={() => toggle('leaderboard')} />
-            <AnimatePresence initial={false}>
-              {expanded === 'leaderboard' && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
-                >
-                  <div className="mx-1 mb-2">
-                    <Leaderboard entries={leaderboard} dailyActivity={dailyActivity} hideTitle memberRecords={memberRecords} />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <div className={`grid transition-[grid-template-rows] duration-200 ease-[var(--ease-out)] ${expanded === 'leaderboard' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+              <div className="overflow-hidden">
+                <div className="mx-1 mb-2">
+                  <Leaderboard entries={leaderboard} dailyActivity={dailyActivity} hideTitle memberRecords={memberRecords} />
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
         {householdInfo && (
           <div>
             <AccordionToggle label="Invite code" open={expanded === 'invite'} onToggle={() => toggle('invite')} />
-            <AnimatePresence initial={false}>
-              {expanded === 'invite' && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
+            <div className={`grid transition-[grid-template-rows] duration-200 ease-[var(--ease-out)] ${expanded === 'invite' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+              <div className="overflow-hidden">
+                <button
+                  type="button"
+                  onClick={copyInviteCode}
+                  className="mx-1 mb-2 flex w-[calc(100%-0.5rem)] items-center gap-3 rounded-xl border border-white/[0.06] bg-surface-950/50 px-3 py-2 text-left transition hover:bg-surface-900/60"
                 >
-                  <button
-                    type="button"
-                    onClick={copyInviteCode}
-                    className="mx-1 mb-2 flex w-[calc(100%-0.5rem)] items-center gap-3 rounded-xl border border-white/[0.06] bg-surface-950/50 px-3 py-2 text-left transition hover:bg-surface-900/60"
-                  >
-                    <p className="flex-1 font-mono text-xs font-bold tracking-[0.2em] text-surface-200">
-                      {householdInfo.invite_code}
-                    </p>
-                    <span className="shrink-0 text-[11px] font-semibold text-duo-green">
-                      {codeCopied ? 'Copied!' : 'Copy'}
-                    </span>
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  <p className="flex-1 font-mono text-xs font-bold tracking-[0.2em] text-surface-200">
+                    {householdInfo.invite_code}
+                  </p>
+                  <span className="shrink-0 text-[11px] font-semibold text-duo-green">
+                    {codeCopied ? 'Copied!' : 'Copy'}
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

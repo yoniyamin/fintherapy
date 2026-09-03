@@ -67,9 +67,8 @@ function ReportConfigModalInner({ onClose, config, inflationRate, monthCount, on
         <motion.div
           key="report-config-sheet"
           initial={{ y: '100%' }}
-          animate={{ y: 0 }}
-          exit={{ y: '100%' }}
-          transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+          animate={{ y: 0, transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } }}
+          exit={{ y: '100%', transition: { duration: 0.18, ease: [0.4, 0, 1, 0] } }}
           className="w-full max-w-lg rounded-t-2xl border-t border-white/10 bg-surface-950/95 backdrop-blur-xl"
           style={{ maxHeight: '85vh' }}
           onClick={e => e.stopPropagation()}

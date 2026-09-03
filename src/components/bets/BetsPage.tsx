@@ -107,7 +107,7 @@ export default function BetsPage() {
             key={t}
             type="button"
             onClick={() => !allClassified || t === 'results' ? setUserTab(t) : undefined}
-            className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all ${
+            className={`flex-1 rounded-md py-2 text-sm font-semibold transition-[background-color,color] duration-150 ${
               tab === t ? ui.tabActive : ui.tabIdle
             } ${allClassified && t === 'predict' ? 'opacity-40 cursor-not-allowed' : ''}`}
           >

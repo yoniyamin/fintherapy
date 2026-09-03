@@ -188,7 +188,7 @@ export default function RevealDesktopPage() {
           <div className="mt-2 w-full max-w-xs">
             <div className="h-3 w-full overflow-hidden rounded-full bg-surface-900 ring-1 ring-white/[0.06]">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-flame to-duo-green transition-all"
+                className="h-full rounded-full bg-gradient-to-r from-flame to-duo-green transition-[width] duration-200"
                 style={{ width: `${((monthStats!.total_count - monthStats!.pending_count) / monthStats!.total_count) * 100}%` }}
               />
             </div>
@@ -209,7 +209,7 @@ export default function RevealDesktopPage() {
           <button
             type="button"
             onClick={markCelebrated}
-            className="flex items-center justify-center gap-2 rounded-xl bg-duo-green px-8 py-3.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] transition-all hover:brightness-110"
+            className="flex items-center justify-center gap-2 rounded-xl bg-duo-green px-8 py-3.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] transition-[transform,opacity,filter] duration-150 hover:brightness-110"
           >
             Reveal the numbers
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -309,7 +309,7 @@ export default function RevealDesktopPage() {
                 <div className="mt-2 flex items-center gap-2">
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-950/80 ring-1 ring-white/[0.06]">
                     <div
-                      className={`h-full rounded-full transition-all ${freeIncome >= 0 ? 'bg-duo-green' : 'bg-danger'}`}
+                      className={`h-full rounded-full transition-[width] duration-200 ${freeIncome >= 0 ? 'bg-duo-green' : 'bg-danger'}`}
                       style={{ width: `${Math.min(Math.max((totalSpent / incomeNum) * 100, 0), 100)}%` }}
                     />
                   </div>

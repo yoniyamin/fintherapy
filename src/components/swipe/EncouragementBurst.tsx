@@ -41,10 +41,10 @@ export default function EncouragementBurst({ burst, onDismiss }: Props) {
         )}
         <motion.div
           className="pointer-events-none flex max-w-xs flex-col items-center gap-3 text-center"
-          initial={{ scale: 0.88, y: 12 }}
+          initial={{ scale: 0.93, y: 8 }}
           animate={{ scale: 1, y: 0 }}
-          exit={{ scale: 0.94, opacity: 0 }}
-          transition={{ type: 'spring', damping: 16, stiffness: 320 }}
+          exit={{ scale: 0.96, opacity: 0, transition: { duration: 0.15, ease: [0.4, 0, 1, 0] } }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
         >
           <EncouragementAnimation
             animation={burst.animation}

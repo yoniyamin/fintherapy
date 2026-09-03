@@ -31,7 +31,7 @@ export default function DeckClearedAnimation({ className = '' }: Props) {
             opacity: [0, 1],
             scale: [0.35, 1],
             duration: 850,
-            ease: spring({ stiffness: 280, damping: 14 }),
+            ease: spring({ stiffness: 280, damping: 22 }),
           },
           '-=450',
         )
@@ -43,7 +43,7 @@ export default function DeckClearedAnimation({ className = '' }: Props) {
             rotate: [-40, 0],
             duration: 500,
             delay: stagger(70, { from: 'center' }),
-            ease: spring({ stiffness: 320, damping: 12 }),
+            ease: spring({ stiffness: 320, damping: 20 }),
           },
           '-=350',
         )
@@ -79,6 +79,7 @@ export default function DeckClearedAnimation({ className = '' }: Props) {
       ref={rootRef}
       className={`relative mx-auto aspect-square ${className}`}
       aria-hidden
+      data-motion="decorative"
     >
       <div
         data-deck-cleared-glow

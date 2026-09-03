@@ -254,7 +254,7 @@ function MonthCaughtUpPanel({
         <motion.button
           type="button"
           onClick={onContinue}
-          className="rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
+          className="rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97]"
           animate={nextMonth ? { scale: [1, 1.03, 1] } : undefined}
           transition={nextMonth ? { duration: 1.4, repeat: Infinity, ease: 'easeInOut' } : undefined}
         >
@@ -1490,7 +1490,7 @@ export default function SwipeDeck() {
             </p>
             <Link
               to="/classify"
-              className="inline-block rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
+              className="inline-block rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97]"
             >
               Back to Classify
             </Link>
@@ -1525,7 +1525,7 @@ export default function SwipeDeck() {
           <div className="flex flex-col items-center gap-2">
             <Link
               to="/upload"
-              className="inline-block rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
+              className="inline-block rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97]"
             >
               Upload CSV
             </Link>
@@ -1842,7 +1842,7 @@ export default function SwipeDeck() {
                 <button
                   type="button"
                   onClick={() => setAccountFilterPersist(null)}
-                  className="rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] active:translate-y-[1px] active:border-b"
+                  className="rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97]"
                 >
                   {classifyCardPicklist.length > 1 ? 'All cards' : 'Back to all'}
                 </button>
@@ -1931,9 +1931,8 @@ export default function SwipeDeck() {
                 <motion.div
                   className="fixed inset-x-0 left-[var(--shell-nav-offset)] bottom-0 z-[101] rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 px-4 pt-3 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl pb-[max(2.5rem,env(safe-area-inset-bottom))]"
                   initial={{ y: '100%' }}
-                  animate={{ y: 0 }}
-                  exit={{ y: '100%' }}
-                  transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                  animate={{ y: 0, transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } }}
+                  exit={{ y: '100%', transition: { duration: 0.18, ease: [0.4, 0, 1, 0] } }}
                   {...noteSheetDrag.sheetDragProps}
                 >
                   <div {...noteSheetDrag.handleZoneProps()}>
@@ -1962,7 +1961,7 @@ export default function SwipeDeck() {
                     <button
                       type="button"
                       onClick={() => void handleSaveNote()}
-                      className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] active:translate-y-[1px] active:border-b"
+                      className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97]"
                     >
                       Save
                     </button>
@@ -1999,7 +1998,7 @@ export default function SwipeDeck() {
                 initial={{ y: 30, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 30, opacity: 0 }}
-                transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+                transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
               >
                 <div className="flex w-full max-w-sm items-center gap-2 rounded-2xl border border-white/10 bg-surface-950/95 px-3 py-2.5 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl">
                   <span className="flex-1 truncate text-xs text-surface-200">
@@ -2060,9 +2059,8 @@ export default function SwipeDeck() {
                   aria-labelledby="recent-panel-title"
                   className="fixed inset-x-0 left-[var(--shell-nav-offset)] bottom-0 z-[111] flex max-h-[85vh] flex-col overflow-hidden rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
                   initial={{ y: '100%' }}
-                  animate={{ y: 0 }}
-                  exit={{ y: '100%' }}
-                  transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                  animate={{ y: 0, transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } }}
+                  exit={{ y: '100%', transition: { duration: 0.18, ease: [0.4, 0, 1, 0] } }}
                   drag="y"
                   dragControls={recentDragControls}
                   dragListener={false}
@@ -2165,7 +2163,7 @@ export default function SwipeDeck() {
                         type="button"
                         disabled={historyRecentLoading || !profile?.household_id}
                         onClick={() => void loadHistoryRecentActions()}
-                        className="rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-2 text-xs font-bold text-white shadow-[0_8px_24px_-10px_rgba(88,204,2,0.45)] disabled:cursor-not-allowed disabled:opacity-40 active:translate-y-[1px] active:border-b"
+                        className="rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-2 text-xs font-bold text-white shadow-[0_8px_24px_-10px_rgba(88,204,2,0.45)] disabled:cursor-not-allowed disabled:opacity-40 transition-[transform,opacity,filter] duration-150 active:scale-[0.97]"
                       >
                         {historyRecentLoading ? 'Loading…' : 'Load range'}
                       </button>

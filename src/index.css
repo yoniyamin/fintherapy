@@ -77,6 +77,16 @@ body {
   --pwa-tab-safe-bottom: env(safe-area-inset-bottom, 0px);
   --shell-tab-clearance: calc(3.5rem + var(--pwa-tab-safe-bottom));
   --shell-nav-offset: 0px;
+
+  /* Motion tokens — mirrors src/lib/motionTokens.ts */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 0);
+  --duration-press: 150ms;
+  --duration-badge: 180ms;
+  --duration-sheet-enter: 250ms;
+  --duration-sheet-exit: 180ms;
 }
 
 @media (min-width: 1280px) {
@@ -188,6 +198,21 @@ input[type='range'].budget-slider:active::-moz-range-thumb {
   }
   input[type='range'].budget-slider:active::-moz-range-thumb {
     transform: scale(1.3) translateY(-10px);
+  }
+}
+
+/*
+ * Scoped reduced-motion — strips transform motion from decorative components
+ * while preserving form feedback (color, opacity) and interactive transitions.
+ * Components opt in via data-motion="decorative".
+ */
+@media (prefers-reduced-motion: reduce) {
+  [data-motion='decorative'],
+  [data-motion='decorative'] * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
   }
 }
 

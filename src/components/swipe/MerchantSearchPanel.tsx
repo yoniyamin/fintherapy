@@ -82,9 +82,8 @@ export default function MerchantSearchPanel({ open, merchantRaw, onClose }: Merc
           <motion.div
             className="fixed inset-x-0 left-[var(--shell-nav-offset)] bottom-0 z-[101] flex max-h-[85vh] flex-col rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl pb-[max(1rem,env(safe-area-inset-bottom))]"
             initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            animate={{ y: 0, transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } }}
+            exit={{ y: '100%', transition: { duration: 0.18, ease: [0.4, 0, 1, 0] } }}
             {...sheetDragProps}
           >
             {/* Handle + close */}

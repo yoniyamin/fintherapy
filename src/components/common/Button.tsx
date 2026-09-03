@@ -8,13 +8,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants = {
   primary:
-    'bg-duo-green text-white border-b-[3px] border-duo-green-dark shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] hover:brightness-110 active:translate-y-[1px] active:border-b disabled:opacity-50 disabled:shadow-none disabled:active:translate-y-0 disabled:active:border-b-[3px]',
+    'bg-duo-green text-white border-b-[3px] border-duo-green-dark shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] hover:brightness-110 active:scale-[0.97] disabled:opacity-50 disabled:shadow-none disabled:active:scale-100',
   secondary:
-    'bg-surface-700 text-surface-50 border-b-[3px] border-surface-900 hover:bg-surface-600 active:translate-y-[1px] active:border-b disabled:opacity-50 disabled:active:translate-y-0 disabled:active:border-b-[3px]',
+    'bg-surface-700 text-surface-50 border-b-[3px] border-surface-900 hover:bg-surface-600 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100',
   danger:
-    'bg-danger text-white border-b-[3px] border-red-700 hover:brightness-110 active:translate-y-[1px] active:border-b disabled:opacity-50 disabled:active:translate-y-0 disabled:active:border-b-[3px]',
+    'bg-danger text-white border-b-[3px] border-red-700 hover:brightness-110 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100',
   ghost:
-    'bg-transparent text-surface-200 hover:bg-surface-800 active:bg-surface-700 disabled:opacity-50',
+    'bg-transparent text-surface-200 hover:bg-surface-800 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100',
 }
 
 const sizes = {
@@ -32,7 +32,7 @@ export default function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`font-bold transition-all ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`font-bold transition-[transform,opacity,filter] duration-150 ease-[var(--ease-out)] ${variants[variant]} ${sizes[size]} ${className}`}
       {...props}
     >
       {children}

@@ -59,7 +59,7 @@ function SavingsGoalBar({ surplus, target }: { surplus: number; target: number }
       </div>
       <div className="h-1.5 rounded-full bg-surface-800 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-200 ${barColor}`}
+          className={`h-full rounded-full transition-[width] duration-200 ${barColor}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -595,7 +595,7 @@ export default function BudgetEditorModal({
                     </div>
                     <div className="h-1.5 rounded-full bg-surface-800 overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-200 ${remaining >= 0 ? 'bg-teal-500' : 'bg-red-500'}`}
+                        className={`h-full rounded-full transition-[width] duration-200 ${remaining >= 0 ? 'bg-teal-500' : 'bg-red-500'}`}
                         style={{ width: `${Math.min(envelopePct, 100)}%` }}
                       />
                     </div>

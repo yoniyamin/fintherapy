@@ -36,7 +36,7 @@ export default function ForgotPasswordPage() {
           className="w-full max-w-sm"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ type: 'spring', damping: 20 }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
         >
           <div className={`${ui.glass} space-y-8 px-7 py-9`}>
             <div className="text-center">
@@ -90,7 +90,7 @@ export default function ForgotPasswordPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-3 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] transition-all hover:brightness-110 active:translate-y-[1px] active:border-b disabled:opacity-50 disabled:shadow-none disabled:active:translate-y-0"
+                  className="w-full rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-3 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] transition-[transform,opacity,filter] duration-150 hover:brightness-110 active:scale-[0.97] disabled:opacity-50 disabled:shadow-none disabled:active:scale-100"
                 >
                   {submitting ? 'Sending...' : 'Send Reset Link'}
                 </button>

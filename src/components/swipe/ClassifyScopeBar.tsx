@@ -234,9 +234,8 @@ export default function ClassifyScopeBar({
                   aria-labelledby="classify-scope-title"
                   className="fixed inset-x-0 left-[var(--shell-nav-offset)] bottom-0 z-[106] max-h-[70vh] overflow-y-auto rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
                   initial={{ y: '100%' }}
-                  animate={{ y: 0 }}
-                  exit={{ y: '100%' }}
-                  transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                  animate={{ y: 0, transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } }}
+                  exit={{ y: '100%', transition: { duration: 0.18, ease: [0.4, 0, 1, 0] } }}
                   {...sheetDragProps}
                 >
                   <div {...handleZoneProps('mb-3')}>

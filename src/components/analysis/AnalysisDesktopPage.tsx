@@ -23,6 +23,7 @@ import FixedDiscretionarySplit from './FixedDiscretionarySplit'
 import HeadlineBanner from './HeadlineBanner'
 import KpiCards from './KpiCards'
 import MemberSpendingPanel from './MemberSpendingPanel'
+import MonthlySummaryTable from './MonthlySummaryTable'
 import MultiMonthSlideDeckPreview from './MultiMonthSlideDeckPreview'
 import RecurringPanel from './RecurringPanel'
 import ReportConfigModal from './ReportConfigModal'
@@ -160,7 +161,7 @@ export default function AnalysisDesktopPage() {
                 key={section.id}
                 type="button"
                 onClick={() => navigateRef.current?.(section.id)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-[background-color,border-color,color] duration-150 ${
                   activeSection === section.id
                     ? 'bg-white/[0.1] text-surface-50 shadow-sm'
                     : 'text-surface-500 hover:bg-white/[0.04] hover:text-surface-300'
@@ -404,6 +405,17 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
           <div ref={setSectionRef('overview')}>
             {show('headline', 1) && <HeadlineBanner headline={headline} verdict={healthSummary.verdict} />}
             {show('kpiCards', 1) && <div className="mt-5"><KpiCards data={data} months={months} categoryLookup={categoryLookup} columns={4} /></div>}
+            {months.length >= 1 && (
+              <div className="mt-5">
+                <MonthlySummaryTable
+                  monthlyTotals={data.monthlyTotals}
+                  months={months}
+                  income={data.householdIncome}
+                  summaryByMonth={data.summaryByMonth}
+                  categoryLookup={categoryLookup}
+                />
+              </div>
+            )}
             {show('fixedDiscretionary', 1) && (
               <div className="mt-5">
                 <FixedDiscretionarySplit
@@ -420,15 +432,6 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
         {visibleSections.has('trends') && (
           <div ref={setSectionRef('trends')}>
             {show('categoryTrend', 2) && <CategoryTrendChart data={data} months={months} categoryLookup={categoryLookup} />}
-          </div>
-        )}
-
-        {visibleSections.has('breakdown') && (
-          <div ref={setSectionRef('breakdown')}>
-            <div className="grid grid-cols-2 gap-5 items-start">
-              {show('deltaDrivers', 2) && <DeltaDrivers drivers={deltaDrivers} />}
-              {show('memberSpending', 1) && <MemberSpendingPanel spendingByAccount={data.spendingByAccount} months={months.length} />}
-            </div>
             {show('comparisonTable', 2) && (
               <div className="mt-5">
                 <ComparisonTable
@@ -441,6 +444,21 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
                 />
               </div>
             )}
+          </div>
+        )}
+
+        {visibleSections.has('advisor') && (
+          <div ref={setSectionRef('advisor')}>
+            {show('advisorNotes', 1) && <AdvisorNotes data={data} months={months} categoryLookup={categoryLookup} />}
+          </div>
+        )}
+
+        {visibleSections.has('breakdown') && (
+          <div ref={setSectionRef('breakdown')}>
+            <div className="grid grid-cols-2 gap-5 items-start">
+              {show('deltaDrivers', 2) && <DeltaDrivers drivers={deltaDrivers} />}
+              {show('memberSpending', 1) && <MemberSpendingPanel spendingByAccount={data.spendingByAccount} months={months.length} />}
+            </div>
           </div>
         )}
 
@@ -503,11 +521,6 @@ function DesktopAnalysisContent({ data, months, categoryLookup, accountAliases, 
           </div>
         )}
 
-        {visibleSections.has('advisor') && (
-          <div ref={setSectionRef('advisor')}>
-            {show('advisorNotes', 1) && <AdvisorNotes data={data} months={months} categoryLookup={categoryLookup} />}
-          </div>
-        )}
       </div>
 
       <BudgetEditorModal

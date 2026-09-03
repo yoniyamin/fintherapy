@@ -205,9 +205,8 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
           <motion.div
             className="fixed inset-x-0 left-[var(--shell-nav-offset)] bottom-0 z-[101] flex max-h-[90vh] flex-col rounded-t-[28px] border border-white/10 border-b-0 bg-surface-950/95 shadow-[0_-24px_48px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl"
             initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            animate={{ y: 0, transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } }}
+            exit={{ y: '100%', transition: { duration: 0.18, ease: [0.4, 0, 1, 0] } }}
             {...sheetDragProps}
           >
             <div {...handleZoneProps('shrink-0 px-4 pt-3')}>
@@ -256,7 +255,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                             key={cat.id}
                             type="button"
                             onClick={() => handleEdit(cat)}
-                            className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 transition-all active:scale-95 ${cat.color}`}
+                            className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 transition-[transform,opacity] duration-150 active:scale-95 ${cat.color}`}
                           >
                             <CategoryIcon categoryId={cat.id} emoji={cat.icon} size="xl" />
                             <span className="text-[11px] font-semibold leading-tight text-surface-200 text-center">{cat.label}</span>
@@ -356,7 +355,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                                   type="button"
                                   onClick={() => setEditing({ ...editing, icon: toGifIconToken(option.key) })}
                                   title={option.label}
-                                  className={`flex h-12 flex-col items-center justify-center gap-0.5 rounded-lg border px-1 transition-all ${
+                                  className={`flex h-12 flex-col items-center justify-center gap-0.5 rounded-lg border px-1 transition-[transform,opacity,border-color,background-color] duration-150 ${
                                     selectedGifKey === option.key
                                       ? 'border-duo-green/60 bg-duo-green/15 scale-105'
                                       : 'border-white/[0.06] bg-surface-900/50 hover:bg-surface-800/80'
@@ -397,7 +396,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                                             type="button"
                                             onClick={() => setEditing({ ...editing!, icon: toFluentEmojiToken(emoji.key) })}
                                             title={emoji.label}
-                                            className={`flex h-11 flex-col items-center justify-center rounded-lg border transition-all ${
+                                            className={`flex h-11 flex-col items-center justify-center rounded-lg border transition-[transform,opacity,border-color,background-color] duration-150 ${
                                               selectedFluentKey === emoji.key
                                                 ? 'border-duo-green/60 bg-duo-green/15 scale-105'
                                                 : 'border-white/[0.04] hover:bg-surface-800/80'
@@ -429,7 +428,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                                   key={icon}
                                   type="button"
                                   onClick={() => setEditing({ ...editing, icon })}
-                                  className={`flex h-10 w-10 items-center justify-center rounded-lg border text-xl transition-all ${
+                                  className={`flex h-10 w-10 items-center justify-center rounded-lg border text-xl transition-[transform,opacity,border-color,background-color] duration-150 ${
                                     !isGifIconToken(editing.icon) && !isFluentEmojiToken(editing.icon) && editing.icon === icon
                                       ? 'border-duo-green/60 bg-duo-green/15 scale-110'
                                       : 'border-white/[0.06] bg-surface-900/50 hover:bg-surface-800/80'
@@ -455,7 +454,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                             key={c.value}
                             type="button"
                             onClick={() => setEditing({ ...editing, color: c.value })}
-                            className={`h-9 w-9 rounded-lg border-2 transition-all ${c.value} ${
+                            className={`h-9 w-9 rounded-lg border-2 transition-[transform,border-color,box-shadow] duration-150 ${c.value} ${
                               editing.color === c.value
                                 ? 'ring-2 ring-duo-green/60 ring-offset-1 ring-offset-surface-950 scale-110'
                                 : ''
@@ -480,7 +479,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                             key={opt.value}
                             type="button"
                             onClick={() => setEditing({ ...editing, expenseType: opt.value })}
-                            className={`flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
+                            className={`flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-[background-color,border-color,color] duration-150 ${
                               editing.expenseType === opt.value
                                 ? 'border-duo-green/60 bg-duo-green/15 text-duo-green'
                                 : 'border-white/[0.08] bg-surface-900/80 text-surface-400 hover:bg-surface-800'
@@ -510,7 +509,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                             key={opt.value}
                             type="button"
                             onClick={() => setEditing({ ...editing, spendingFrequency: opt.value })}
-                            className={`flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
+                            className={`flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-[background-color,border-color,color] duration-150 ${
                               editing.spendingFrequency === opt.value
                                 ? 'border-duo-green/60 bg-duo-green/15 text-duo-green'
                                 : 'border-white/[0.08] bg-surface-900/80 text-surface-400 hover:bg-surface-800'
@@ -586,7 +585,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                         type="button"
                         onClick={() => void handleSave()}
                         disabled={saving || !editing.label.trim()}
-                        className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] transition-all active:translate-y-[1px] active:border-b disabled:opacity-50"
+                        className="flex-1 rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100"
                       >
                         {saving ? 'Saving…' : editing.isNew ? 'Create' : 'Save'}
                       </button>

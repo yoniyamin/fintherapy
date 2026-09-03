@@ -11,7 +11,7 @@ export const DEV_SCREENS: DevScreen[] = [
   {
     path: '/dev/animations',
     title: 'Animation lab',
-    description: 'Encouragement bursts, deck cleared screen, scroll report mockup',
+    description: 'Skill comparison tabs — Emil, Apple, Animate, GPT taste, high-end, imagegen mobile',
   },
   {
     path: '/dev/category-picker',

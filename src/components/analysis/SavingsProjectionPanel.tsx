@@ -340,7 +340,7 @@ function BudgetGoalsView({
           </div>
           <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-200 ${barColor}`}
+              className={`h-full rounded-full transition-[width] duration-200 ${barColor}`}
               style={{ width: `${savingsPct}%` }}
             />
           </div>
@@ -532,7 +532,7 @@ export default function SavingsProjectionPanel({
             <button
               type="button"
               onClick={() => setPanelMode('budget-goals')}
-              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
+              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-[background-color,border-color,color] duration-150 ${
                 panelMode === 'budget-goals'
                   ? 'bg-slate-700/60 text-slate-200 shadow-sm'
                   : 'text-slate-500 hover:text-slate-400'
@@ -543,7 +543,7 @@ export default function SavingsProjectionPanel({
             <button
               type="button"
               onClick={() => setPanelMode('projection')}
-              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
+              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-[background-color,border-color,color] duration-150 ${
                 panelMode === 'projection'
                   ? 'bg-teal-500/20 text-teal-300 shadow-sm'
                   : 'text-slate-500 hover:text-slate-400'
@@ -657,7 +657,7 @@ export default function SavingsProjectionPanel({
 
           {/* Segmented control */}
           <div className="grid grid-cols-4 gap-1 rounded-lg bg-slate-800/80 p-1 mb-3">
-            <div className={`flex items-center justify-center rounded-md transition-all ${
+            <div className={`flex items-center justify-center rounded-md transition-[background-color,color] duration-150 ${
               isCustomActive ? 'bg-teal-500/20 shadow-sm' : 'hover:bg-white/[0.03]'
             }`}>
               <input
@@ -682,7 +682,7 @@ export default function SavingsProjectionPanel({
                 key={pct}
                 type="button"
                 onClick={() => { setCutPct(pct); setIsCustomActive(false); setCustomPct('') }}
-                className={`rounded-md py-2 text-xs font-medium transition-all ${
+                className={`rounded-md py-2 text-xs font-medium transition-[background-color,border-color,color] duration-150 ${
                   cutPct === pct && !isCustomActive
                     ? 'bg-teal-500/20 text-teal-300 shadow-sm'
                     : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.03]'

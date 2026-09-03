@@ -688,10 +688,10 @@ function HighlightsSlide({
           <div className="flex items-start gap-3">
             <motion.span
               className="text-xl"
-              initial={{ scale: 0 }}
-              whileInView={{ scale: 1 }}
+              initial={{ scale: 0.93, opacity: 0 }}
+              whileInView={{ scale: 1, opacity: 1 }}
               viewport={{ once: true }}
-              transition={{ type: 'spring', stiffness: 400, damping: 14, delay: 0.08 + i * 0.06 }}
+              transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1], delay: 0.08 + i * 0.06 }}
             >
               {card.emoji}
             </motion.span>

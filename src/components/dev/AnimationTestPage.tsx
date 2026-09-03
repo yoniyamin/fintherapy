@@ -15,6 +15,7 @@ import ScreenSurface from '../layout/ScreenSurface'
 import EncouragementAnimation from '../swipe/EncouragementAnimation'
 import EncouragementBurst from '../swipe/EncouragementBurst'
 import DeckClearedScreen, { type DeckClearedViewport } from '../swipe/DeckClearedScreen'
+import DevLabTabs from './DevLabTabs'
 import ScrollReportMockup from './ScrollReportMockup'
 
 const INLINE_ANIMATIONS: EncouragementAnimationKey[] = ['high-five', 'medal', 'star', 'trophy']
@@ -103,9 +104,7 @@ export default function AnimationTestPage() {
             Standalone route — no tab bar. Bookmark{' '}
             <span className="font-mono text-ice">/dev/animations</span>
           </p>
-          <p className="mt-2 text-[11px] text-surface-500">
-            star · SMIL · high-five, medal, trophy, deck cleared · anime.js
-          </p>
+          <DevLabTabs />
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">

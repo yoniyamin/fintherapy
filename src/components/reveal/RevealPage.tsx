@@ -316,7 +316,7 @@ export default function RevealPage() {
             <button
               type="button"
               onClick={markCelebrated}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-duo-green px-5 py-3.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] transition-all hover:brightness-110 active:translate-y-[1px]"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-duo-green px-5 py-3.5 text-sm font-bold text-white shadow-[0_12px_32px_-10px_rgba(88,204,2,0.4)] transition-[transform,opacity,filter] duration-150 hover:brightness-110 active:scale-[0.97]"
             >
               Reveal the numbers
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

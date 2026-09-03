@@ -139,7 +139,7 @@ export default function SignUpPage() {
               <button
                 type="submit"
                 disabled={submitting || !!success}
-                className="w-full rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-3 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] transition-all hover:brightness-110 active:translate-y-[1px] active:border-b disabled:opacity-50 disabled:shadow-none disabled:active:translate-y-0"
+                className="w-full rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-4 py-3 text-sm font-bold text-white shadow-[0_14px_36px_-10px_rgba(88,204,2,0.45)] transition-[transform,opacity,filter] duration-150 hover:brightness-110 active:scale-[0.97] disabled:opacity-50 disabled:shadow-none disabled:active:scale-100"
               >
                 {submitting ? 'Creating account...' : 'Create Account'}
               </button>

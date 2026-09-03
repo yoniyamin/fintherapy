@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Transaction } from '../../types/database'
@@ -33,7 +33,11 @@ export default function CategoryDetail({
   categories,
   subtitle,
 }: Props) {
-  const [localTxns, setLocalTxns] = useState(transactions)
+  const sortedTransactions = useMemo(
+    () => [...transactions].sort((a, b) => Math.abs(Number(b.amount)) - Math.abs(Number(a.amount))),
+    [transactions],
+  )
+  const [localTxns, setLocalTxns] = useState(sortedTransactions)
   const [movingTxId, setMovingTxId] = useState<string | null>(null)
   const [noteTxId, setNoteTxId] = useState<string | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
@@ -42,8 +46,8 @@ export default function CategoryDetail({
   const { sheetDragProps, handleZoneProps } = useBottomSheetDrag(onClose)
 
   useEffect(() => {
-    setLocalTxns(transactions)
-  }, [transactions])
+    setLocalTxns(sortedTransactions)
+  }, [sortedTransactions])
 
   const cats = categories
   const cat = cats.find(c => c.id === category)
@@ -218,7 +222,7 @@ export default function CategoryDetail({
                             type="button"
                             onClick={() => void handleSaveNote(tx.id)}
                             disabled={savingNote}
-                            className="flex-1 rounded-lg border-b-[3px] border-duo-green-dark bg-duo-green py-2 text-xs font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] active:translate-y-[1px] active:border-b disabled:opacity-50"
+                            className="flex-1 rounded-lg border-b-[3px] border-duo-green-dark bg-duo-green py-2 text-xs font-bold text-white shadow-[0_8px_24px_-8px_rgba(88,204,2,0.4)] transition-[transform,opacity,filter] duration-150 active:scale-[0.97] disabled:opacity-50"
                           >
                             {savingNote ? 'Saving…' : 'Save'}
                           </button>
@@ -241,7 +245,7 @@ export default function CategoryDetail({
                             key={c.id}
                             onClick={() => handleMove(tx.id, c.id)}
                             disabled={reclassifying}
-                            className={`flex flex-col items-center gap-1 rounded-lg border px-2 py-2 text-center transition-all active:scale-95 disabled:opacity-50 ${c.color}`}
+                            className={`flex flex-col items-center gap-1 rounded-lg border px-2 py-2 text-center transition-[transform,opacity] duration-150 active:scale-95 disabled:opacity-50 ${c.color}`}
                           >
                             <span className="text-base">{c.icon}</span>
                             <span className="text-[10px] font-medium leading-tight text-surface-200">{c.label}</span>

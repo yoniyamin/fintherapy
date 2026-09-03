@@ -4,6 +4,7 @@ export default function OrganicBackdrop() {
     <div
       className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
       aria-hidden
+      data-motion="decorative"
     >
       <div className="absolute inset-0 bg-gradient-to-b from-surface-850 via-surface-900 to-[#070b14]" />
       <div

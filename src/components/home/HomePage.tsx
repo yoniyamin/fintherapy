@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useFlaggedCount } from '../../hooks/useFlaggedCount'
 import { useFlaggedSuggestions } from '../../hooks/useFlaggedSuggestions'
@@ -218,11 +218,8 @@ export default function HomePage() {
     <div className="relative z-10 mx-auto flex max-w-lg flex-col px-4 pb-4 pt-5">
       {!homeLoaded && !householdInfo && profile && <HomeSkeleton />}
       {householdInfo && profile && (
-        <motion.section
+        <section
           className={`overflow-hidden ${ui.glass}`}
-          initial={{ y: -12, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ type: 'spring', damping: 22 }}
         >
           <div className="p-4">
             <div className="flex items-start justify-between gap-3">
@@ -274,10 +271,10 @@ export default function HomePage() {
                   </p>
                   <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-800/90 ring-1 ring-white/[0.06]">
                     <motion.div
-                      className="h-full rounded-full bg-gradient-to-r from-teal-500/90 via-emerald-400/95 to-duo-green"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${Math.max(4, xp.progress * 100)}%` }}
-                      transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                      className="h-full w-full origin-left rounded-full bg-gradient-to-r from-teal-500/90 via-emerald-400/95 to-duo-green"
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: Math.max(0.04, xp.progress) }}
+                      transition={{ delay: 0.2, duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                     />
                   </div>
                 </div>
@@ -286,7 +283,7 @@ export default function HomePage() {
 
             <Link to="/upload" className="mt-3 block">
               <motion.div
-                className="flex items-center justify-center gap-2 rounded-2xl border border-cyan-500/15 bg-surface-950/45 px-4 py-3 transition-all active:scale-[0.98] shadow-[0_18px_44px_-14px_rgba(28,176,246,0.45)] hover:shadow-[0_22px_50px_-12px_rgba(28,176,246,0.55)]"
+                className="flex items-center justify-center gap-2 rounded-2xl border border-cyan-500/15 bg-surface-950/45 px-4 py-3 transition-[transform,opacity,box-shadow] duration-150 active:scale-[0.98] shadow-[0_18px_44px_-14px_rgba(28,176,246,0.45)] hover:shadow-[0_22px_50px_-12px_rgba(28,176,246,0.55)]"
                 whileTap={{ scale: 0.98 }}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-ice">
@@ -298,14 +295,11 @@ export default function HomePage() {
               </motion.div>
             </Link>
           </div>
-        </motion.section>
+        </section>
       )}
 
-      <motion.section
+      <section
         className="mt-4 space-y-2"
-        initial={{ y: 12, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.1 }}
       >
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">Needs attention</h2>
         <StatusRow
@@ -332,85 +326,61 @@ export default function HomePage() {
           />
         )}
         <StatusRow detail="Check monthly progress and reveal totals" label="Reveal" to="/reveal" />
-      </motion.section>
+      </section>
 
       {activityLines.length > 0 && (
         <section className="mt-4">
           <AccordionToggle label="Activity today" open={expanded === 'activity'} onToggle={() => toggle('activity')} />
-          <AnimatePresence initial={false}>
-            {expanded === 'activity' && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className={`mt-1 space-y-2 p-3 ${ui.glassFlat}`}>
-                  {activityLines.map((line) => (
-                    <div key={line.userId} className="flex items-center gap-2.5">
-                      <MemberAvatar name={line.displayName} size="sm" />
-                      <p className="min-w-0 text-xs text-surface-300">
-                        <span className="font-semibold text-surface-100">{line.displayName}</span>{' '}
-                        {line.summary}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <div className={`grid transition-[grid-template-rows] duration-200 ease-[var(--ease-out)] ${expanded === 'activity' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+            <div className="overflow-hidden">
+              <div className={`mt-1 space-y-2 p-3 ${ui.glassFlat}`}>
+                {activityLines.map((line) => (
+                  <div key={line.userId} className="flex items-center gap-2.5">
+                    <MemberAvatar name={line.displayName} size="sm" />
+                    <p className="min-w-0 text-xs text-surface-300">
+                      <span className="font-semibold text-surface-100">{line.displayName}</span>{' '}
+                      {line.summary}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </section>
       )}
 
       {leaderboard.length > 1 && (
         <section className="mt-3">
           <AccordionToggle label="Leaderboard" open={expanded === 'leaderboard'} onToggle={() => toggle('leaderboard')} />
-          <AnimatePresence initial={false}>
-            {expanded === 'leaderboard' && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="mt-1">
-                  <Leaderboard entries={leaderboard} dailyActivity={dailyActivity} hideTitle memberRecords={memberRecords} />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <div className={`grid transition-[grid-template-rows] duration-200 ease-[var(--ease-out)] ${expanded === 'leaderboard' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+            <div className="overflow-hidden">
+              <div className="mt-1">
+                <Leaderboard entries={leaderboard} dailyActivity={dailyActivity} hideTitle memberRecords={memberRecords} />
+              </div>
+            </div>
+          </div>
         </section>
       )}
 
       {householdInfo && (
         <section className="mt-3">
           <AccordionToggle label="Invite code" open={expanded === 'invite'} onToggle={() => toggle('invite')} />
-          <AnimatePresence initial={false}>
-            {expanded === 'invite' && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
+          <div className={`grid transition-[grid-template-rows] duration-200 ease-[var(--ease-out)] ${expanded === 'invite' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+            <div className="overflow-hidden">
+              <button
+                type="button"
+                onClick={copyInviteCode}
+                className="mt-1 flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-surface-950/50 px-3 py-2 text-left transition hover:bg-surface-900/60"
               >
-                <button
-                  type="button"
-                  onClick={copyInviteCode}
-                  className="mt-1 flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-surface-950/50 px-3 py-2 text-left transition hover:bg-surface-900/60"
-                >
-                  <p className="flex-1 font-mono text-xs font-bold tracking-[0.2em] text-surface-200">
-                    {householdInfo.invite_code}
-                  </p>
-                  <span className="shrink-0 text-[11px] font-semibold text-duo-green">
-                    {codeCopied ? 'Copied!' : 'Copy'}
-                  </span>
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                <p className="flex-1 font-mono text-xs font-bold tracking-[0.2em] text-surface-200">
+                  {householdInfo.invite_code}
+                </p>
+                <span className="shrink-0 text-[11px] font-semibold text-duo-green">
+                  {codeCopied ? 'Copied!' : 'Copy'}
+                </span>
+              </button>
+            </div>
+          </div>
         </section>
       )}
 

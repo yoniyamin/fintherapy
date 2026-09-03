@@ -21,10 +21,10 @@ export default function ProgressBar({ current, total, label }: ProgressBarProps)
       )}
       <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-950/80 ring-1 ring-white/[0.06]">
         <motion.div
-          className="h-full rounded-full bg-gradient-to-r from-teal-500/90 via-duo-green to-duo-green-light"
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ type: 'spring', stiffness: 80, damping: 20 }}
+          className="h-full w-full origin-left rounded-full bg-gradient-to-r from-teal-500/90 via-duo-green to-duo-green-light"
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: pct / 100 }}
+          transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
         >
           <div className="h-full w-full rounded-full bg-gradient-to-b from-white/20 to-transparent" />
         </motion.div>

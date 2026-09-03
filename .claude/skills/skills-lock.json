@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "kb-retriever": {
+      "source": "conardli/garden-skills",
+      "sourceType": "github",
+      "skillPath": "skills/kb-retriever/SKILL.md",
+      "computedHash": "aa228657d333e5259ab46569f6e53386be7c4eb6db31b774836b0d26b55cf128"
+    }
+  }
+}

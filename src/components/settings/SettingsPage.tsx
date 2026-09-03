@@ -120,13 +120,9 @@ export default function SettingsPage() {
 
   return (
     <div className={`${ui.screen} ${ui.page}`}>
-      <motion.h1
-        className={ui.heroTitle}
-        initial={{ y: -12, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-      >
+      <h1 className={ui.heroTitle}>
         Settings
-      </motion.h1>
+      </h1>
 
       <AnimatePresence>
         {error && (
@@ -141,11 +137,8 @@ export default function SettingsPage() {
         )}
       </AnimatePresence>
 
-      <motion.section
+      <section
         className="mt-6 space-y-6"
-        initial={{ y: 12, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.05 }}
       >
         <form onSubmit={handleSaveName} className={`space-y-3 p-4 ${ui.glassFlat}`}>
           <h2 className="text-sm font-semibold text-surface-300">Display Name</h2>
@@ -160,7 +153,7 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={savingName || !displayName.trim()}
-              className="rounded-xl bg-duo-green px-4 py-2 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-50"
+              className="rounded-xl bg-duo-green px-4 py-2 text-sm font-bold text-white transition-[transform,opacity,filter] duration-150 hover:brightness-110 disabled:opacity-50"
             >
               {savingName ? 'Saving...' : 'Save'}
             </button>
@@ -182,7 +175,7 @@ export default function SettingsPage() {
               <button
                 type="submit"
                 disabled={savingHousehold || !householdName.trim()}
-                className="rounded-xl bg-duo-green px-4 py-2 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-50"
+                className="rounded-xl bg-duo-green px-4 py-2 text-sm font-bold text-white transition-[transform,opacity,filter] duration-150 hover:brightness-110 disabled:opacity-50"
               >
                 {savingHousehold ? 'Saving...' : 'Save'}
               </button>
@@ -232,7 +225,7 @@ export default function SettingsPage() {
           <button
             type="submit"
             disabled={savingPassword || !newPassword || !confirmPassword}
-            className="rounded-xl bg-duo-green px-4 py-2 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-50"
+            className="rounded-xl bg-duo-green px-4 py-2 text-sm font-bold text-white transition-[transform,opacity,filter] duration-150 hover:brightness-110 disabled:opacity-50"
           >
             {savingPassword ? 'Updating...' : 'Update Password'}
           </button>
@@ -248,7 +241,7 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={() => setConfirmLeave(true)}
-                className="rounded-xl border border-flame/30 bg-flame/10 px-4 py-2 text-sm font-bold text-flame transition-all hover:bg-flame/20"
+                className="rounded-xl border border-flame/30 bg-flame/10 px-4 py-2 text-sm font-bold text-flame transition-[transform,opacity,background-color] duration-150 hover:bg-flame/20"
               >
                 Leave Household
               </button>
@@ -306,7 +299,7 @@ export default function SettingsPage() {
         </div>
 
         <p className="text-center text-[11px] text-surface-500">Version {APP_VERSION}</p>
-      </motion.section>
+      </section>
     </div>
   )
 }

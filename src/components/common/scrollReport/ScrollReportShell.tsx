@@ -55,7 +55,7 @@ export default function ScrollReportShell({
           <button
             type="button"
             onClick={onClose}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-surface-400 transition-all hover:bg-white/[0.04] hover:text-surface-200"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-surface-400 transition-[background-color,color] duration-150 hover:bg-white/[0.04] hover:text-surface-200"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
@@ -92,7 +92,7 @@ export default function ScrollReportShell({
             type="button"
             onClick={onDownload}
             disabled={downloading}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-purple-400/20 bg-gradient-to-r from-purple-500/20 to-blue-500/20 px-3 py-1.5 text-sm font-medium text-purple-200 transition-all hover:from-purple-500/30 hover:to-blue-500/30 disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-purple-400/20 bg-gradient-to-r from-purple-500/20 to-blue-500/20 px-3 py-1.5 text-sm font-medium text-purple-200 transition-[background-color,opacity] duration-150 hover:from-purple-500/30 hover:to-blue-500/30 disabled:opacity-50"
           >
             {downloading ? (
               <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-purple-400 border-t-transparent" />
