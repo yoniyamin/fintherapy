@@ -6,7 +6,7 @@ import type { EmilSuggestion } from './emilImprovementSuggestions'
 
 interface DemoProps {
   replayKey: number
-  suggestion: AppleSuggestion
+  suggestion: EmilSuggestion
   onReplay: () => void
 }
 
@@ -24,7 +24,17 @@ function appleSuggestionAsEmil(s: AppleSuggestion) {
   }
 }
 
-export function AppleSuggestionDemo({ id, replayKey, suggestion, onReplay }: DemoProps & { id: string }) {
+export function AppleSuggestionDemo({
+  id,
+  replayKey,
+  suggestion,
+  onReplay,
+}: {
+  id: string
+  replayKey: number
+  suggestion: AppleSuggestion
+  onReplay: () => void
+}) {
   const frame = appleSuggestionAsEmil(suggestion)
 
   switch (id) {
