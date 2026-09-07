@@ -32,7 +32,7 @@ export function AnimateSuggestionDemo({
   replayKey,
   suggestion,
   onReplay,
-}: DemoProps & { id: string; suggestion: AnimateSuggestion }) {
+}: Omit<DemoProps, 'suggestion'> & { id: string; suggestion: AnimateSuggestion }) {
   const frame = animateSuggestionAsEmil(suggestion)
 
   switch (id) {
