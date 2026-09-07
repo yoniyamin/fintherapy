@@ -24,6 +24,23 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      get_session_statistics_summary: {
+        Args: Record<string, never>
+        Returns: {
+          total_sessions: number
+          total_duration_seconds: number
+          section_totals: Record<string, number>
+          section_session_counts: Record<string, number>
+          auth_action_counts: Record<string, number>
+          recent_sessions: {
+            id: string
+            created_at: string
+            auth_action: string
+            section_seconds: Record<string, number>
+            duration_seconds: number
+          }[]
+        }
+      }
       upsert_session_statistics: {
         Args: {
           p_id: string

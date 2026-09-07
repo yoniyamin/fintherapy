@@ -14,6 +14,7 @@ import EmilImprovementsPage from '../components/dev/EmilImprovementsPage'
 import GptTasteImprovementsPage from '../components/dev/GptTasteImprovementsPage'
 import HighEndImprovementsPage from '../components/dev/HighEndImprovementsPage'
 import ImagegenMobileImprovementsPage from '../components/dev/ImagegenMobileImprovementsPage'
+import UsageStatsPage from '../components/dev/UsageStatsPage'
 import CategoryPickerTestPage from '../components/dev/CategoryPickerTestPage'
 import DevIndexPage from '../components/dev/DevIndexPage'
 import AppShell from '../components/layout/AppShell'
@@ -112,6 +113,13 @@ export const router = createBrowserRouter([
         element: (
           <AuthGuard requireHousehold={false}>
             <ImagegenMobileImprovementsPage />
+          </AuthGuard>
+        ),
+      }, {
+        path: '/dev/usage-stats',
+        element: (
+          <AuthGuard requireHousehold={false}>
+            <UsageStatsPage />
           </AuthGuard>
         ),
       }]

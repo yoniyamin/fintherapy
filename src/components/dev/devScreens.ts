@@ -19,4 +19,9 @@ export const DEV_SCREENS: DevScreen[] = [
     description: 'Classify sandbox with SwipeCard, category picker, and editor',
     inAppShell: true,
   },
+  {
+    path: '/dev/usage-stats',
+    title: 'Usage statistics',
+    description: 'Aggregate session stats — route time, analysis breakdown, never-used sections',
+  },
 ]
