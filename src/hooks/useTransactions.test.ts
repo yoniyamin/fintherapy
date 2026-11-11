@@ -89,6 +89,117 @@ describe('useTransactions batch RPCs', () => {
     })
   })
 
+  describe('classifyTransactionsSplit', () => {
+    const assignments = [
+      { txId: 'a', category: 'food' },
+      { txId: 'b', category: 'transport' },
+    ]
+
+    it('sends one JSON assignment per transaction and returns the ids the server updated', async () => {
+      // Arrange
+      mockRpc.mockResolvedValue({ data: ['a', 'b'], error: null })
+      const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+
+      // Act
+      let response: { error: unknown; updatedIds: string[] } | undefined
+      await act(async () => {
+        response = await result.current.classifyTransactionsSplit(assignments)
+      })
+
+      // Assert
+      expect(mockRpc).toHaveBeenCalledWith('classify_transactions_split', {
+        p_household_id: HOUSEHOLD_ID,
+        p_assignments: [
+          { tx_id: 'a', category: 'food' },
+          { tx_id: 'b', category: 'transport' },
+        ],
+        p_reclassify: false,
+      })
+      expect(response!.error).toBeNull()
+      expect(response!.updatedIds).toEqual(['a', 'b'])
+    })
+
+    it('passes the reclassify flag for Recent-panel edits', async () => {
+      // Arrange
+      mockRpc.mockResolvedValue({ data: ['a', 'b'], error: null })
+      const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+
+      // Act
+      await act(async () => {
+        await result.current.classifyTransactionsSplit(assignments, { reclassify: true })
+      })
+
+      // Assert
+      expect(mockRpc).toHaveBeenCalledWith(
+        'classify_transactions_split',
+        expect.objectContaining({ p_reclassify: true }),
+      )
+    })
+
+    it('returns only the updated ids when another member already classified some rows, without an error', async () => {
+      // Arrange
+      mockRpc.mockResolvedValue({ data: ['a'], error: null })
+      const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+
+      // Act
+      let response: { error: unknown; updatedIds: string[] } | undefined
+      await act(async () => {
+        response = await result.current.classifyTransactionsSplit(assignments)
+      })
+
+      // Assert
+      expect(response!.error).toBeNull()
+      expect(response!.updatedIds).toEqual(['a'])
+    })
+
+    it('returns an empty list when the RPC returns null data', async () => {
+      // Arrange
+      mockRpc.mockResolvedValue({ data: null, error: null })
+      const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+
+      // Act
+      let response: { error: unknown; updatedIds: string[] } | undefined
+      await act(async () => {
+        response = await result.current.classifyTransactionsSplit(assignments)
+      })
+
+      // Assert
+      expect(response!.updatedIds).toEqual([])
+    })
+
+    it('returns the RPC error and no updated ids when the call fails', async () => {
+      // Arrange
+      const rpcError = { message: 'boom' }
+      mockRpc.mockResolvedValue({ data: null, error: rpcError })
+      const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+
+      // Act
+      let response: { error: unknown; updatedIds: string[] } | undefined
+      await act(async () => {
+        response = await result.current.classifyTransactionsSplit(assignments)
+      })
+
+      // Assert
+      expect(response!.error).toBe(rpcError)
+      expect(response!.updatedIds).toEqual([])
+    })
+
+    it('returns an error without calling the RPC when there is no household', async () => {
+      // Arrange
+      const { result } = renderHook(() => useTransactions(null))
+
+      // Act
+      let response: { error: unknown; updatedIds: string[] } | undefined
+      await act(async () => {
+        response = await result.current.classifyTransactionsSplit(assignments)
+      })
+
+      // Assert
+      expect(response!.error).toBeInstanceOf(Error)
+      expect(mockRpc).not.toHaveBeenCalled()
+    })
+  })
+
   describe('flagTransactionsBatch', () => {
     it('returns updatedCount from RPC data', async () => {
       // Arrange

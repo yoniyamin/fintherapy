@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { TxCategories } from '../lib/groupAssignments'
 import type { Transaction } from '../types/database'
 
 export interface MerchantGroup {
@@ -29,6 +30,10 @@ export interface SessionAction {
   count: number
   xpEarned: number
   timestamp: number
+  /** Per-transaction categories when the stack was classified row by row (mixed split). */
+  txCategories?: TxCategories
+  /** True when only part of the stack was saved and the rest stayed in the deck (stack not completed). */
+  partial?: boolean
 }
 
 interface ClassificationState {
@@ -48,6 +53,8 @@ interface ClassificationState {
   /** Rebuild groups from updated txns without resetting session counters. */
   refreshDeck: (txns: Transaction[]) => void
   advance: (txCount: number) => void
+  /** Count transactions saved from a stack whose remaining rows stay in the deck (stack not completed). */
+  recordPartialClassified: (txCount: number) => void
   addSessionXp: (amount: number) => void
   flag: () => void
   /** Move current group to end of queue (e.g. skip in No idea deck). */
@@ -64,7 +71,12 @@ interface ClassificationState {
   /** Remove an action from history and roll back the corresponding counter (used on revert-to-pending). */
   rollbackAction: (actionId: number) => void
   /** Replace an action's kind/category in history (used when reclassifying / marking transfer from Recent). */
-  updateActionInHistory: (actionId: number, kind: SessionActionKind, category: string | null) => void
+  updateActionInHistory: (
+    actionId: number,
+    kind: SessionActionKind,
+    category: string | null,
+    txCategories?: TxCategories,
+  ) => void
 
   /** @deprecated kept for compatibility */
   transactions: Transaction[]
@@ -166,6 +178,13 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
       activeGroup: groups[nextIndex] ?? null,
       activeTransaction: groups[nextIndex]?.transactions[0] ?? null,
     })
+  },
+
+  recordPartialClassified: (txCount: number) => {
+    set((state) => ({
+      classifiedTxCount: state.classifiedTxCount + txCount,
+      showCategoryPicker: false,
+    }))
   },
 
   addSessionXp: (amount: number) => {
@@ -271,7 +290,7 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
       switch (target.kind) {
         case 'classified':
         case 'auto-confirmed':
-          patch.completedCount = Math.max(0, state.completedCount - 1)
+          if (!target.partial) patch.completedCount = Math.max(0, state.completedCount - 1)
           patch.classifiedTxCount = Math.max(0, state.classifiedTxCount - target.count)
           break
         case 'flagged':
@@ -285,10 +304,10 @@ export const useClassificationStore = create<ClassificationState>((set, get) => 
     })
   },
 
-  updateActionInHistory: (actionId, kind, category) => {
+  updateActionInHistory: (actionId, kind, category, txCategories) => {
     set((state) => ({
       sessionHistory: state.sessionHistory.map((h) =>
-        h.id === actionId ? { ...h, kind, category, timestamp: Date.now() } : h,
+        h.id === actionId ? { ...h, kind, category, txCategories, timestamp: Date.now() } : h,
       ),
     }))
   },

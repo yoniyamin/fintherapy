@@ -25,6 +25,20 @@ import { useAuth } from '../../hooks/useAuth'
 import ClassifyScopeBar from './ClassifyScopeBar'
 import SwipeCard from './SwipeCard'
 import CategoryPicker from './CategoryPicker'
+import GroupedTransactionsModal from './GroupedTransactionsModal'
+import ConfirmDialog from '../common/ConfirmDialog'
+import {
+  buildInitialAssignments,
+  distinctCategoryCount,
+  isMixedCategories,
+  partitionByAssignment,
+  restrictAssignments,
+  toSplitAssignments,
+  toTxCategories,
+  uniformCategory,
+  type CategoryAssignments,
+  type TxCategories,
+} from '../../lib/groupAssignments'
 import CategoryEditorModal from '../settings/CategoryEditorModal'
 import ProgressBar from '../common/ProgressBar'
 import { AccountCardEditModal, type AccountCardEditDraft } from '../common/AccountCardEditModal'
@@ -160,6 +174,39 @@ function formatRecentRowWhen(tsMs: number): string {
 type RecentPanelEntry = {
   origin: 'session' | 'history'
   action: SessionAction
+}
+
+type GroupModalTarget =
+  | { source: 'deck'; group: MerchantGroup }
+  | { source: 'recent'; action: SessionAction; origin: 'session' | 'history' }
+
+type SplitGroup = Pick<MerchantGroup, 'merchantRaw' | 'merchantClean' | 'transactions' | 'totalAmount' | 'count'>
+
+/** Builds the modal's title, rows, and starting categories from a deck stack or a Recent entry. */
+function resolveGroupModalData(target: GroupModalTarget | null) {
+  if (!target) return null
+  if (target.source === 'deck') {
+    const { group } = target
+    return {
+      merchantLabel: group.merchantClean ?? group.merchantRaw,
+      transactions: group.transactions,
+      initialAssignments: buildInitialAssignments(group.transactions, group.predictedCategory),
+      allowLeaveInDeck: true,
+    }
+  }
+  const { action } = target
+  return {
+    merchantLabel: action.merchantClean ?? action.merchantRaw,
+    transactions: action.txSnapshots,
+    initialAssignments: buildInitialAssignments(action.txSnapshots, action.category, action.txCategories),
+    allowLeaveInDeck: false,
+  }
+}
+
+/** Sentence shown in the confirm dialog before undoing a stack that was split across categories. */
+function mixedRevertMessage(action: SessionAction): string {
+  const name = action.merchantClean ?? action.merchantRaw
+  return `"${name}" was split across ${distinctCategoryCount(action.txCategories)} categories. Undoing sends all ${action.count} transactions back to the deck and discards the category you chose for each one.`
 }
 
 function MonthCaughtUpPanel({
@@ -347,6 +394,7 @@ export default function SwipeDeck() {
     removeTransactions, addPendingTransactions, refetchFresh,
     detectRefundsAndRefresh,
     classifyTransactionsBatch,
+    classifyTransactionsSplit,
     flagTransactionsBatch,
     markTransferBatch,
     reclassifyTransactionsBatch,
@@ -390,6 +438,14 @@ export default function SwipeDeck() {
   const monthAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [deckVerifyState, setDeckVerifyState] = useState<'idle' | 'verifying' | 'confirmed'>('idle')
   const [actionError, setActionError] = useState<string | null>(null)
+  const [actionNotice, setActionNotice] = useState<string | null>(null)
+  const [groupModalTarget, setGroupModalTarget] = useState<GroupModalTarget | null>(null)
+  const [groupSaving, setGroupSaving] = useState(false)
+  const [pendingMixedRevert, setPendingMixedRevert] = useState<{
+    action: SessionAction
+    origin: 'session' | 'history'
+  } | null>(null)
+  const groupModalData = useMemo(() => resolveGroupModalData(groupModalTarget), [groupModalTarget])
   const recentDragControls = useDragControls()
   const [flaggedFootnoteTxns, setFlaggedFootnoteTxns] = useState<Transaction[]>([])
   const [accountAliases, setAccountAliases] = useState<Map<string, string>>(new Map())
@@ -437,6 +493,19 @@ export default function SwipeDeck() {
     },
     [onClassifySuccess, profile?.total_xp, refreshProfile],
   )
+
+  /** Floating "+XP" and the "N transactions classified!" toast for stacks of more than one. */
+  const showXpFeedback = useCallback((xpEarned: number, txCount: number) => {
+    xpCounter.current += 1
+    const floatId = xpCounter.current
+    setXpFloats((prev) => [...prev, { id: floatId, amount: xpEarned }])
+    setTimeout(() => setXpFloats((prev) => prev.filter((f) => f.id !== floatId)), 900)
+
+    if (txCount > 1) {
+      setGroupToasts((prev) => [...prev, { id: floatId, count: txCount }])
+      setTimeout(() => setGroupToasts((prev) => prev.filter((t) => t.id !== floatId)), 1300)
+    }
+  }, [])
 
   const [recentPanelOpen, setRecentPanelOpen] = useState(false)
   const recentScrollPullRef = useRef(0)
@@ -1108,10 +1177,11 @@ export default function SwipeDeck() {
 
   const recordSessionAction = useCallback(
     (
-      group: { merchantRaw: string; merchantClean: string | null; transactions: Transaction[]; totalAmount: number; count: number },
+      group: SplitGroup,
       kind: SessionActionKind,
       category: string | null,
       xpEarned = 0,
+      extra: { txCategories?: TxCategories; partial?: boolean } = {},
     ): SessionAction => {
       return store.recordAction({
         kind,
@@ -1122,6 +1192,7 @@ export default function SwipeDeck() {
         totalAmount: group.totalAmount,
         count: group.count,
         xpEarned,
+        ...extra,
       })
     },
     [store],
@@ -1275,18 +1346,161 @@ export default function SwipeDeck() {
     showUndoToast(action)
     await awardXp(xpEarned)
     celebrateClassifySuccess(xpEarned)
-
-    xpCounter.current += 1
-    const floatId = xpCounter.current
-    setXpFloats(prev => [...prev, { id: floatId, amount: xpEarned }])
-    setTimeout(() => setXpFloats(prev => prev.filter(f => f.id !== floatId)), 900)
-
-    if (txCount > 1) {
-      const toastId = floatId
-      setGroupToasts(prev => [...prev, { id: toastId, count: txCount }])
-      setTimeout(() => setGroupToasts(prev => prev.filter(t => t.id !== toastId)), 1300)
-    }
+    showXpFeedback(xpEarned, txCount)
     invalidateFlaggedCount()
+  }
+
+  const handleOpenGroupModal = () => {
+    const group = store.activeGroup
+    if (group) setGroupModalTarget({ source: 'deck', group })
+  }
+
+  const handleOpenRecentGroupModal = (action: SessionAction, origin: 'session' | 'history') => {
+    setGroupModalTarget({ source: 'recent', action, origin })
+  }
+
+  /** Saves the per-transaction categories chosen in the modal; keeps the modal open when the save fails. */
+  const handleGroupSave = async (assignments: CategoryAssignments) => {
+    const target = groupModalTarget
+    if (!target || !user || groupSaving) return
+    setGroupSaving(true)
+    let saved = false
+    try {
+      saved =
+        target.source === 'deck'
+          ? await saveDeckSplit(target.group, assignments)
+          : await saveRecentSplit(target.action, target.origin, assignments)
+    } catch {
+      showSplitSaveFailed()
+    }
+    setGroupSaving(false)
+    if (saved) setGroupModalTarget(null)
+  }
+
+  /** Classifies the assigned rows of the active stack; unassigned rows stay in the deck as a smaller stack. */
+  const saveDeckSplit = async (group: MerchantGroup, assignments: CategoryAssignments): Promise<boolean> => {
+    const { assigned, left } = partitionByAssignment(group.transactions, assignments)
+    const requested = restrictAssignments(assigned, assignments)
+    const { error, updatedIds } = await classifyTransactionsSplit(toSplitAssignments(requested))
+    if (error) {
+      showSplitSaveFailed()
+      return false
+    }
+
+    const updated = new Set(updatedIds)
+    const saved = assigned.filter((t) => updated.has(t.id))
+    removeTransactions(updatedIds)
+    if (saved.length > 0) {
+      const sharedCategory = uniformCategory(restrictAssignments(group.transactions, assignments))
+      if (sharedCategory) learnMerchant(group.merchantRaw, sharedCategory)
+      await completeDeckSplit(group, saved, left.length > 0, assignments)
+    }
+    await reportSkippedRows(assigned.length - saved.length)
+    return true
+  }
+
+  /** Records XP, history, and undo for the rows that were saved from the active stack. */
+  const completeDeckSplit = async (
+    group: MerchantGroup,
+    saved: Transaction[],
+    stackStillOpen: boolean,
+    assignments: CategoryAssignments,
+  ) => {
+    const txCategories = toTxCategories(restrictAssignments(saved, assignments))
+    const mixed = isMixedCategories(txCategories)
+    const xpEarned = saved.length * XP_VALUES.CLASSIFY_MANUAL
+    const savedGroup: SplitGroup = {
+      merchantRaw: group.merchantRaw,
+      merchantClean: group.merchantClean,
+      transactions: saved,
+      totalAmount: saved.reduce((sum, t) => sum + Number(t.amount), 0),
+      count: saved.length,
+    }
+
+    if (stackStillOpen) store.recordPartialClassified(saved.length)
+    else store.advance(saved.length)
+    store.addSessionXp(xpEarned)
+    const action = recordSessionAction(
+      savedGroup,
+      'classified',
+      mixed ? null : Object.values(txCategories)[0]!,
+      xpEarned,
+      { txCategories: mixed ? txCategories : undefined, partial: stackStillOpen },
+    )
+    showUndoToast(action)
+    await awardXp(xpEarned)
+    celebrateClassifySuccess(xpEarned)
+    showXpFeedback(xpEarned, saved.length)
+    invalidateFlaggedCount()
+  }
+
+  /** Re-saves a Recent entry with new per-transaction categories (no status guard, like reclassify). */
+  const saveRecentSplit = async (
+    action: SessionAction,
+    origin: 'session' | 'history',
+    assignments: CategoryAssignments,
+  ): Promise<boolean> => {
+    const requested = restrictAssignments(action.txSnapshots, assignments)
+    const { error, updatedIds } = await classifyTransactionsSplit(toSplitAssignments(requested), {
+      reclassify: true,
+    })
+    if (error) {
+      showSplitSaveFailed()
+      return false
+    }
+
+    if (updatedIds.length > 0) {
+      const updated = new Set(updatedIds)
+      const savedAssignments = restrictAssignments(
+        action.txSnapshots.filter((t) => updated.has(t.id)),
+        assignments,
+      )
+      const sharedCategory = uniformCategory(savedAssignments)
+      if (sharedCategory) learnMerchant(action.merchantRaw, sharedCategory)
+      if (origin === 'session') {
+        store.updateActionInHistory(
+          action.id,
+          'classified',
+          sharedCategory,
+          sharedCategory ? undefined : toTxCategories(savedAssignments),
+        )
+      } else {
+        await loadHistoryRecentActions()
+      }
+      invalidateFlaggedCount()
+    }
+    await reportSkippedRows(action.txSnapshots.length - updatedIds.length)
+    return true
+  }
+
+  /** Split saves are atomic, so a failure means nothing was changed. */
+  const showSplitSaveFailed = () => {
+    setActionError('Could not save — nothing was changed. Try again.')
+    setTimeout(() => setActionError(null), 5000)
+  }
+
+  /** Tells the user which rows another household member already classified, then resyncs with the server. */
+  const reportSkippedRows = async (skippedCount: number) => {
+    if (skippedCount <= 0) return
+    const verb = skippedCount === 1 ? 'transaction was' : 'transactions were'
+    setActionNotice(`${skippedCount} ${verb} already classified by someone else — skipped.`)
+    setTimeout(() => setActionNotice(null), 6000)
+    await refetchFresh({ silent: true })
+  }
+
+  /** Asks for confirmation before undoing a stack that was split across several categories. */
+  const handleRequestRevert = (action: SessionAction, origin: 'session' | 'history') => {
+    if (isMixedCategories(action.txCategories)) {
+      setPendingMixedRevert({ action, origin })
+      return
+    }
+    void handleRevertAction(action, origin)
+  }
+
+  const handleConfirmMixedRevert = () => {
+    const pending = pendingMixedRevert
+    setPendingMixedRevert(null)
+    if (pending) void handleRevertAction(pending.action, pending.origin)
   }
 
   /** Server-side undo: clear category/status back to pending, then drop the row
@@ -1875,6 +2089,7 @@ export default function SwipeDeck() {
                       showAccountPerLine={accountFilter == null}
                       notePreview={notePreviewForGroup(group.transactions)}
                       onOpenNote={i === 0 ? openNoteModal : undefined}
+                      onOpenGroup={i === 0 && group.count > 1 ? handleOpenGroupModal : undefined}
                       categories={pickerCategories}
                       pickerCancelTick={i === 0 ? pickerCancelTick : undefined}
                       billingMonthLabel={
@@ -1914,6 +2129,29 @@ export default function SwipeDeck() {
         currentCategory={categoryPickerContext.currentCategory}
         merchantRaw={categoryPickerContext.merchantRaw}
         merchantClean={categoryPickerContext.merchantClean}
+      />
+
+      <GroupedTransactionsModal
+        open={groupModalData != null}
+        merchantLabel={groupModalData?.merchantLabel ?? ''}
+        transactions={groupModalData?.transactions ?? []}
+        initialAssignments={groupModalData?.initialAssignments ?? {}}
+        categories={pickerCategories}
+        allowLeaveInDeck={groupModalData?.allowLeaveInDeck ?? true}
+        accountAliases={accountAliases}
+        saving={groupSaving}
+        onSave={(assignments) => void handleGroupSave(assignments)}
+        onClose={() => setGroupModalTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingMixedRevert != null}
+        title="Undo split classification?"
+        message={pendingMixedRevert ? mixedRevertMessage(pendingMixedRevert.action) : ''}
+        confirmLabel="Undo and send back"
+        cancelLabel="Keep split"
+        onConfirm={handleConfirmMixedRevert}
+        onCancel={() => setPendingMixedRevert(null)}
       />
 
       {typeof document !== 'undefined' &&
@@ -2006,9 +2244,11 @@ export default function SwipeDeck() {
                       ? 'Marked as No idea'
                       : undoToast.kind === 'transfer'
                         ? 'Marked as transfer'
-                        : `Classified as ${
-                            resolvedCategories.find((c) => c.id === undoToast.category)?.label ?? undoToast.category
-                          }`}
+                        : isMixedCategories(undoToast.txCategories)
+                          ? `Split across ${distinctCategoryCount(undoToast.txCategories)} categories`
+                          : `Classified as ${
+                              resolvedCategories.find((c) => c.id === undoToast.category)?.label ?? undoToast.category
+                            }`}
                     <span className="ml-1 text-surface-500">· {undoToast.merchantClean ?? undoToast.merchantRaw}</span>
                   </span>
                   <button
@@ -2016,7 +2256,7 @@ export default function SwipeDeck() {
                     onClick={() => {
                       const a = undoToast
                       if (!a) return
-                      void handleRevertAction(a, 'session')
+                      handleRequestRevert(a, 'session')
                     }}
                     className="rounded-lg border border-duo-green/40 bg-duo-green/15 px-2.5 py-1 text-xs font-bold text-duo-green transition-colors hover:bg-duo-green/25"
                   >
@@ -2198,7 +2438,9 @@ export default function SwipeDeck() {
                             ? { label: 'No idea', cls: 'bg-flame/15 text-flame' }
                             : h.kind === 'transfer'
                               ? { label: 'Transfer', cls: 'bg-ice/15 text-ice' }
-                              : { label: catLabel ?? 'Classified', cls: 'bg-duo-green/15 text-duo-green' }
+                              : isMixedCategories(h.txCategories)
+                                ? { label: `Mixed · ${distinctCategoryCount(h.txCategories)} categories`, cls: 'bg-gem/15 text-gem' }
+                                : { label: catLabel ?? 'Classified', cls: 'bg-duo-green/15 text-duo-green' }
                         const whenLabel = formatRecentRowWhen(h.timestamp)
                         return (
                           <li
@@ -2241,6 +2483,15 @@ export default function SwipeDeck() {
                               >
                                 Change category
                               </button>
+                              {h.count > 1 && (h.kind === 'classified' || h.kind === 'auto-confirmed') && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenRecentGroupModal(h, entry.origin)}
+                                  className="rounded-lg border border-gem/30 bg-gem/10 px-2.5 py-1 text-[11px] font-semibold text-gem hover:bg-gem/15"
+                                >
+                                  Edit individually
+                                </button>
+                              )}
                               {h.kind !== 'transfer' && (
                                 <button
                                   type="button"
@@ -2261,7 +2512,7 @@ export default function SwipeDeck() {
                               )}
                               <button
                                 type="button"
-                                onClick={() => void handleRevertAction(h, entry.origin)}
+                                onClick={() => handleRequestRevert(h, entry.origin)}
                                 className="ml-auto rounded-lg border border-white/[0.08] bg-surface-900/80 px-2.5 py-1 text-[11px] font-semibold text-surface-300 hover:bg-surface-800"
                               >
                                 Back to deck
@@ -2294,6 +2545,7 @@ export default function SwipeDeck() {
           <AnimatePresence>
             {actionError && (
               <motion.div
+                key="action-error"
                 className="fixed inset-x-0 z-[210] flex justify-center px-4"
                 style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5.5rem)' }}
                 initial={{ y: 24, opacity: 0 }}
@@ -2302,6 +2554,20 @@ export default function SwipeDeck() {
               >
                 <div className="max-w-sm rounded-2xl border border-flame/40 bg-surface-950/95 px-4 py-2.5 text-center text-xs font-semibold text-flame shadow-lg backdrop-blur-xl">
                   {actionError}
+                </div>
+              </motion.div>
+            )}
+            {actionNotice && (
+              <motion.div
+                key="action-notice"
+                className="fixed inset-x-0 z-[210] flex justify-center px-4"
+                style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5.5rem)' }}
+                initial={{ y: 24, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 24, opacity: 0 }}
+              >
+                <div className="max-w-sm rounded-2xl border border-gem/40 bg-surface-950/95 px-4 py-2.5 text-center text-xs font-semibold text-gem shadow-lg backdrop-blur-xl">
+                  {actionNotice}
                 </div>
               </motion.div>
             )}

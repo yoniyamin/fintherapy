@@ -236,6 +236,94 @@ describe('classificationStore', () => {
     })
   })
 
+  describe('partial split classification', () => {
+    it('recordPartialClassified counts transactions without completing the stack', () => {
+      // Arrange
+      useClassificationStore.getState().load([makeTx(), makeTx({ merchant_raw: 'Amazon' })])
+
+      // Act
+      useClassificationStore.getState().recordPartialClassified(2)
+
+      // Assert
+      const state = useClassificationStore.getState()
+      expect(state.classifiedTxCount).toBe(2)
+      expect(state.completedCount).toBe(0)
+      expect(state.currentIndex).toBe(0)
+    })
+
+    it('rolling back a partial action keeps completedCount untouched', () => {
+      // Arrange
+      useClassificationStore.getState().load([makeTx()])
+      useClassificationStore.getState().advance(1)
+      useClassificationStore.getState().recordPartialClassified(2)
+      const action = useClassificationStore.getState().recordAction({
+        kind: 'classified',
+        category: 'food',
+        merchantRaw: 'Starbucks',
+        merchantClean: null,
+        txSnapshots: [],
+        totalAmount: 11,
+        count: 2,
+        xpEarned: 0,
+        partial: true,
+      })
+
+      // Act
+      useClassificationStore.getState().rollbackAction(action.id)
+
+      // Assert
+      const state = useClassificationStore.getState()
+      expect(state.completedCount).toBe(1)
+      expect(state.classifiedTxCount).toBe(1)
+    })
+
+    it('rolling back a full action still decrements completedCount', () => {
+      // Arrange
+      useClassificationStore.getState().load([makeTx()])
+      useClassificationStore.getState().advance(2)
+      const action = useClassificationStore.getState().recordAction({
+        kind: 'classified',
+        category: null,
+        merchantRaw: 'Starbucks',
+        merchantClean: null,
+        txSnapshots: [],
+        totalAmount: 11,
+        count: 2,
+        xpEarned: 0,
+        txCategories: { a: 'food', b: 'transport' },
+      })
+
+      // Act
+      useClassificationStore.getState().rollbackAction(action.id)
+
+      // Assert
+      expect(useClassificationStore.getState().completedCount).toBe(0)
+    })
+
+    it('updateActionInHistory replaces per-row categories so a re-saved action can stop being mixed', () => {
+      // Arrange
+      const action = useClassificationStore.getState().recordAction({
+        kind: 'classified',
+        category: null,
+        merchantRaw: 'Starbucks',
+        merchantClean: null,
+        txSnapshots: [],
+        totalAmount: 11,
+        count: 2,
+        xpEarned: 0,
+        txCategories: { a: 'food', b: 'transport' },
+      })
+
+      // Act
+      useClassificationStore.getState().updateActionInHistory(action.id, 'classified', 'food')
+
+      // Assert
+      const updated = useClassificationStore.getState().sessionHistory[0]!
+      expect(updated.category).toBe('food')
+      expect(updated.txCategories).toBeUndefined()
+    })
+  })
+
   describe('reset', () => {
     it('clears all state including sessionXpEarned', () => {
       // Arrange

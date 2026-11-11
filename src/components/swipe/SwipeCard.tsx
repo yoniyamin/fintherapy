@@ -27,6 +27,8 @@ interface SwipeCardProps {
   /** Shown when any transaction has a note (top card). */
   notePreview?: string | null
   onOpenNote?: () => void
+  /** Opens the per-transaction review sheet for stacks with more than one transaction. */
+  onOpenGroup?: () => void
   categories: readonly CategoryDef[]
   /** Increments when the picker is dismissed without a selection. The top card
    *  springs back to center so a swipe-right that opened the picker can be undone. */
@@ -56,6 +58,7 @@ export default function SwipeCard({
   showAccountPerLine = false,
   notePreview = null,
   onOpenNote,
+  onOpenGroup,
   categories,
   pickerCancelTick,
   billingMonthLabel = null,
@@ -380,6 +383,19 @@ export default function SwipeCard({
                 {group.count >= 3 ? '🎯 Smart Stack · ' : ''}
                 {group.count} transactions
               </span>
+              {isTopCard && onOpenGroup && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenGroup()
+                  }}
+                  className="rounded-full bg-gem/20 px-2 py-0.5 text-[11px] font-bold text-gem transition-transform duration-100 hover:bg-gem/30 active:scale-95"
+                  title="Review and classify each transaction separately"
+                >
+                  Review ›
+                </button>
+              )}
             </motion.div>
           )}
 

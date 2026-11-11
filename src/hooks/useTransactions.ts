@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import type { SplitAssignment } from '../lib/groupAssignments'
 import { supabase } from '../lib/supabase'
 import {
   fetchPendingTransactionsShared,
@@ -204,6 +205,20 @@ export function useTransactions(
       p_category: category,
     })
     return { error, updatedCount: (data as number) ?? 0 }
+  }
+
+  /** Saves a different category per transaction in one atomic call; returns the ids the server actually updated. */
+  const classifyTransactionsSplit = async (
+    assignments: SplitAssignment[],
+    options: { reclassify?: boolean } = {},
+  ) => {
+    if (!householdId) return { error: new Error('No household'), updatedIds: [] as string[] }
+    const { data, error } = await supabase.rpc('classify_transactions_split', {
+      p_household_id: householdId,
+      p_assignments: assignments.map((a) => ({ tx_id: a.txId, category: a.category })),
+      p_reclassify: options.reclassify ?? false,
+    })
+    return { error, updatedIds: (data as string[] | null) ?? [] }
   }
 
   const flagTransaction = async (txId: string) => {
@@ -635,6 +650,7 @@ export function useTransactions(
     addPendingTransactions,
     classifyTransaction,
     classifyTransactionsBatch,
+    classifyTransactionsSplit,
     flagTransaction,
     flagTransactionsBatch,
     setTransactionsUserNote,
