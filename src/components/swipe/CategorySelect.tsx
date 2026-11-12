@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { buildCategoryHierarchy } from '../../lib/categoryHierarchy'
+import { resolveCategoryTextIcon } from '../../lib/categoryIconAssets'
 import type { CategoryDef } from '../../lib/constants'
 
 interface CategorySelectProps {
@@ -35,16 +36,16 @@ export default function CategorySelect({
       {groups.map(({ parent, children }) =>
         children.length === 0 ? (
           <option key={parent.id} value={parent.id}>
-            {parent.icon} {parent.label}
+            {resolveCategoryTextIcon(parent.id, parent.icon)} {parent.label}
           </option>
         ) : (
           <optgroup key={parent.id} label={parent.label}>
             <option value={parent.id}>
-              {parent.icon} {parent.label}
+              {resolveCategoryTextIcon(parent.id, parent.icon)} {parent.label}
             </option>
             {children.map((child) => (
               <option key={child.id} value={child.id}>
-                {child.icon} {child.label}
+                {resolveCategoryTextIcon(child.id, child.icon)} {child.label}
               </option>
             ))}
           </optgroup>

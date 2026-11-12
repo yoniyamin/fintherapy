@@ -1,5 +1,5 @@
 import { DEFAULT_CATEGORIES } from './constants'
-import { fluentEmojiKey, isFluentEmojiToken, resolveFluentEmojiUrl } from './fluentAnimatedEmojis'
+import { fluentEmojiKey, isFluentEmojiToken, resolveFluentEmojiGlyph, resolveFluentEmojiUrl } from './fluentAnimatedEmojis'
 import leisureIcon from '../assets/Categories/doodle-color-157-sun-lounger-hover-shift.gif'
 import healthIcon from '../assets/Categories/wired-flat-1277-antibacterial-spray-disinfection-hover-pinch.gif'
 import diningIcon from '../assets/Categories/wired-flat-13-pizza-hover-rotate.gif'
@@ -82,6 +82,23 @@ export function resolveCategoryIconSrc(categoryId: string, icon: string): string
     return CATEGORY_ICON_ASSETS[tokenKey]
   }
   return CATEGORY_ICON_ASSETS[categoryId]
+}
+
+const TEXT_ICON_FALLBACK = '📦'
+
+/** Resolves a plain-text glyph for a category icon, for places that cannot render images (e.g. native select options). */
+export function resolveCategoryTextIcon(categoryId: string, icon: string): string {
+  const fKey = fluentEmojiKey(icon)
+  if (fKey) return resolveFluentEmojiGlyph(fKey) ?? TEXT_ICON_FALLBACK
+
+  if (isGifIconToken(icon)) {
+    const gifKey = gifIconKey(icon)
+    const byToken = DEFAULT_CATEGORIES.find((c) => c.id === gifKey)
+    const byId = DEFAULT_CATEGORIES.find((c) => c.id === categoryId)
+    return byToken?.icon ?? byId?.icon ?? TEXT_ICON_FALLBACK
+  }
+
+  return icon
 }
 
 export { isFluentEmojiToken }

@@ -8,6 +8,7 @@ import {
   gifIconKey,
   isFluentEmojiToken,
   isGifIconToken,
+  resolveCategoryTextIcon,
   toGifIconToken,
 } from '../../lib/categoryIconAssets'
 import {
@@ -547,7 +548,7 @@ export default function CategoryEditorModal({ open, onClose, config }: Props) {
                             c.id !== NO_IDEA_CATEGORY_ID
                           )
                           .map((c) => (
-                            <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
+                            <option key={c.id} value={c.id}>{resolveCategoryTextIcon(c.id, c.icon)} {c.label}</option>
                           ))}
                       </select>
                       <p className="mt-1 text-[10px] text-surface-500">

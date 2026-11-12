@@ -182,3 +182,8 @@ export function resolveFluentEmojiUrl(key: string): string | undefined {
   if (!entry) return undefined
   return buildFluentEmojiUrl(entry.folder)
 }
+
+/** Resolves a fluent emoji key to its plain unicode glyph, or undefined when the key is not in the catalog. */
+export function resolveFluentEmojiGlyph(key: string): string | undefined {
+  return FLUENT_EMOJI_BY_KEY.get(key)?.glyph
+}

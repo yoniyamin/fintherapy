@@ -5,6 +5,7 @@ import type { BudgetChangeLogEntry, BudgetSettings, CategoryBudget, UpsertBudget
 import { buildBudgetSnapshot } from '../../hooks/useCategoryBudgets'
 import type { SpendingFrequency } from '../../lib/constants'
 import { formatCurrency } from '../../lib/formatCurrency'
+import CategoryIcon from '../common/CategoryIcon'
 import { buildDraftRows, computeSmartReductions, deltaLabel, sliderBounds, type DraftRow, type SmartReductionResult } from './budgetEditorUtils'
 import type { CategorySummary } from '../../hooks/useReveal'
 
@@ -98,7 +99,7 @@ function BudgetSliderRow({
   return (
     <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 pt-3 pb-2">
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-sm">{row.icon}</span>
+        <CategoryIcon categoryId={row.category_id} emoji={row.icon} size="sm" />
         <span className="flex-1 truncate text-xs font-medium text-surface-200">{row.label}</span>
         {isAnnual && <span className="shrink-0 rounded bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-300">Annual</span>}
         {editingValue !== null ? (
@@ -897,7 +898,10 @@ export default function BudgetEditorModal({
                       <div className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded-lg bg-white/[0.03] px-3 py-2">
                         {confirmAction.result.reductions.map(r => (
                           <div key={r.category_id} className="flex items-center justify-between text-[10px]">
-                            <span className="text-surface-400 truncate">{r.icon} {r.label}</span>
+                            <span className="flex min-w-0 items-center gap-1 text-surface-400">
+                              <CategoryIcon categoryId={r.category_id} emoji={r.icon} size="sm" />
+                              <span className="truncate">{r.label}</span>
+                            </span>
                             <span className="tabular-nums text-surface-300 shrink-0 ml-2">
                               {formatCurrency(r.currentTarget, false)}
                               <span className="text-emerald-400"> → {formatCurrency(r.proposedTarget, false)}</span>
