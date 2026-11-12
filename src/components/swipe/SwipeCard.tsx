@@ -30,8 +30,8 @@ interface SwipeCardProps {
   /** Opens the per-transaction review sheet for stacks with more than one transaction. */
   onOpenGroup?: () => void
   categories: readonly CategoryDef[]
-  /** Increments when the picker is dismissed without a selection. The top card
-   *  springs back to center so a swipe-right that opened the picker can be undone. */
+  /** Increments when the picker is dismissed without a selection, or when the save behind a swipe fails.
+   *  The top card springs back to center so the swipe can be undone or retried. */
   pickerCancelTick?: number
   /** Human-readable billing month for this stack. */
   billingMonthLabel?: string | null

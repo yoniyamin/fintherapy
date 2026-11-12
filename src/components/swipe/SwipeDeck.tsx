@@ -384,13 +384,29 @@ function GroupClassifiedToast({ id, count }: { id: number; count: number }) {
   )
 }
 
+/** Full-area error state with a retry button, shown instead of a spinner that could never finish. */
+function DeckLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center" role="alert">
+      <p className="text-sm text-surface-400">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="rounded-xl border-b-[3px] border-duo-green-dark bg-duo-green px-6 py-2.5 text-sm font-bold text-white transition-[transform,opacity,filter] duration-150 active:scale-[0.97]"
+      >
+        Try again
+      </button>
+    </div>
+  )
+}
+
 export default function SwipeDeck() {
   const location = useLocation()
   const deckMode = location.pathname.includes('no-idea') ? 'no-idea' : 'pending'
   const { profile, user, refreshProfile } = useAuth()
   const flaggedQueueCount = useFlaggedCount(profile?.household_id)
   const {
-    transactions: fetched, autoClassified, loading,
+    transactions: fetched, autoClassified, loading, loadError, fetchPending,
     removeTransactions, addPendingTransactions, refetchFresh,
     detectRefundsAndRefresh,
     classifyTransactionsBatch,
@@ -436,9 +452,12 @@ export default function SwipeDeck() {
   const [accountFilter, setAccountFilter] = useState<string | null>(null)
   const [monthFilter, setMonthFilter] = useState<string | null>(null)
   const monthAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [deckVerifyState, setDeckVerifyState] = useState<'idle' | 'verifying' | 'confirmed'>('idle')
+  const [deckVerifyState, setDeckVerifyState] = useState<'idle' | 'verifying' | 'confirmed' | 'error'>('idle')
+  const [verifyAttempt, setVerifyAttempt] = useState(0)
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionNotice, setActionNotice] = useState<string | null>(null)
+  /** Number of swipe saves still waiting on the server; drives the "Saving…" pill. */
+  const [savingCount, setSavingCount] = useState(0)
   const [groupModalTarget, setGroupModalTarget] = useState<GroupModalTarget | null>(null)
   const [groupSaving, setGroupSaving] = useState(false)
   const [pendingMixedRevert, setPendingMixedRevert] = useState<{
@@ -461,14 +480,22 @@ export default function SwipeDeck() {
   const [showTutorial, setShowTutorial] = useState(
     () => localStorage.getItem('classify_tutorial_dismissed') !== '1',
   )
-  // Bumps when the category picker is dismissed without a selection. SwipeCard watches
-  // this to spring the just-flown-off card back into view, so a swipe-right that opens
-  // the picker can be undone by closing the picker.
+  // Bumps when the top card must come back: the category picker was dismissed without a
+  // selection, or the save behind a swipe failed. SwipeCard watches this to spring the
+  // just-flown-off card back into view.
   const [pickerCancelTick, setPickerCancelTick] = useState(0)
+  /** Springs the top card back to center after a swipe that was not applied. */
+  const restoreTopCard = useCallback(() => setPickerCancelTick((v) => v + 1), [])
+  /** When non-null, the picker is opened from the Recent panel for a previously-actioned group. */
+  const [recentReclassifyTarget, setRecentReclassifyTarget] = useState<{
+    action: SessionAction
+    origin: 'session' | 'history'
+  } | null>(null)
   const handlePickerCancel = useCallback(() => {
     store.closeCategoryPicker()
-    setPickerCancelTick((v) => v + 1)
-  }, [store])
+    setRecentReclassifyTarget(null)
+    restoreTopCard()
+  }, [store, restoreTopCard])
 
   /** Most recent action used by the transient Undo toast. Auto-clears after a short window. */
   const [undoToast, setUndoToast] = useState<SessionAction | null>(null)
@@ -526,12 +553,6 @@ export default function SwipeDeck() {
   const [historyRecentCapNotice, setHistoryRecentCapNotice] = useState<string | null>(null)
   /** null = all cards for the classified-at range query */
   const [recentHistoryAccountLast4, setRecentHistoryAccountLast4] = useState<string | null>(null)
-  /** When non-null, the picker is opened from the Recent panel for a previously-actioned group. */
-  const [recentReclassifyTarget, setRecentReclassifyTarget] = useState<{
-    action: SessionAction
-    origin: 'session' | 'history'
-  } | null>(null)
-
   const categoryPickerContext = useMemo(() => {
     if (recentReclassifyTarget) {
       const action = recentReclassifyTarget.action
@@ -560,6 +581,25 @@ export default function SwipeDeck() {
       currentCategory: null,
     }
   }, [recentReclassifyTarget, store.activeGroup])
+
+  /** Stack the open picker was shown for; null while closed or when opened from the Recent panel. */
+  const pickerGroupKeyRef = useRef<string | null>(null)
+  const activeGroupKey = store.activeGroup?.key ?? null
+  /** Closes the picker when a deck refresh swaps the active stack underneath it, so a pick cannot land on a different merchant. */
+  useEffect(() => {
+    if (!store.showCategoryPicker || recentReclassifyTarget) {
+      pickerGroupKeyRef.current = null
+      return
+    }
+    if (pickerGroupKeyRef.current === null) {
+      pickerGroupKeyRef.current = activeGroupKey
+      return
+    }
+    if (pickerGroupKeyRef.current !== activeGroupKey) {
+      pickerGroupKeyRef.current = null
+      useClassificationStore.getState().closeCategoryPicker()
+    }
+  }, [store.showCategoryPicker, recentReclassifyTarget, activeGroupKey])
 
   /** All deck candidates: pending classify queue + already auto-classified items
    *  surfaced as confirmable "Predicted" cards. No-idea deck only uses `fetched`. */
@@ -1074,8 +1114,8 @@ export default function SwipeDeck() {
         if (gen !== deckSyncGenerationRef.current) return
         if (deckMode === 'pending' && useClassificationStore.getState().sessionHistory.length > 0) {
           try {
-            const { pending, autoClassified: autoRefreshed } = await detectRefundsAndRefresh()
-            if (gen !== deckSyncGenerationRef.current) return
+            const { pending, autoClassified: autoRefreshed, stale } = await detectRefundsAndRefresh()
+            if (stale || gen !== deckSyncGenerationRef.current) return
             const merged = [...pending, ...autoRefreshed]
             if (merged.length > 0) {
               const deckAfter = filterTransactionsByBillingMonth(
@@ -1109,8 +1149,8 @@ export default function SwipeDeck() {
       }
 
       try {
-        const { offsetCount, pending, autoClassified: autoRefreshed } = await detectRefundsAndRefresh()
-        if (gen !== deckSyncGenerationRef.current) return
+        const { offsetCount, pending, autoClassified: autoRefreshed, stale } = await detectRefundsAndRefresh()
+        if (stale || gen !== deckSyncGenerationRef.current) return
         setRefundsOffset(offsetCount)
         const merged = [...pending, ...autoRefreshed]
         finalTxns = merged
@@ -1158,16 +1198,12 @@ export default function SwipeDeck() {
   useEffect(() => {
     if (!profile?.household_id) return
     const POLL_MS = 30_000
-    const id = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        void refetchFresh({ silent: true })
-      }
-    }, POLL_MS)
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        void refetchFresh({ silent: true })
-      }
+    const refreshQuietly = () => {
+      if (document.visibilityState !== 'visible') return
+      refetchFresh({ silent: true }).catch((err) => console.warn('queue refresh failed:', err))
     }
+    const id = setInterval(refreshQuietly, POLL_MS)
+    const onVisible = refreshQuietly
     document.addEventListener('visibilitychange', onVisible)
     return () => {
       clearInterval(id)
@@ -1198,15 +1234,35 @@ export default function SwipeDeck() {
     [store],
   )
 
-  /** Runs a batch RPC; on error or partial update, refetches and re-injects still-pending txns. */
+  /** Shows an error banner that clears itself after a few seconds. */
+  const flashActionError = useCallback((message: string) => {
+    setActionError(message)
+    setTimeout(() => setActionError(null), 5000)
+  }, [])
+
+  /** Runs a batch RPC; on error, throw, or partial update, springs the card back right away, then refetches and re-injects still-pending txns. */
   const runBatchRpc = useCallback(
     async (
       group: MerchantGroup,
       batchRpc: (txIds: string[]) => Promise<{ error: unknown; updatedCount: number }>,
     ): Promise<boolean> => {
       const ids = group.transactions.map((t) => t.id)
-      const { error, updatedCount } = await batchRpc(ids)
-      if (error || updatedCount !== ids.length) {
+      let saved = false
+      let failure: unknown
+      setSavingCount((n) => n + 1)
+      try {
+        const { error, updatedCount } = await batchRpc(ids)
+        saved = !error && updatedCount === ids.length
+        if (!saved) failure = error ?? new Error(`updated ${updatedCount} of ${ids.length} transactions`)
+      } catch (err) {
+        failure = err
+      }
+      setSavingCount((n) => n - 1)
+      if (saved) return true
+      console.warn('classify save failed:', failure)
+      restoreTopCard()
+      flashActionError('Could not save — try again. Your stack was put back.')
+      try {
         const payload = await refetchFresh({ silent: true })
         const stillPendingIds = new Set([
           ...payload.pending.map((t) => t.id),
@@ -1214,13 +1270,12 @@ export default function SwipeDeck() {
         ])
         const toReInject = group.transactions.filter((t) => stillPendingIds.has(t.id))
         if (toReInject.length > 0) addPendingTransactions(toReInject)
-        setActionError('Could not save — try again. Your stack was put back.')
-        setTimeout(() => setActionError(null), 5000)
-        return false
+      } catch (err) {
+        console.warn('classify recovery refetch failed:', err)
       }
-      return true
+      return false
     },
-    [addPendingTransactions, refetchFresh],
+    [addPendingTransactions, flashActionError, refetchFresh, restoreTopCard],
   )
 
   const handleSwipeRight = async () => {
@@ -1267,7 +1322,8 @@ export default function SwipeDeck() {
 
   const handleSwipeLeft = async () => {
     if (deckMode === 'no-idea') {
-      store.rotateCurrentToEnd()
+      if (store.groups.length > 1) store.rotateCurrentToEnd()
+      else restoreTopCard()
       return
     }
     const group = store.activeGroup
@@ -1348,6 +1404,17 @@ export default function SwipeDeck() {
     celebrateClassifySuccess(xpEarned)
     showXpFeedback(xpEarned, txCount)
     invalidateFlaggedCount()
+  }
+
+  /** Runs a swipe or picker handler; if it throws, springs the card back and reports it instead of leaving a rejected promise behind. */
+  const runSwipeAction = async (action: () => Promise<void> | void) => {
+    try {
+      await action()
+    } catch (err) {
+      console.warn('classify action failed:', err)
+      restoreTopCard()
+      flashActionError('Something went wrong — please try again.')
+    }
   }
 
   const handleOpenGroupModal = () => {
@@ -1630,16 +1697,17 @@ export default function SwipeDeck() {
         const payload = await refetchFresh({ silent: true })
         if (cancelled) return
         const serverEmpty = payload.pending.length + payload.autoClassified.length === 0
-        setDeckVerifyState(serverEmpty ? 'confirmed' : 'idle')
+        if (serverEmpty) setDeckVerifyState('confirmed')
+        else setDeckVerifyState(payload.stale ? 'error' : 'idle')
       } catch {
         if (cancelled) return
-        setDeckVerifyState('idle')
+        setDeckVerifyState('error')
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [isDone, refetchFresh])
+  }, [isDone, refetchFresh, verifyAttempt])
 
   useEffect(() => {
     if (isDone && !hasRefreshedProfile.current) {
@@ -1653,6 +1721,24 @@ export default function SwipeDeck() {
       <div className="flex h-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-duo-green border-t-transparent" />
       </div>
+    )
+  }
+
+  if (loadError && !loading && !isDone && allDeckTxns.length === 0) {
+    return (
+      <DeckLoadError
+        message="We couldn't load your transactions. Check your connection and try again."
+        onRetry={() => void fetchPending()}
+      />
+    )
+  }
+
+  if (isDone && deckVerifyState === 'error') {
+    return (
+      <DeckLoadError
+        message="We couldn't confirm there is nothing left to classify. Check your connection and try again."
+        onRetry={() => setVerifyAttempt((n) => n + 1)}
+      />
     )
   }
 
@@ -2071,10 +2157,10 @@ export default function SwipeDeck() {
                       key={group.key}
                       group={group}
                       stackIndex={i}
-                      onSwipeRight={handleSwipeRight}
-                      onSwipeLeft={handleSwipeLeft}
+                      onSwipeRight={() => void runSwipeAction(handleSwipeRight)}
+                      onSwipeLeft={() => void runSwipeAction(handleSwipeLeft)}
                       onSwipeUp={i === 0 && !!group.predictedCategory ? handleSwipeUp : undefined}
-                      onTransfer={handleTransfer}
+                      onTransfer={() => void runSwipeAction(handleTransfer)}
                       rightLabel={
                         deckMode === 'no-idea'
                           ? 'Pick category'
@@ -2122,7 +2208,7 @@ export default function SwipeDeck() {
 
       <CategoryPicker
         open={store.showCategoryPicker}
-        onSelect={handleCategorySelect}
+        onSelect={(categoryId) => void runSwipeAction(() => handleCategorySelect(categoryId))}
         onClose={handlePickerCancel}
         categories={pickerCategories}
         predictedCategory={categoryPickerContext.predictedCategory}
@@ -2543,6 +2629,22 @@ export default function SwipeDeck() {
       {typeof document !== 'undefined' &&
         createPortal(
           <AnimatePresence>
+            {savingCount > 0 && (
+              <motion.div
+                key="saving"
+                role="status"
+                className="pointer-events-none fixed inset-x-0 z-[210] flex justify-center px-4"
+                style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5.5rem)' }}
+                initial={{ y: 24, opacity: 0 }}
+                animate={{ y: 0, opacity: 1, transition: { delay: 0.4 } }}
+                exit={{ opacity: 0, transition: { duration: 0.15 } }}
+              >
+                <div className="flex items-center gap-2 rounded-2xl border border-white/[0.12] bg-surface-950/95 px-4 py-2.5 text-xs font-semibold text-surface-200 shadow-lg backdrop-blur-xl">
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-duo-green border-t-transparent" />
+                  Saving…
+                </div>
+              </motion.div>
+            )}
             {actionError && (
               <motion.div
                 key="action-error"

@@ -6,12 +6,16 @@ const mockPendingFresh = [{ id: 'tx-3', status: 'pending' }]
 const mockAutoFresh = [{ id: 'tx-4', status: 'auto' }]
 
 let rpcCallCount = 0
+let failPendingRpc = false
 
 vi.mock('./supabase', () => ({
   supabase: {
     rpc: vi.fn((name: string) => {
       rpcCallCount++
       const isFirstBatch = rpcCallCount <= 2
+      if (name === 'get_pending_transactions' && failPendingRpc) {
+        return Promise.resolve({ data: null, error: { message: 'request timed out' } })
+      }
       if (name === 'get_pending_transactions') {
         return Promise.resolve({
           data: isFirstBatch ? mockPending : mockPendingFresh,
@@ -31,6 +35,7 @@ let invalidate: typeof import('./pendingTransactionsCache').invalidatePendingTra
 
 beforeEach(async () => {
   rpcCallCount = 0
+  failPendingRpc = false
   vi.resetModules()
   const mod = await import('./pendingTransactionsCache')
   fetchShared = mod.fetchPendingTransactionsShared
@@ -60,5 +65,26 @@ describe('pendingTransactionsCache', () => {
     // Assert — the generation check should detect staleness and refetch
     expect(result.pending).toEqual(mockPendingFresh)
     expect(result.autoClassified).toEqual(mockAutoFresh)
+  })
+
+  it('rejects instead of returning an empty queue when an RPC fails', async () => {
+    // Arrange
+    failPendingRpc = true
+
+    // Act & Assert
+    await expect(fetchShared('hh-1')).rejects.toThrow('request timed out')
+  })
+
+  it('does not cache a failed fetch, so the next call retries', async () => {
+    // Arrange
+    failPendingRpc = true
+    await expect(fetchShared('hh-1')).rejects.toThrow()
+    failPendingRpc = false
+
+    // Act
+    const result = await fetchShared('hh-1')
+
+    // Assert
+    expect(result.pending).toEqual(mockPendingFresh)
   })
 })

@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createFetchWithTimeout } from './fetchWithTimeout'
 
 export const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
 export const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -50,5 +51,6 @@ export const supabase: SupabaseClient = supabaseConfigured
         // Password-only app; avoids PWA / standalone URL hash edge cases with session parsing.
         detectSessionInUrl: false,
       },
+      global: { fetch: createFetchWithTimeout() },
     })
   : mockClient

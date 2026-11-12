@@ -1,5 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MotionGlobalConfig } from 'framer-motion'
+import type { ComponentProps } from 'react'
 import SwipeDeck from './SwipeDeck'
 import { MockAuthProvider } from '../../test/mock-auth'
 import { MockRouter } from '../../test/mock-router'
@@ -59,13 +61,20 @@ const mockDetectRefundsAndRefresh = vi.fn().mockResolvedValue({ offsetCount: 0, 
 
 const mockClassifySplit = vi.fn()
 const mockRemoveTransactions = vi.fn()
+const mockFetchPending = vi.fn()
+const mockLoadState = { error: null as Error | null }
+const mockConfirmAutoBatch = vi.fn().mockResolvedValue({ error: null, updatedCount: 1 })
+const mockRejectAuto = vi.fn().mockResolvedValue({ error: null })
 const mockTransactions: Transaction[] = []
-
+const mockGetAccountAliases = vi.fn().mockResolvedValue([])
+const mockGetDistinctLast4 = vi.fn().mockResolvedValue(['1234'])
 vi.mock('../../hooks/useTransactions', () => ({
   useTransactions: () => ({
     transactions: mockTransactions,
     autoClassified: [],
     loading: false,
+    loadError: mockLoadState.error,
+    fetchPending: mockFetchPending,
     classifyTransactionsBatch: mockClassifyBatch,
     classifyTransactionsSplit: mockClassifySplit,
     flagTransactionsBatch: mockFlagBatch,
@@ -75,8 +84,8 @@ vi.mock('../../hooks/useTransactions', () => ({
     awardXp: mockAwardXp,
     getMonthStats: mockGetMonthStats,
     getExportData: vi.fn().mockResolvedValue([]),
-    getAccountAliases: vi.fn().mockResolvedValue([]),
-    getDistinctAccountLast4ForHousehold: vi.fn().mockResolvedValue(['1234']),
+    getAccountAliases: mockGetAccountAliases,
+    getDistinctAccountLast4ForHousehold: mockGetDistinctLast4,
     upsertAccountAlias: vi.fn().mockResolvedValue(undefined),
     setTransactionsUserNote: vi.fn().mockResolvedValue(undefined),
     refetchFresh: mockRefetchFresh,
@@ -94,8 +103,8 @@ vi.mock('../../hooks/useTransactions', () => ({
 vi.mock('../../hooks/useMerchantKnowledge', () => ({
   useMerchantKnowledge: () => ({
     confirmAutoClassified: vi.fn().mockResolvedValue({ error: null }),
-    confirmAutoClassifiedBatch: vi.fn().mockResolvedValue({ error: null, updatedCount: 1 }),
-    rejectAutoClassified: vi.fn().mockResolvedValue({ error: null }),
+    confirmAutoClassifiedBatch: mockConfirmAutoBatch,
+    rejectAutoClassified: mockRejectAuto,
     learnMerchant: vi.fn(),
   }),
 }))
@@ -164,6 +173,26 @@ vi.mock('../../stores/classificationStore', () => {
   return { useClassificationStore: hook }
 })
 
+/** Renders the real card plus probe controls: swipes cannot be driven through jsdom drag, so the probe calls the same handlers and exposes the restore tick the deck passes down. */
+vi.mock('./SwipeCard', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./SwipeCard')>()
+  const RealSwipeCard = actual.default
+  return {
+    default: (props: ComponentProps<typeof RealSwipeCard>) => (
+      <>
+        <RealSwipeCard {...props} />
+        {props.stackIndex === 0 && (
+          <div data-testid="swipe-probe" data-restore-tick={props.pickerCancelTick ?? 0}>
+            <button type="button" onClick={() => props.onSwipeRight()}>probe swipe right</button>
+            <button type="button" onClick={() => props.onSwipeLeft()}>probe swipe left</button>
+            <button type="button" onClick={() => props.onTransfer()}>probe transfer</button>
+          </div>
+        )}
+      </>
+    ),
+  }
+})
+
 vi.mock('../../lib/supabase', () => ({
   supabase: {
     rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
@@ -175,7 +204,11 @@ vi.mock('../../lib/supabase', () => ({
 }))
 
 function renderDeck(route = '/classify') {
-  return render(
+  return render(deckTree(route))
+}
+
+function deckTree(route: string) {
+  return (
     <MockRouter initialEntries={[route]}>
       <MockAuthProvider value={{
         profile: mockProfile,
@@ -183,7 +216,7 @@ function renderDeck(route = '/classify') {
       }}>
         <SwipeDeck />
       </MockAuthProvider>
-    </MockRouter>,
+    </MockRouter>
   )
 }
 
@@ -192,6 +225,8 @@ function resetDeckState() {
   mockStore.groups = []
   mockStore.activeGroup = null
   mockStore.sessionHistory = []
+  mockStore.showCategoryPicker = false
+  mockLoadState.error = null
   mockClassifySplit.mockReset()
   mockRevertBatch.mockResolvedValue({ error: null, updatedCount: 2 })
 }
@@ -463,5 +498,489 @@ describe('SwipeDeck grouped transactions', () => {
       await waitFor(() => expect(mockRevertBatch).toHaveBeenCalledWith(['a', 'b']))
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('SwipeDeck failed saves restore the top card', () => {
+  const failed = { error: { message: 'boom' }, updatedCount: 0 }
+  const restoreTick = () => screen.getByTestId('swipe-probe').getAttribute('data-restore-tick')
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetDeckState()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    localStorage.clear()
+    localStorage.setItem('classify_tutorial_dismissed', '1')
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+    mockClassifyBatch.mockReset().mockResolvedValue({ error: null, updatedCount: 3 })
+    mockFlagBatch.mockReset().mockResolvedValue({ error: null, updatedCount: 3 })
+    mockMarkTransferBatch.mockReset().mockResolvedValue({ error: null, updatedCount: 3 })
+    mockConfirmAutoBatch.mockReset().mockResolvedValue({ error: null, updatedCount: 3 })
+    mockRejectAuto.mockReset().mockResolvedValue({ error: null })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  async function clickProbe(name: string, route = '/classify') {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderDeck(route)
+    await user.click(await screen.findByRole('button', { name }))
+    return user
+  }
+
+  it('restores the card when confirming a predicted stack fails', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), 'food')
+    mockConfirmAutoBatch.mockResolvedValue(failed)
+
+    // Act
+    await clickProbe('probe swipe right')
+
+    // Assert
+    await waitFor(() => expect(restoreTick()).toBe('1'))
+    expect(await screen.findByText(/Could not save — try again/)).toBeInTheDocument()
+    expect(mockRemoveTransactions).not.toHaveBeenCalled()
+    expect(mockStore.advance).not.toHaveBeenCalled()
+  })
+
+  it('restores the card when rejecting a predicted stack fails', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), 'food')
+    mockRejectAuto.mockResolvedValue({ error: { message: 'boom' } })
+
+    // Act
+    await clickProbe('probe swipe left')
+
+    // Assert
+    await waitFor(() => expect(restoreTick()).toBe('1'))
+    expect(mockStore.flag).not.toHaveBeenCalled()
+  })
+
+  it('restores the card when flagging an unpredicted stack fails', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), null)
+    mockFlagBatch.mockResolvedValue(failed)
+
+    // Act
+    await clickProbe('probe swipe left')
+
+    // Assert
+    await waitFor(() => expect(restoreTick()).toBe('1'))
+    expect(mockStore.flag).not.toHaveBeenCalled()
+  })
+
+  it('restores the card when the server updated fewer rows than requested', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), null)
+    mockFlagBatch.mockResolvedValue({ error: null, updatedCount: 1 })
+
+    // Act
+    await clickProbe('probe swipe left')
+
+    // Assert
+    await waitFor(() => expect(restoreTick()).toBe('1'))
+    expect(mockStore.flag).not.toHaveBeenCalled()
+  })
+
+  it('restores the card when marking a transfer fails', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), null)
+    mockMarkTransferBatch.mockResolvedValue(failed)
+
+    // Act
+    await clickProbe('probe transfer')
+
+    // Assert
+    await waitFor(() => expect(restoreTick()).toBe('1'))
+    expect(mockStore.markTransfer).not.toHaveBeenCalled()
+  })
+
+  it('restores the card when the category save fails after picking a category', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), null)
+    mockStore.showCategoryPicker = true
+    mockClassifyBatch.mockResolvedValue(failed)
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderDeck()
+
+    // Act
+    await user.click((await screen.findAllByRole('option', { name: /Food/ }))[0]!)
+
+    // Assert
+    await waitFor(() => expect(restoreTick()).toBe('1'))
+    expect(mockStore.advance).not.toHaveBeenCalled()
+  })
+
+  it('restores the card and shows the save error when the save request throws', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), null)
+    mockStore.showCategoryPicker = true
+    mockClassifyBatch.mockRejectedValue(new Error('network down'))
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderDeck()
+
+    // Act
+    await user.click((await screen.findAllByRole('option', { name: /Food/ }))[0]!)
+
+    // Assert
+    await waitFor(() => expect(restoreTick()).toBe('1'))
+    expect(await screen.findByText(/Could not save — try again/)).toBeInTheDocument()
+    expect(mockStore.advance).not.toHaveBeenCalled()
+  })
+
+  it('still recovers when the refetch after a failed save also throws', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), null)
+    mockFlagBatch.mockResolvedValue(failed)
+    mockRefetchFresh.mockRejectedValueOnce(new Error('offline'))
+
+    // Act
+    await clickProbe('probe swipe left')
+
+    // Assert
+    await waitFor(() => expect(restoreTick()).toBe('1'))
+    expect(await screen.findByText(/Could not save — try again/)).toBeInTheDocument()
+  })
+
+  it('reports an unexpected error instead of failing silently when a follow-up step throws', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), 'food')
+    mockAwardXp.mockRejectedValueOnce(new Error('auth lock timeout'))
+
+    // Act
+    await clickProbe('probe swipe right')
+
+    // Assert
+    expect(await screen.findByText(/Something went wrong/)).toBeInTheDocument()
+    expect(mockStore.advance).toHaveBeenCalledWith(3)
+  })
+
+  it('restores the card when skipping the only stack in the no-idea deck', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), null)
+
+    // Act
+    await clickProbe('probe swipe left', '/classify/no-idea')
+
+    // Assert
+    await waitFor(() => expect(restoreTick()).toBe('1'))
+    expect(mockStore.rotateCurrentToEnd).not.toHaveBeenCalled()
+  })
+
+  it('rotates without restoring when the no-idea deck has more than one stack', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), null)
+    mockStore.groups = [mockStore.groups[0], { ...(mockStore.groups[0] as object), key: 'other\u00002026-06' }]
+
+    // Act
+    await clickProbe('probe swipe left', '/classify/no-idea')
+
+    // Assert
+    await waitFor(() => expect(mockStore.rotateCurrentToEnd).toHaveBeenCalledTimes(1))
+    expect(restoreTick()).toBe('0')
+  })
+
+  it('does not restore the card after a successful save', async () => {
+    // Arrange
+    seedDeckStack(stackTxs(), 'food')
+
+    // Act
+    await clickProbe('probe swipe right')
+
+    // Assert
+    await waitFor(() => expect(mockStore.advance).toHaveBeenCalledWith(3))
+    expect(restoreTick()).toBe('0')
+  })
+})
+
+describe('SwipeDeck load failures', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetDeckState()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    localStorage.clear()
+    localStorage.setItem('classify_tutorial_dismissed', '1')
+    mockRefetchFresh.mockReset().mockResolvedValue({ pending: [], autoClassified: [] })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('shows an error with a retry instead of an empty deck when the first load fails', async () => {
+    // Arrange
+    mockLoadState.error = new Error('request timed out')
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderDeck()
+
+    // Act
+    await user.click(await screen.findByRole('button', { name: 'Try again' }))
+
+    // Assert
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load your transactions/)
+    expect(mockFetchPending).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText(/how classification works/i)).not.toBeInTheDocument()
+  })
+
+  it('shows an error with a retry when confirming the cleared deck fails, and recovers on retry', async () => {
+    // Arrange
+    mockStore.sessionHistory = [makeSessionAction()]
+    mockRefetchFresh.mockRejectedValueOnce(new Error('request timed out'))
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderDeck()
+    const retry = await screen.findByRole('button', { name: 'Try again' })
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't confirm/)
+
+    // Act
+    await user.click(retry)
+
+    // Assert
+    await waitFor(() => expect(mockRefetchFresh).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+})
+
+describe('SwipeDeck open picker follows the active stack', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetDeckState()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    localStorage.clear()
+    localStorage.setItem('classify_tutorial_dismissed', '1')
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('closes the picker when a refresh swaps the active stack underneath it', async () => {
+    // Arrange
+    seedDeckStack(stackTxs())
+    mockStore.showCategoryPicker = true
+    const view = renderDeck()
+    await screen.findByTestId('swipe-probe')
+
+    // Act
+    mockStore.activeGroup = { ...(mockStore.activeGroup as object), key: 'netflix\u00002026-06' }
+    view.rerender(deckTree('/classify'))
+
+    // Assert
+    await waitFor(() => expect(mockStore.closeCategoryPicker).toHaveBeenCalledTimes(1))
+  })
+
+  it('keeps the picker open while the active stack is unchanged', async () => {
+    // Arrange
+    seedDeckStack(stackTxs())
+    mockStore.showCategoryPicker = true
+    const view = renderDeck()
+    await screen.findByTestId('swipe-probe')
+
+    // Act
+    view.rerender(deckTree('/classify'))
+
+    // Assert
+    expect(mockStore.closeCategoryPicker).not.toHaveBeenCalled()
+  })
+})
+describe('SwipeDeck refresh edge cases', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>
+  const defaultDetect = { offsetCount: 0, pending: [], autoClassified: [] }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetDeckState()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    localStorage.clear()
+    localStorage.setItem('classify_tutorial_dismissed', '1')
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    mockRefetchFresh.mockReset().mockResolvedValue({ pending: [], autoClassified: [], stale: false })
+    mockDetectRefundsAndRefresh.mockReset().mockResolvedValue({ ...defaultDetect, stale: false })
+    mockClassifyBatch.mockReset().mockResolvedValue({ error: null, updatedCount: 3 })
+    mockReclassifyBatch.mockReset().mockResolvedValue({ error: null, updatedCount: 2 })
+  })
+
+  afterEach(() => {
+    warnSpy.mockRestore()
+    delete (document as { visibilityState?: unknown }).visibilityState
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    mockDetectRefundsAndRefresh.mockReset().mockResolvedValue(defaultDetect)
+    mockRefetchFresh.mockReset().mockResolvedValue({ pending: [], autoClassified: [] })
+  })
+
+  const storeCallsJson = () =>
+    JSON.stringify([...mockStore.load.mock.calls, ...mockStore.refreshDeck.mock.calls])
+
+  it('syncs the store with the refreshed queue when the refresh is current', async () => {
+    // Arrange
+    seedDeckStack(stackTxs())
+    mockDetectRefundsAndRefresh.mockResolvedValue({
+      offsetCount: 0,
+      stale: false,
+      pending: [makeTx({ id: 'fresh-only' })],
+      autoClassified: [],
+    })
+
+    // Act
+    renderDeck()
+
+    // Assert
+    await waitFor(() => expect(storeCallsJson()).toContain('fresh-only'))
+  })
+
+  it('leaves the store alone when the refresh was superseded by a newer change', async () => {
+    // Arrange
+    seedDeckStack(stackTxs())
+    mockDetectRefundsAndRefresh.mockResolvedValue({
+      offsetCount: 0,
+      stale: true,
+      pending: [makeTx({ id: 'stale-only' })],
+      autoClassified: [],
+    })
+
+    // Act
+    renderDeck()
+    await waitFor(() => expect(mockDetectRefundsAndRefresh).toHaveBeenCalled())
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Assert
+    expect(storeCallsJson()).not.toContain('stale-only')
+  })
+
+  it('logs a warning instead of failing silently when the 30 s refresh fails', async () => {
+    // Arrange
+    seedDeckStack(stackTxs())
+    const failure = new Error('offline')
+    mockRefetchFresh.mockRejectedValue(failure)
+    renderDeck()
+    await screen.findByTestId('swipe-probe')
+
+    // Act
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    // Assert
+    await waitFor(() => expect(warnSpy).toHaveBeenCalledWith('queue refresh failed:', failure))
+  })
+
+  it('logs a warning when the refresh on returning to the tab fails', async () => {
+    // Arrange
+    seedDeckStack(stackTxs())
+    const failure = new Error('offline')
+    mockRefetchFresh.mockRejectedValue(failure)
+    renderDeck()
+    await screen.findByTestId('swipe-probe')
+
+    // Act
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    // Assert
+    await waitFor(() => expect(warnSpy).toHaveBeenCalledWith('queue refresh failed:', failure))
+  })
+
+  it('shows an error with a retry instead of an endless spinner when the cleared-deck check was superseded', async () => {
+    // Arrange
+    mockStore.sessionHistory = [makeSessionAction()]
+    mockRefetchFresh.mockResolvedValue({ pending: [makeTx()], autoClassified: [], stale: true })
+
+    // Act
+    renderDeck()
+
+    // Assert
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't confirm/)
+  })
+
+  it('classifies the active stack, not an old Recent entry, after the Recent picker was cancelled', async () => {
+    // Arrange
+    seedDeckStack(stackTxs())
+    mockStore.sessionHistory = [makeSessionAction({ category: 'food' })]
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const view = renderDeck()
+    await user.click(await screen.findByRole('button', { name: /^Recent/ }))
+    await user.click(await screen.findByRole('button', { name: 'Change category' }))
+    mockStore.showCategoryPicker = true
+    view.rerender(deckTree('/classify'))
+    await screen.findByRole('dialog', { name: 'Pick a Category' })
+
+    // Act
+    await user.keyboard('{Escape}')
+    await user.click(await screen.findByRole('option', { name: /Food/ }))
+
+    // Assert
+    await waitFor(() => expect(mockClassifyBatch).toHaveBeenCalledWith(['t1', 't2', 't3'], 'food'))
+    expect(mockReclassifyBatch).not.toHaveBeenCalled()
+  })
+})
+describe('SwipeDeck saving indicator', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetDeckState()
+    localStorage.clear()
+    localStorage.setItem('classify_tutorial_dismissed', '1')
+    mockConfirmAutoBatch.mockReset()
+    mockRefetchFresh.mockReset().mockResolvedValue({ pending: [], autoClassified: [], stale: false })
+    MotionGlobalConfig.skipAnimations = true
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    MotionGlobalConfig.skipAnimations = false
+    vi.mocked(console.warn).mockRestore()
+  })
+
+  /** Swipes right on a predicted stack whose save stays pending until the returned resolver is called. */
+  async function swipeWithPendingSave() {
+    seedDeckStack(stackTxs(), 'food')
+    let settle!: (value: { error: unknown; updatedCount: number }) => void
+    mockConfirmAutoBatch.mockReturnValue(new Promise((resolve) => { settle = resolve }))
+    const user = userEvent.setup()
+    renderDeck()
+    await user.click(await screen.findByRole('button', { name: 'probe swipe right' }))
+    return settle
+  }
+
+  it('shows a saving pill while the save is pending and removes it once the save succeeds', async () => {
+    // Arrange & Act
+    const settle = await swipeWithPendingSave()
+
+    // Assert
+    expect(await screen.findByText('Saving…')).toBeInTheDocument()
+
+    // Act
+    settle({ error: null, updatedCount: 3 })
+    // Assert
+    await waitFor(() => expect(screen.queryByText('Saving…')).not.toBeInTheDocument())
+  })
+
+  it('removes the saving pill when the save fails', async () => {
+    // Arrange
+    const settle = await swipeWithPendingSave()
+    expect(await screen.findByText('Saving…')).toBeInTheDocument()
+
+    // Act
+    settle({ error: { message: 'boom' }, updatedCount: 0 })
+
+    // Assert
+    await waitFor(() => expect(screen.queryByText('Saving…')).not.toBeInTheDocument())
+    expect(await screen.findByText(/Could not save/)).toBeInTheDocument()
   })
 })

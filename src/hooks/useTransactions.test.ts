@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 
 const mockRpc = vi.fn()
+const mockGetSession = vi.fn().mockResolvedValue({ data: { session: { user: { id: 'u-1' } } } })
 
 vi.mock('../lib/supabase', () => ({
   supabase: {
     rpc: (...args: unknown[]) => mockRpc(...args),
-    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u-1' } } }) },
+    auth: { getSession: (...args: unknown[]) => mockGetSession(...args) },
   },
 }))
 
@@ -301,7 +302,7 @@ describe('useTransactions batch RPCs', () => {
       const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
 
       // Act
-      let payload: { pending: unknown[]; autoClassified: unknown[] } | undefined
+      let payload: { pending: unknown[]; autoClassified: unknown[]; stale: boolean } | undefined
       await act(async () => {
         payload = await result.current.refetchFresh({ silent: true })
       })
@@ -309,6 +310,271 @@ describe('useTransactions batch RPCs', () => {
       // Assert
       expect(payload!.pending).toEqual(mockPayload.pending)
       expect(payload!.autoClassified).toEqual(mockPayload.autoClassified)
+      expect(payload!.stale).toBe(false)
+    })
+  })
+})
+
+describe('useTransactions load failures', () => {
+  const loaded = {
+    pending: [{ id: 'tx-1', status: 'pending' }],
+    autoClassified: [{ id: 'tx-2', status: 'auto' }],
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const { fetchPendingTransactionsShared } = await import('../lib/pendingTransactionsCache')
+    vi.mocked(fetchPendingTransactionsShared).mockReset().mockResolvedValue(loaded as never)
+  })
+
+  it('reports a failed first load instead of presenting an empty queue as loaded', async () => {
+    // Arrange
+    const { fetchPendingTransactionsShared } = await import('../lib/pendingTransactionsCache')
+    vi.mocked(fetchPendingTransactionsShared).mockReset().mockRejectedValue(new Error('request timed out'))
+
+    // Act
+    const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    // Assert
+    expect(result.current.loadError?.message).toBe('request timed out')
+    expect(result.current.transactions).toEqual([])
+  })
+
+  it('keeps the previous queue when a later load fails, and clears the error once a load succeeds', async () => {
+    // Arrange
+    const { fetchPendingTransactionsShared } = await import('../lib/pendingTransactionsCache')
+    const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+    await waitFor(() => expect(result.current.transactions).toEqual(loaded.pending))
+    vi.mocked(fetchPendingTransactionsShared).mockRejectedValueOnce(new Error('offline'))
+
+    // Act
+    await act(async () => {
+      await result.current.fetchPending({ silent: true })
+    })
+
+    // Assert
+    expect(result.current.loadError?.message).toBe('offline')
+    expect(result.current.transactions).toEqual(loaded.pending)
+
+    // Act
+    await act(async () => {
+      await result.current.fetchPending({ silent: true })
+    })
+
+    // Assert
+    expect(result.current.loadError).toBeNull()
+  })
+
+  it('propagates a failed refetchFresh and leaves the queue untouched', async () => {
+    // Arrange
+    const { fetchPendingTransactionsShared } = await import('../lib/pendingTransactionsCache')
+    const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+    await waitFor(() => expect(result.current.transactions).toEqual(loaded.pending))
+    vi.mocked(fetchPendingTransactionsShared).mockRejectedValueOnce(new Error('timeout'))
+
+    // Act & Assert
+    await act(async () => {
+      await expect(result.current.refetchFresh({ silent: true })).rejects.toThrow('timeout')
+    })
+    expect(result.current.transactions).toEqual(loaded.pending)
+  })
+
+  it('reports a failed no-idea load instead of an empty flagged queue', async () => {
+    // Arrange
+    mockRpc.mockResolvedValue({ data: null, error: { message: 'request timed out' } })
+
+    // Act
+    const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID, 'no-idea'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    // Assert
+    expect(result.current.loadError?.message).toBe('request timed out')
+  })
+})
+
+describe('useTransactions stale refresh guard', () => {
+  const loaded = {
+    pending: [{ id: 'tx-1', status: 'pending' }, { id: 'tx-2', status: 'pending' }],
+    autoClassified: [],
+  }
+
+  /** Returns a promise plus its resolver so a test controls when a fetch settles. */
+  const deferred = <T,>() => {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((r) => {
+      resolve = r
+    })
+    return { promise, resolve }
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    mockRpc.mockReset().mockResolvedValue({ data: 0, error: null })
+    const { fetchPendingTransactionsShared } = await import('../lib/pendingTransactionsCache')
+    vi.mocked(fetchPendingTransactionsShared).mockReset().mockResolvedValue(loaded as never)
+  })
+
+  it('discards a slower refetch that started before a local removal, but still returns its payload', async () => {
+    // Arrange
+    const { fetchPendingTransactionsShared } = await import('../lib/pendingTransactionsCache')
+    const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+    await waitFor(() => expect(result.current.transactions).toEqual(loaded.pending))
+    const slow = deferred<typeof loaded>()
+    vi.mocked(fetchPendingTransactionsShared).mockReturnValueOnce(slow.promise as never)
+
+    // Act
+    let refetch!: Promise<{ pending: unknown[]; stale: boolean }>
+    act(() => {
+      refetch = result.current.refetchFresh({ silent: true })
+    })
+    act(() => {
+      result.current.removeTransactions(['tx-1'])
+    })
+    let payload!: { pending: unknown[]; stale: boolean }
+    await act(async () => {
+      slow.resolve(loaded)
+      payload = await refetch
+    })
+
+    // Assert
+    expect(payload.stale).toBe(true)
+    expect(payload.pending).toEqual(loaded.pending)
+    expect(result.current.transactions.map((t) => t.id)).toEqual(['tx-2'])
+  })
+
+  it('marks an older detectRefundsAndRefresh as stale when a newer refetch finished first', async () => {
+    // Arrange
+    const { fetchPendingTransactionsShared } = await import('../lib/pendingTransactionsCache')
+    const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+    await waitFor(() => expect(result.current.transactions).toEqual(loaded.pending))
+    const older = deferred<typeof loaded>()
+    const newer = { pending: [{ id: 'tx-2', status: 'pending' }], autoClassified: [] }
+    vi.mocked(fetchPendingTransactionsShared)
+      .mockReturnValueOnce(older.promise as never)
+      .mockResolvedValueOnce(newer as never)
+
+    // Act
+    let detect!: Promise<{ stale: boolean }>
+    act(() => {
+      detect = result.current.detectRefundsAndRefresh()
+    })
+    await waitFor(() => expect(fetchPendingTransactionsShared).toHaveBeenCalledTimes(2))
+    await act(async () => {
+      await result.current.refetchFresh({ silent: true })
+    })
+    let detectResult!: { stale: boolean }
+    await act(async () => {
+      older.resolve(loaded)
+      detectResult = await detect
+    })
+
+    // Assert
+    expect(detectResult.stale).toBe(true)
+    expect(result.current.transactions).toEqual(newer.pending)
+  })
+
+  it('propagates a failed detectRefundsAndRefresh and leaves the queue untouched', async () => {
+    // Arrange
+    const { fetchPendingTransactionsShared } = await import('../lib/pendingTransactionsCache')
+    const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+    await waitFor(() => expect(result.current.transactions).toEqual(loaded.pending))
+    vi.mocked(fetchPendingTransactionsShared).mockRejectedValueOnce(new Error('timeout'))
+
+    // Act & Assert
+    await act(async () => {
+      await expect(result.current.detectRefundsAndRefresh()).rejects.toThrow('timeout')
+    })
+    expect(result.current.transactions).toEqual(loaded.pending)
+  })
+
+  it('applies detectRefundsAndRefresh when nothing superseded it', async () => {
+    // Arrange
+    const { fetchPendingTransactionsShared } = await import('../lib/pendingTransactionsCache')
+    const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+    await waitFor(() => expect(result.current.transactions).toEqual(loaded.pending))
+    const refreshed = { pending: [{ id: 'tx-2', status: 'pending' }], autoClassified: [] }
+    vi.mocked(fetchPendingTransactionsShared).mockResolvedValueOnce(refreshed as never)
+
+    // Act
+    let detectResult!: { stale: boolean }
+    await act(async () => {
+      detectResult = await result.current.detectRefundsAndRefresh()
+    })
+
+    // Assert
+    expect(detectResult.stale).toBe(false)
+    expect(result.current.transactions).toEqual(refreshed.pending)
+  })
+})
+
+describe('useTransactions awardXp', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    mockRpc.mockReset().mockResolvedValue({ data: null, error: null })
+    mockGetSession.mockReset().mockResolvedValue({ data: { session: { user: { id: 'u-1' } } } })
+  })
+
+  it('awards XP for the locally cached session user', async () => {
+    // Arrange
+    const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+
+    // Act
+    let response!: { error: unknown }
+    await act(async () => {
+      response = await result.current.awardXp(10)
+    })
+
+    // Assert
+    expect(response.error).toBeNull()
+    expect(mockRpc).toHaveBeenCalledWith('award_xp', { p_user_id: 'u-1', p_xp: 10 })
+  })
+
+  it('returns an error instead of throwing when the session lookup fails', async () => {
+    // Arrange
+    mockGetSession.mockRejectedValueOnce(new Error('lock timeout'))
+    const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+
+    // Act
+    let response!: { error: unknown }
+    await act(async () => {
+      response = await result.current.awardXp(10)
+    })
+
+    // Assert
+    expect((response.error as Error).message).toBe('lock timeout')
+    expect(mockRpc).not.toHaveBeenCalledWith('award_xp', expect.anything())
+  })
+})
+
+describe('useTransactions refetchFresh spinner', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const { fetchPendingTransactionsShared } = await import('../lib/pendingTransactionsCache')
+    vi.mocked(fetchPendingTransactionsShared).mockReset().mockResolvedValue({ pending: [{ id: 'tx-1' }], autoClassified: [] } as never)
+  })
+
+  it('does not show the blocking spinner when the same deck was already loaded', async () => {
+    // Arrange
+    const { fetchPendingTransactionsShared } = await import('../lib/pendingTransactionsCache')
+    const { result } = renderHook(() => useTransactions(HOUSEHOLD_ID))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    let finish!: (value: never) => void
+    vi.mocked(fetchPendingTransactionsShared).mockReturnValueOnce(new Promise((resolve) => { finish = resolve }) as never)
+
+    // Act
+    let refetch!: Promise<unknown>
+    act(() => {
+      refetch = result.current.refetchFresh()
+    })
+
+    // Assert
+    expect(result.current.loading).toBe(false)
+    await act(async () => {
+      finish({ pending: [], autoClassified: [] } as never)
+      await refetch
     })
   })
 })

@@ -74,6 +74,15 @@ export interface ExportRow {
   user_note?: string | null
 }
 
+/** Loads the flagged deck; throws on an RPC error so a failed load is not mistaken for an empty queue. */
+async function fetchFlaggedTransactions(householdId: string): Promise<Transaction[]> {
+  const { data, error } = await supabase.rpc('get_flagged_transactions', {
+    p_household_id: householdId,
+  })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as Transaction[]
+}
+
 export function useTransactions(
   householdId: string | null | undefined,
   deck: ClassifyDeckMode = 'pending',
@@ -81,8 +90,20 @@ export function useTransactions(
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [autoClassified, setAutoClassified] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  /** Set when the last load failed; the previous lists stay in place so a failure never looks like an empty queue. */
+  const [loadError, setLoadError] = useState<Error | null>(null)
   /** Avoid full-screen spinner on background refetches (e.g. tab idle / token refresh). */
   const loadedKeyRef = useRef<string | null>(null)
+  /** Bumped when a refresh starts and on every local mutation; a refresh only writes state if nothing newer happened while it was in flight. */
+  const applyGenRef = useRef(0)
+
+  /** Writes a fetched queue into state unless a newer refresh or local change superseded it; returns whether it was applied. */
+  const applyIfCurrent = useCallback((gen: number, pending: Transaction[], auto: Transaction[]): boolean => {
+    if (gen !== applyGenRef.current) return false
+    setTransactions(pending)
+    setAutoClassified(auto)
+    return true
+  }, [])
 
   const fetchPending = useCallback(async (options?: { silent?: boolean }) => {
     if (!householdId) {
@@ -95,11 +116,7 @@ export function useTransactions(
     if (blocking && !options?.silent) setLoading(true)
     try {
       if (deck === 'no-idea') {
-        const { data, error } = await supabase.rpc('get_flagged_transactions', {
-          p_household_id: householdId,
-        })
-        if (!error && data) setTransactions(data as Transaction[])
-        else setTransactions([])
+        setTransactions(await fetchFlaggedTransactions(householdId))
         setAutoClassified([])
       } else {
         const { pending, autoClassified: auto } = await fetchPendingTransactionsShared(householdId)
@@ -107,6 +124,10 @@ export function useTransactions(
         setAutoClassified(auto)
       }
       loadedKeyRef.current = key
+      setLoadError(null)
+    } catch (err) {
+      console.warn('load transactions failed:', err)
+      setLoadError(err instanceof Error ? err : new Error(String(err)))
     } finally {
       if (blocking && !options?.silent) setLoading(false)
     }
@@ -117,34 +138,34 @@ export function useTransactions(
   }, [fetchPending])
 
   /** Clears shared cache and refetches — use on classify mount and before deck-cleared verification.
-   *  Returns the fetched payload so callers can inspect counts without reading stale React state. */
-  const refetchFresh = useCallback(async (options?: { silent?: boolean }): Promise<{ pending: Transaction[]; autoClassified: Transaction[] }> => {
-    if (!householdId) return { pending: [], autoClassified: [] }
+   *  Returns the fetched payload so callers can inspect counts without reading stale React state.
+   *  Hook state is only updated when no newer refresh or local change happened meanwhile;
+   *  `stale` is true when it was left alone, so callers must not assume the hook now matches the payload. */
+  const refetchFresh = useCallback(async (options?: { silent?: boolean }): Promise<{ pending: Transaction[]; autoClassified: Transaction[]; stale: boolean }> => {
+    if (!householdId) return { pending: [], autoClassified: [], stale: false }
+    const gen = ++applyGenRef.current
     invalidatePendingTransactionsInflight(householdId)
-    loadedKeyRef.current = null
     const key = `${householdId}:${deck}`
     const blocking = loadedKeyRef.current !== key
+    loadedKeyRef.current = null
     if (blocking && !options?.silent) setLoading(true)
     try {
       if (deck === 'no-idea') {
-        const { data, error } = await supabase.rpc('get_flagged_transactions', {
-          p_household_id: householdId,
-        })
-        const txs = (!error && data ? data as Transaction[] : [])
-        setTransactions(txs)
-        setAutoClassified([])
+        const txs = await fetchFlaggedTransactions(householdId)
+        const applied = applyIfCurrent(gen, txs, [])
         loadedKeyRef.current = key
-        return { pending: txs, autoClassified: [] }
+        setLoadError(null)
+        return { pending: txs, autoClassified: [], stale: !applied }
       }
       const payload = await fetchPendingTransactionsShared(householdId)
-      setTransactions(payload.pending)
-      setAutoClassified(payload.autoClassified)
+      const applied = applyIfCurrent(gen, payload.pending, payload.autoClassified)
       loadedKeyRef.current = key
-      return payload
+      setLoadError(null)
+      return { ...payload, stale: !applied }
     } finally {
       if (blocking && !options?.silent) setLoading(false)
     }
-  }, [householdId, deck])
+  }, [householdId, deck, applyIfCurrent])
 
   /** Sets hook state from an already-fetched payload without triggering loading spinners.
    *  Used by SwipeDeck after detectRefunds to keep hook and store in sync. */
@@ -161,6 +182,7 @@ export function useTransactions(
   }, [householdId, deck])
 
   const removeTransactions = useCallback((ids: string[]) => {
+    applyGenRef.current += 1
     const idSet = new Set(ids)
     setTransactions((prev) => prev.filter((t) => !idSet.has(t.id)))
     setAutoClassified((prev) => prev.filter((t) => !idSet.has(t.id)))
@@ -170,6 +192,7 @@ export function useTransactions(
    *  Existing rows with matching ids are replaced so callers can patch status/category. */
   const addPendingTransactions = useCallback((txns: Transaction[]) => {
     if (txns.length === 0) return
+    applyGenRef.current += 1
     setTransactions((prev) => {
       const idSet = new Set(txns.map((t) => t.id))
       const without = prev.filter((t) => !idSet.has(t.id))
@@ -290,27 +313,36 @@ export function useTransactions(
   }, [householdId])
 
   /** Runs refund detection then refetches the full pending+auto queue.
-   *  Updates both hook state and returns the payload for store sync.
+   *  Updates hook state and returns the payload for store sync; `stale` is true when a newer refresh or
+   *  local change superseded this one, so hook state was left alone and callers must skip their store sync.
    *  Only meaningful in 'pending' deck mode. */
-  const detectRefundsAndRefresh = useCallback(async (): Promise<{ offsetCount: number; pending: Transaction[]; autoClassified: Transaction[] }> => {
-    if (!householdId) return { offsetCount: 0, pending: [], autoClassified: [] }
+  const detectRefundsAndRefresh = useCallback(async (): Promise<{ offsetCount: number; stale: boolean; pending: Transaction[]; autoClassified: Transaction[] }> => {
+    if (!householdId) return { offsetCount: 0, stale: false, pending: [], autoClassified: [] }
+    const gen = ++applyGenRef.current
     const offsetCount = await detectRefunds()
     invalidatePendingTransactionsInflight(householdId)
     const payload = await fetchPendingTransactionsShared(householdId)
-    setTransactions(payload.pending)
-    setAutoClassified(payload.autoClassified)
-    loadedKeyRef.current = `${householdId}:${deck}`
-    return { offsetCount, ...payload }
-  }, [householdId, deck, detectRefunds])
+    const applied = applyIfCurrent(gen, payload.pending, payload.autoClassified)
+    if (applied) loadedKeyRef.current = `${householdId}:${deck}`
+    return { offsetCount, stale: !applied, ...payload }
+  }, [householdId, deck, detectRefunds, applyIfCurrent])
 
+  /** Awards (or, when negative, takes back) XP for the signed-in user. Reads the local session instead of a
+   *  network `getUser()` and never throws, so a failure here cannot undo or block an already-saved classification. */
   const awardXp = async (xp: number) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: new Error('Not authenticated') }
-    const { error } = await supabase.rpc('award_xp', {
-      p_user_id: user.id,
-      p_xp: xp,
-    })
-    return { error }
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
+      if (!user) return { error: new Error('Not authenticated') }
+      const { error } = await supabase.rpc('award_xp', {
+        p_user_id: user.id,
+        p_xp: xp,
+      })
+      return { error }
+    } catch (err) {
+      console.warn('award xp failed:', err)
+      return { error: err instanceof Error ? err : new Error(String(err)) }
+    }
   }
 
   const getMonthStats = useCallback(async (billingMonth: string): Promise<MonthStats | null> => {
@@ -642,6 +674,7 @@ export function useTransactions(
     transactions,
     autoClassified,
     loading,
+    loadError,
     fetchPending,
     refetchFresh,
     applyPendingPayload,

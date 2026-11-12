@@ -23,12 +23,13 @@ async function loadPendingFromServer(householdId: string): Promise<PendingTransa
     supabase.rpc('get_auto_classified_transactions', { p_household_id: householdId }),
   ])
 
-  const pending =
-    !pendingRes.error && pendingRes.data ? (pendingRes.data as Transaction[]) : []
-  const autoClassified =
-    !autoRes.error && autoRes.data ? (autoRes.data as Transaction[]) : []
+  const failure = pendingRes.error ?? autoRes.error
+  if (failure) throw new Error(failure.message)
 
-  return { pending, autoClassified }
+  return {
+    pending: (pendingRes.data ?? []) as Transaction[],
+    autoClassified: (autoRes.data ?? []) as Transaction[],
+  }
 }
 
 export function fetchPendingTransactionsShared(householdId: string): Promise<PendingTransactionsPayload> {
