@@ -8,13 +8,15 @@ import { useBottomSheetDrag } from '../../hooks/useBottomSheetDrag'
 
 interface CategoryPickerProps {
   open: boolean
-  onSelect: (categoryId: string) => void
+  onSelect: (categoryId: string, billingMonth?: string) => void
   onClose: () => void
   categories?: readonly CategoryDef[]
   predictedCategory?: string | null
   currentCategory?: string | null
   merchantRaw?: string | null
   merchantClean?: string | null
+  /** Default billing month (YYYY-MM) for a refund; when set, shows a "counts toward" month selector. */
+  refundMonth?: string | null
 }
 
 const NEUTRAL_TILE =
@@ -31,6 +33,7 @@ export default function CategoryPicker({
   currentCategory,
   merchantRaw,
   merchantClean,
+  refundMonth,
 }: CategoryPickerProps) {
   if (typeof document === 'undefined') return null
 
@@ -47,6 +50,7 @@ export default function CategoryPicker({
           currentCategory={currentCategory}
           merchantRaw={merchantRaw}
           merchantClean={merchantClean}
+          refundMonth={refundMonth}
         />
       )}
     </AnimatePresence>,
@@ -62,14 +66,16 @@ function CategoryPickerInner({
   currentCategory,
   merchantRaw,
   merchantClean,
+  refundMonth,
 }: {
   cats: readonly CategoryDef[]
-  onSelect: (id: string) => void
+  onSelect: (id: string, billingMonth?: string) => void
   onClose: () => void
   predictedCategory?: string | null
   currentCategory?: string | null
   merchantRaw?: string | null
   merchantClean?: string | null
+  refundMonth?: string | null
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -77,6 +83,7 @@ function CategoryPickerInner({
   const selectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showScrollFade, setShowScrollFade] = useState(false)
   const [pressedId, setPressedId] = useState<string | null>(null)
+  const [chosenMonth, setChosenMonth] = useState(refundMonth ?? '')
   const { sheetDragProps, handleZoneProps } = useBottomSheetDrag(onClose)
 
   const layout = useMemo(
@@ -178,11 +185,12 @@ function CategoryPickerInner({
       setPressedId(categoryId)
       if (selectTimerRef.current) clearTimeout(selectTimerRef.current)
       selectTimerRef.current = setTimeout(() => {
-        onSelect(categoryId)
+        const overrideMonth = refundMonth && chosenMonth && chosenMonth !== refundMonth ? chosenMonth : undefined
+        onSelect(categoryId, overrideMonth)
         setPressedId(null)
       }, SELECT_FEEDBACK_MS)
     },
-    [onSelect, pressedId],
+    [chosenMonth, onSelect, pressedId, refundMonth],
   )
 
   let tileIndex = 0
@@ -216,6 +224,19 @@ function CategoryPickerInner({
             Pick a Category
           </h3>
         </div>
+
+        {refundMonth && (
+          <label className="mb-2 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-duo-green/30 bg-duo-green/10 px-3 py-2 text-xs text-duo-green">
+            <span className="font-semibold">Refund: deducted from this category in</span>
+            <input
+              type="month"
+              value={chosenMonth}
+              onChange={(e) => setChosenMonth(e.target.value)}
+              className="rounded-lg border border-white/10 bg-surface-900 px-2 py-1 text-xs text-surface-50"
+              aria-label="Month the refund counts toward"
+            />
+          </label>
+        )}
 
         <div className="relative min-h-0 flex-1">
           <div

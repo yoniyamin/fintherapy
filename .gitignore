@@ -34,3 +34,4 @@ dev-dist/*
 dev-dist/sw.js
 dev-dist/sw.js
 graphify-out/*
+docs/frozenUI_bug.md

@@ -3,6 +3,7 @@ import { motion, useAnimation, useMotionValue, useMotionValueEvent, useTransform
 import type { MerchantGroup } from '../../stores/classificationStore'
 import type { CategoryDef } from '../../lib/constants'
 import { formatAccountLabel } from '../../lib/accountDisplay'
+import { isRefundAmount } from '../../lib/refundDetection'
 import CategoryIcon from '../common/CategoryIcon'
 import MerchantSearchPanel from './MerchantSearchPanel'
 import type { AccountType } from '../../types/database'
@@ -225,6 +226,12 @@ export default function SwipeCard({
     distinctLast4.size > 0 &&
     [...distinctLast4].every((l) => accountTypes.get(l) === 'debit')
 
+  const isRefund = isRefundAmount(
+    group.totalAmount,
+    [...distinctLast4].map((last4) => accountTypes.get(last4)),
+  )
+  const amountColorClass = isRefund ? 'text-duo-green' : 'text-primary-400'
+
   const dateRange = group.count > 1
     ? `${formatDate(group.transactions[group.transactions.length - 1].tx_date)} – ${formatDate(group.transactions[0].tx_date)}`
     : formatDate(tx.tx_date)
@@ -320,7 +327,7 @@ export default function SwipeCard({
               onTransfer()
             }}
             className="absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-ice/10 text-lg transition-transform duration-100 active:scale-90 active:bg-ice/20"
-            title="Mark as own account transfer"
+            title="Not spending: own transfer or other income (not a refund)"
           >
             💸
           </button>
@@ -399,9 +406,22 @@ export default function SwipeCard({
             </motion.div>
           )}
 
-          <p className="mt-4 text-4xl font-extrabold tracking-tight tabular-nums text-primary-400">
+          <p className={`mt-4 text-4xl font-extrabold tracking-tight tabular-nums ${amountColorClass}`}>
+            {isRefund && '+'}
             {formatAmount(group.totalAmount)}
           </p>
+
+          {isRefund && (
+            <div className="mx-auto mt-2 flex flex-col items-center gap-1">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-duo-green/40 bg-duo-green/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-duo-green">
+                Refund / credit
+              </span>
+              <p className="max-w-[16rem] text-[11px] leading-snug text-surface-400">
+                Money back to you. It is deducted from the category you pick
+                {isTopCard ? ', in the month you choose.' : '.'}
+              </p>
+            </div>
+          )}
 
           {group.count > 1 && (
             <div className="mt-1 space-y-0.5 text-xs text-surface-500">

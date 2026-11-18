@@ -220,12 +220,14 @@ export function useTransactions(
     return { error }
   }
 
-  const classifyTransactionsBatch = async (txIds: string[], category: string) => {
+  /** Classifies a batch; `billingMonth` (YYYY-MM) pins a refund to a month other than its transaction month. */
+  const classifyTransactionsBatch = async (txIds: string[], category: string, billingMonth?: string) => {
     if (!householdId) return { error: new Error('No household'), updatedCount: 0 }
     const { data, error } = await supabase.rpc('classify_transactions_batch', {
       p_household_id: householdId,
       p_tx_ids: txIds,
       p_category: category,
+      ...(billingMonth ? { p_billing_month: billingMonth } : {}),
     })
     return { error, updatedCount: (data as number) ?? 0 }
   }

@@ -1,4 +1,5 @@
 import type { Transaction } from '../types/database'
+import { classifyStackKey } from './refundDetection'
 
 /** Billing months present on transactions (YYYY-MM), sorted ascending. */
 export function distinctBillingMonthsFromTxns(txns: Transaction[]): string[] {
@@ -40,7 +41,7 @@ export function countPendingStacksByMonth(txns: Transaction[]): Map<string, numb
   for (const t of txns) {
     const bm = t.billing_month?.trim()
     if (!bm) continue
-    const stackKey = `${t.merchant_raw.toLowerCase().trim()}\u0000${bm}`
+    const stackKey = classifyStackKey(t)
     let set = keys.get(bm)
     if (!set) {
       set = new Set()
@@ -60,7 +61,7 @@ export function countPendingMonthsPerCard(txns: Transaction[]): Map<string, numb
     const last4 = t.account_last4?.trim()
     const bm = t.billing_month?.trim()
     if (!last4 || !bm) continue
-    const stackKey = `${t.merchant_raw.toLowerCase().trim()}\u0000${bm}`
+    const stackKey = classifyStackKey(t)
     let cardMap = byCard.get(last4)
     if (!cardMap) {
       cardMap = new Map()

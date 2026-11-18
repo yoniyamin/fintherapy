@@ -56,6 +56,7 @@ import { useCategoryConfig } from '../../hooks/useCategoryConfig'
 import { XP_VALUES } from '../../lib/constants'
 import { ui } from '../../lib/uiClasses'
 import { formatAccountLabel } from '../../lib/accountDisplay'
+import { defaultRefundMonth, isRefundAmount } from '../../lib/refundDetection'
 import type { AccountType, Transaction } from '../../types/database'
 
 function aggregateMonthStats(parts: MonthStats[]): MonthStats {
@@ -561,6 +562,7 @@ export default function SwipeDeck() {
         merchantClean: action.merchantClean,
         predictedCategory: null,
         currentCategory: action.category,
+        refundMonth: null,
       }
     }
 
@@ -571,16 +573,21 @@ export default function SwipeDeck() {
         merchantClean: null,
         predictedCategory: null,
         currentCategory: null,
+        refundMonth: null,
       }
     }
 
+    const groupAccountTypes = group.transactions.map((t) => accountTypes.get(t.account_last4?.trim() ?? ''))
     return {
       merchantRaw: group.merchantRaw,
       merchantClean: group.merchantClean,
       predictedCategory: group.predictedCategory,
       currentCategory: null,
+      refundMonth: isRefundAmount(group.totalAmount, groupAccountTypes)
+        ? defaultRefundMonth(group.transactions)
+        : null,
     }
-  }, [recentReclassifyTarget, store.activeGroup])
+  }, [accountTypes, recentReclassifyTarget, store.activeGroup])
 
   /** Stack the open picker was shown for; null while closed or when opened from the Recent panel. */
   const pickerGroupKeyRef = useRef<string | null>(null)
@@ -1366,7 +1373,7 @@ export default function SwipeDeck() {
     invalidateFlaggedCount()
   }
 
-  const handleCategorySelect = async (categoryId: string) => {
+  const handleCategorySelect = async (categoryId: string, billingMonth?: string) => {
     if (recentReclassifyTarget) {
       const { action: target, origin } = recentReclassifyTarget
       setRecentReclassifyTarget(null)
@@ -1389,7 +1396,11 @@ export default function SwipeDeck() {
 
     store.closeCategoryPicker()
 
-    const ok = await runBatchRpc(group, (ids) => classifyTransactionsBatch(ids, categoryId))
+    const ok = await runBatchRpc(group, (ids) =>
+      billingMonth
+        ? classifyTransactionsBatch(ids, categoryId, billingMonth)
+        : classifyTransactionsBatch(ids, categoryId),
+    )
     if (!ok) return
     learnMerchant(group.merchantRaw, categoryId)
     removeTransactions(group.transactions.map((t) => t.id))
@@ -2208,13 +2219,16 @@ export default function SwipeDeck() {
 
       <CategoryPicker
         open={store.showCategoryPicker}
-        onSelect={(categoryId) => void runSwipeAction(() => handleCategorySelect(categoryId))}
+        onSelect={(categoryId, billingMonth) =>
+          void runSwipeAction(() => handleCategorySelect(categoryId, billingMonth))
+        }
         onClose={handlePickerCancel}
         categories={pickerCategories}
         predictedCategory={categoryPickerContext.predictedCategory}
         currentCategory={categoryPickerContext.currentCategory}
         merchantRaw={categoryPickerContext.merchantRaw}
         merchantClean={categoryPickerContext.merchantClean}
+        refundMonth={categoryPickerContext.refundMonth}
       />
 
       <GroupedTransactionsModal

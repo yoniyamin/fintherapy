@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { TxCategories } from '../lib/groupAssignments'
+import { classifyStackKey } from '../lib/refundDetection'
 import type { Transaction } from '../types/database'
 
 export interface MerchantGroup {
@@ -81,13 +82,6 @@ interface ClassificationState {
   /** @deprecated kept for compatibility */
   transactions: Transaction[]
   activeTransaction: Transaction | null
-}
-
-/** Buckets pending/auto deck rows: same merchant text may repeat across billing_month — never stack across months. */
-function classifyStackKey(tx: Transaction): string {
-  const merchant = tx.merchant_raw.toLowerCase().trim()
-  const bm = tx.billing_month?.trim() ?? ''
-  return `${merchant}\u0000${bm}`
 }
 
 function groupByMerchant(txns: Transaction[]): MerchantGroup[] {
